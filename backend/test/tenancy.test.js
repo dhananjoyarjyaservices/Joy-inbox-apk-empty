@@ -4,9 +4,9 @@ const { encryptSecret, decryptSecret, requirePermission, ROLE_PERMISSIONS, saveW
 
 test("tenant WhatsApp credentials encrypt and decrypt with authenticated encryption", () => {
   const key = Buffer.alloc(32, 7).toString("base64");
-  const encrypted = encryptSecret("EAA-test-token", key);
-  assert.notEqual(encrypted.ciphertext, Buffer.from("EAA-test-token").toString("base64"));
-  assert.equal(decryptSecret(encrypted, key), "EAA-test-token");
+  const encrypted = encryptSecret("EAA_test_token", key);
+  assert.notEqual(encrypted.ciphertext, Buffer.from("EAA_test_token").toString("base64"));
+  assert.equal(decryptSecret(encrypted, key), "EAA_test_token");
   assert.throws(() => decryptSecret(encrypted, Buffer.alloc(32, 8).toString("base64")));
 });
 
@@ -62,15 +62,15 @@ test("WhatsApp credentials are encrypted and mapped to exactly one tenant", asyn
   const organization = { id: "org_test", ref: orgRef };
   const connection = await saveWhatsAppConnection(db, organization, {
     phoneNumberId: "123456789012345",
-    accessToken: "EAA-example-secret-token",
+    accessToken: "EAA_example_secret_token",
     displayPhoneNumber: "+1 555 0100",
     verifiedName: "Test Business"
   });
   assert.equal(connection.connected, true);
   const stored = db.docs.get("organizations/org_test/settings/whatsapp");
-  assert.notEqual(stored.accessToken.ciphertext, Buffer.from("EAA-example-secret-token").toString("base64"));
+  assert.notEqual(stored.accessToken.ciphertext, Buffer.from("EAA_example_secret_token").toString("base64"));
   const credentials = await getWhatsAppCredentials(db, "org_test");
-  assert.equal(credentials.accessToken, "EAA-example-secret-token");
+  assert.equal(credentials.accessToken, "EAA_example_secret_token");
   const mapped = await resolvePhoneNumberOrganization(db, "123456789012345");
   assert.equal(mapped.id, "org_test");
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
@@ -81,10 +81,10 @@ test("WhatsApp number cannot be claimed by a second organization", async () => {
   process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString("base64");
   await saveWhatsAppConnection(db, { id: "org_a", ref: db.collection("organizations").doc("org_a") }, {
     phoneNumberId: "123456789012345",
-    accessToken: "EAA-first-token"
+    accessToken: "EAA_first_token"
   });
   await assert.rejects(() => saveWhatsAppConnection(db, {
     id: "org_b", ref: db.collection("organizations").doc("org_b")
-  }, { phoneNumberId: "123456789012345", accessToken: "EAA-second-token" }), { statusCode: 409 });
+  }, { phoneNumberId: "123456789012345", accessToken: "EAA_second_token" }), { statusCode: 409 });
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
