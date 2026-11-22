@@ -54,3 +54,8 @@ An authenticated `POST /whatsapp/connect` endpoint now:
 The endpoint never returns the access token. Configure a base64-encoded 32-byte `TENANT_SECRET_ENCRYPTION_KEY` only in the backend secret environment. Never place it in Vite/client environment variables or commit it.
 
 **Critical remaining integration:** Existing send, media, status, greeting and webhook code still uses legacy global WhatsApp credentials and legacy top-level chat paths. The new stored tenant credentials are not yet used by those message flows. The media implementation still persists customer media in Firebase Storage. Do not connect live customer tenants or deploy this branch until the message paths, webhook routing, tenant-scoped data paths and no-permanent-media-storage design are implemented and tested.
+
+
+## Tenant credential transport foundation
+
+The WhatsApp API client now accepts an explicit credential object for text sends, media sends, connection checks and outbound media upload. The credential object is intended to be loaded by trusted backend code from the organization's encrypted settings after membership and permission checks. Legacy environment fallback remains for the existing owner-only routes during migration. This is only a transport-layer compatibility step: the current HTTP handlers do not yet load and pass tenant credentials, and must not be treated as multi-tenant messaging.
