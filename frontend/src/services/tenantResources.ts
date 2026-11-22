@@ -65,8 +65,8 @@ export async function fetchTenantQuickReplyImage(org: string, quickReplyId: stri
 export async function removeTenantQuickReplyImage(org: string, quickReplyId: string) {
   return call("/organizations/quick-replies/image", "DELETE", { organizationId: org, quickReplyId });
 }
-export async function sendTenantQuickReplyImage(org: string, chatId: string, quickReplyId: string) {
-  return call("/organizations/send-quick-reply", "POST", { organizationId: org, chatId, quickReplyId });
+export async function sendTenantQuickReplyImage(org: string, chatId: string, quickReplyId: string, phoneNumberId?: string) {
+  return call("/organizations/send-quick-reply", "POST", { organizationId: org, chatId, quickReplyId, ...(phoneNumberId ? { phoneNumberId } : {}) });
 }
 export async function deleteTenantQuickReply(org: string, resourceId: string) {
   return call("/organizations/quick-replies", "DELETE", { organizationId: org, resourceId });
