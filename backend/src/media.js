@@ -32,8 +32,8 @@ async function fetchWhatsAppMediaForProxy(mediaId, credentials) {
     throw new Error("Media credentials or ID are invalid.");
   }
   const metadataResponse = await fetch(
-    \`https://graph.facebook.com/\${GRAPH_API_VERSION}/\${encodeURIComponent(mediaId)}\`,
-    { headers: { Authorization: \`Bearer \${accessToken}\` }, redirect: "error" }
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(mediaId)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` }, redirect: "error" }
   );
   const metadata = await metadataResponse.json();
   if (!metadataResponse.ok || typeof metadata.url !== "string") {
@@ -54,7 +54,7 @@ async function fetchWhatsAppMediaForProxy(mediaId, credentials) {
     throw error;
   }
   const response = await fetch(mediaUrl.toString(), {
-    headers: { Authorization: \`Bearer \${accessToken}\` },
+    headers: { Authorization: `Bearer ${accessToken}` },
     redirect: "error"
   });
   if (!response.ok) {
