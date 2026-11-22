@@ -8,6 +8,41 @@ function validUid(value) {
   return typeof value === "string" && /^[A-Za-z0-9:_-]{1,128}$/.test(value);
 }
 
+async function writeMemberAudit(organization, actor, action, target, details = {}) {
+  const auditRef = organization.ref.collection("auditLogs").doc();
+  await auditRef.set({
+    action,
+    actorUid: String(actor?.uid || ""),
+    actorRole: String(actor?.role || ""),
+    targetUid: String(target?.uid || ""),
+    targetEmail: String(target?.email || ""),
+    details,
+    createdAt: new Date()
+  });
+}
+
+async function listOrganizationMemberAudit(db, organization, options = {}) {
+  const requestedLimit = Number(options.limit);
+  const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 25;
+  const snapshot = await organization.ref.collection("auditLogs")
+    .orderBy("createdAt", "desc").limit(limit).get();
+  return {
+    events: snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        action: String(data.action || ""),
+        actorUid: String(data.actorUid || ""),
+        actorRole: String(data.actorRole || ""),
+        targetUid: String(data.targetUid || ""),
+        targetEmail: String(data.targetEmail || ""),
+        details: data.details && typeof data.details === "object" ? data.details : {},
+        createdAt: data.createdAt || null
+      };
+    })
+  };
+}
+
 function requireManager(actor) {
   if (!actor || !["owner", "admin"].includes(actor.role)) {
     throw httpError("Only organization owners and admins can manage members.", 403);
@@ -95,6 +130,9 @@ async function addOrganizationMember(db, auth, organization, actor, input) {
       createdAt: now
     }, { merge: true });
   });
+  await writeMemberAudit(organization, actor, "member.added", {
+    uid: user.uid, email: user.email || email
+  }, { role });
   return { uid: user.uid, email: user.email || email, displayName: user.displayName || "", role, status: "active" };
 }
 
@@ -115,6 +153,7 @@ async function updateOrganizationMemberRole(organization, actor, input) {
     transaction.set(ref, { role, updatedAt: new Date() }, { merge: true });
     transaction.set(indexRef, { role }, { merge: true });
   });
+  await writeMemberAudit(organization, actor, "member.role_changed", { uid }, { role });
   return { uid, role };
 }
 
@@ -133,7 +172,8 @@ async function removeOrganizationMember(organization, actor, input) {
     transaction.set(ref, { status: "removed", removedAt: now, updatedAt: now }, { merge: true });
     transaction.set(indexRef, { status: "removed" }, { merge: true });
   });
+  await writeMemberAudit(organization, actor, "member.removed", { uid }, {});
   return { uid, status: "removed" };
 }
 
-module.exports = { listOrganizationMembers, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember };
+module.exports = { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember };
