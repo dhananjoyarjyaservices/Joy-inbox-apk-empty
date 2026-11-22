@@ -347,7 +347,7 @@ test("member listing clamps oversized page sizes and rejects invalid cursors", a
 test("member role changes are recorded in a tenant-scoped audit log", async () => {
   const { db, records } = fakeDb();
   const organization = { id: "org_audit", ref: db.collection("organizations").doc("org_audit"), createdBy: "owner_uid" };
-  await organization.ref.collection("members").doc("agent_uid").set({ role: "agent", status: "active" });
+  await organization.ref.collection("members").doc("agent_uid").set({ role: "agent", status: "active", email: "agent@example.com" });
   await updateOrganizationMemberRole(organization, { uid: "owner_uid", email: "owner@example.com", role: "owner" }, { uid: "agent_uid", role: "admin" });
   const auditEntries = [...records.entries()].filter(([path]) => path.startsWith("organizations/org_audit/auditLogs/"));
   assert.equal(auditEntries.length, 1);
