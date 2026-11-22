@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import { Building2, LogOut, MessageCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
@@ -7,7 +6,6 @@ import { connectWhatsApp, createOrganization, listOrganizations, type Organizati
 
 export default function Setup() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [name, setName] = useState("");
   const [organizationId, setOrganizationId] = useState("");
