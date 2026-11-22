@@ -208,7 +208,7 @@ test("invalid member IDs and roles are rejected before writes", async () => {
 test("role changes update the tenant member and user organization index together", async () => {
   const { db, records } = fakeDb();
   const organization = { id: "org_a", ref: db.collection("organizations").doc("org_a"), createdBy: "owner_uid" };
-  await organization.ref.collection("members").doc("agent_uid").set({ role: "agent", status: "active" });
+  await organization.ref.collection("members").doc("agent_uid").set({ role: "agent", status: "active", email: "agent@example.com" });
   await db.collection("users").doc("agent_uid").collection("organizations").doc("org_a").set({ role: "agent", status: "active" });
   await updateOrganizationMemberRole(organization, { role: "owner" }, { uid: "agent_uid", role: "admin" });
   assert.equal(records.get("organizations/org_a/members/agent_uid").role, "admin");
