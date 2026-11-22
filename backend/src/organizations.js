@@ -6,11 +6,11 @@ function httpError(message, statusCode) {
 
 function normalizeOrganizationName(value) {
   if (typeof value !== "string") throw httpError("Business name is required.", 400);
-  const name = value.trim().replace(/\\s+/g, " ");
+  const name = value.trim().replace(/\s+/g, " ");
   if (name.length < 2 || name.length > 80) {
     throw httpError("Business name must be between 2 and 80 characters.", 400);
   }
-  if (/[<>\\u0000-\\u001f]/.test(name)) {
+  if (/[<>]/.test(name) || [...name].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
     throw httpError("Business name contains unsupported characters.", 400);
   }
   return name;
