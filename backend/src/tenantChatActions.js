@@ -34,6 +34,7 @@ function validateChatState(input) {
 function validateMessageState(input) {
   if (!input || typeof input !== "object" || Array.isArray(input) ||
       Object.keys(input).length !== 3 ||
+      Object.keys(input).some((key) => !["chatId", "messageId", "pinned", "saved"].includes(key)) ||
       typeof input.chatId !== "string" || !CHAT_ID_PATTERN.test(input.chatId) ||
       typeof input.messageId !== "string" || !MESSAGE_ID_PATTERN.test(input.messageId)) {
     throw httpError("Valid chatId, messageId and a message state are required.", 400);
