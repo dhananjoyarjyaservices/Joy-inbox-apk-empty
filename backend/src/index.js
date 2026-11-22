@@ -488,6 +488,7 @@ async function sendTenantMediaMessage(event) {
     return jsonResponse(event, 400, { error: "Caption is invalid for this media type." });
   }
   const db = getDb();
+  const credentials = await getWhatsAppCredentials(db, organization.id);
   const replyContext = await resolveTenantReplyContext(db, organization.id, chatId, body);
   const clientMessageId = getClientMessageId(body.clientMessageId);
   const source = body.source === "quick_reply" ? "quick_reply" : "manual";
@@ -496,7 +497,6 @@ async function sendTenantMediaMessage(event) {
   const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
   if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
-  const credentials = await getWhatsAppCredentials(db, organization.id);
   let uploaded, result, sendStarted = false;
   try {
     uploaded = await uploadWhatsAppMedia(buffer, mimeType, filename, credentials);
