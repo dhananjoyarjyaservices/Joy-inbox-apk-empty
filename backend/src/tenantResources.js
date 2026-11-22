@@ -1,0 +1,82 @@
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+function httpError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function contactInput(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Contact details are required.", 400);
+  const allowed = ["name", "phone", "email", "notes", "source"];
+  if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Unsupported contact field.", 400);
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const rawPhone = typeof input.phone === "string" ? input.phone.trim().replace(/[\\s().-]/g, "") : "";
+  const phone = rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`;
+  const email = typeof input.email === "string" ? input.email.trim() : "";
+  const notes = typeof input.notes === "string" ? input.notes.trim() : "";
+  const source = input.source === "whatsapp" ? "whatsapp" : "local";
+  if (!name || name.length > 100) throw httpError("Contact name is required (maximum 100 characters).", 400);
+  if (!/^\\+[1-9]\\d{6,14}$/.test(phone)) throw httpError("Enter a valid international phone number.", 400);
+  if (email.length > 254 || (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))) throw httpError("Enter a valid email address.", 400);
+  if (notes.length > 1000) throw httpError("Contact notes are too long.", 400);
+  return { name, phone, phoneId: phone.slice(1), email, notes, source };
+}
+
+function quickReplyInput(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Quick Reply details are required.", 400);
+  const allowed = ["title", "shortcut", "message"];
+  if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Unsupported Quick Reply field.", 400);
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  const shortcut = typeof input.shortcut === "string" ? input.shortcut.trim().replace(/^\\/+/, "").toLowerCase() : "";
+  const message = typeof input.message === "string" ? input.message.trim() : "";
+  if (!title || title.length > 60 || !message || message.length > 4096) throw httpError("Title (max 60) and message (max 4096) are required.", 400);
+  if (shortcut.length > 30 || (shortcut && !/^[a-z0-9_-]+$/.test(shortcut))) throw httpError("Shortcut must use letters, numbers, underscores or hyphens (maximum 30).", 400);
+  return { title, shortcut, message };
+}
+
+function getTenantResourceCollection(db, organizationId, resource) {
+  if (!ID_PATTERN.test(organizationId || "")) throw httpError("A valid organization ID is required.", 400);
+  if (!["contacts", "quickReplies"].includes(resource)) throw httpError("Unsupported resource.", 400);
+  return db.collection("organizations").doc(organizationId).collection(resource);
+}
+
+async function listTenantResource(db, organizationId, resource) {
+  const snapshot = await getTenantResourceCollection(db, organizationId, resource)
+    .orderBy(resource === "contacts" ? "name" : "createdAt", resource === "contacts" ? "asc" : "desc")
+    .limit(500).get();
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+async function saveTenantResource(db, organizationId, resource, input, resourceId) {
+  const collection = getTenantResourceCollection(db, organizationId, resource);
+  const data = resource === "contacts" ? contactInput(input) : quickReplyInput(input);
+  const now = new Date();
+  if (resource === "contacts") {
+    const id = data.phoneId;
+    await collection.doc(id).set({ ...data, ...(resourceId && resourceId === id ? {} : { createdAt: now }), updatedAt: now }, { merge: true });
+    if (resourceId && resourceId !== id) await collection.doc(resourceId).delete();
+    return { id, ...data };
+  }
+  if (resourceId) {
+    if (!ID_PATTERN.test(resourceId)) throw httpError("Invalid Quick Reply ID.", 400);
+    const ref = collection.doc(resourceId);
+    const existing = await ref.get();
+    if (!existing.exists) throw httpError("Quick Reply was not found.", 404);
+    await ref.set({ ...data, updatedAt: now }, { merge: true });
+    return { id: resourceId, ...data };
+  }
+  const ref = collection.doc();
+  await ref.set({ ...data, createdAt: now, updatedAt: now });
+  return { id: ref.id, ...data };
+}
+
+async function deleteTenantResource(db, organizationId, resource, resourceId) {
+  if (!ID_PATTERN.test(resourceId || "")) throw httpError("A valid resource ID is required.", 400);
+  const ref = getTenantResourceCollection(db, organizationId, resource).doc(resourceId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw httpError("Resource was not found.", 404);
+  await ref.delete();
+}
+
+module.exports = { contactInput, quickReplyInput, getTenantResourceCollection, listTenantResource, saveTenantResource, deleteTenantResource };
