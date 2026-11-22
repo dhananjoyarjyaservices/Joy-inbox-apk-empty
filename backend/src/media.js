@@ -214,9 +214,9 @@ async function getSignedMediaUrl(storagePath) {
   return { url, expiresAt };
 }
 
-async function uploadWhatsAppMedia(buffer, mimeType, filename) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+async function uploadWhatsAppMedia(buffer, mimeType, filename, credentials) {
+  const accessToken = credentials?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = credentials?.phoneNumberId || process.env.PHONE_NUMBER_ID;
   if (!accessToken || !phoneNumberId) {
     throw new Error("WhatsApp API credentials are missing.");
   }
