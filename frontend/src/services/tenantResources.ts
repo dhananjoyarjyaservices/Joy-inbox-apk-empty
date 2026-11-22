@@ -17,7 +17,7 @@ async function call(path: string, method: string, body?: unknown, organizationId
   return result;
 }
 export type TenantContact = { id: string; name: string; phone: string; email?: string; notes?: string; source?: "local" | "whatsapp" };
-export type TenantQuickReply = { id: string; title: string; shortcut: string; message: string };
+export type TenantQuickReply = { id: string; title: string; shortcut: string; message: string; hasImage?: boolean; imageMimeType?: string };
 export async function listTenantContacts(org: string): Promise<TenantContact[]> {
   const result = await call("/organizations/contacts", "GET", undefined, org);
   return Array.isArray(result.items) ? result.items : [];
@@ -36,6 +36,20 @@ export async function listTenantQuickReplies(org: string): Promise<TenantQuickRe
 export async function saveTenantQuickReply(org: string, data: Omit<TenantQuickReply, "id">, resourceId?: string) {
   const result = await call("/organizations/quick-replies", resourceId ? "PUT" : "POST", { organizationId: org, data, ...(resourceId ? { resourceId } : {}) });
   return result.item as TenantQuickReply;
+}
+export async function uploadTenantQuickReplyImage(org: string, quickReplyId: string, file: File) {
+  if (!["image/jpeg", "image/png"].includes(file.type) || file.size <= 0 || file.size > 3 * 1024 * 1024) {
+    throw new Error("Choose a JPEG or PNG image up to 3 MB.");
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  const fileBase64 = btoa(binary);
+  return call("/organizations/quick-replies/image", "POST", {
+    organizationId: org, quickReplyId, mimeType: file.type, fileBase64
+  });
 }
 export async function deleteTenantQuickReply(org: string, resourceId: string) {
   return call("/organizations/quick-replies", "DELETE", { organizationId: org, resourceId });
