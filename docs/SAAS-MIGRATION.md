@@ -86,3 +86,8 @@ The legacy owner account continues to use the existing dashboard while tenant us
 The frontend now has a separate tenant chat service that reads only from `organizations/{organizationId}/chats` and its `messages` subcollections. It provides tenant-specific chat/message lookups, realtime listeners, and cursor pagination. It does not fall back to the legacy top-level `chats` collection. The setup page also remembers the selected workspace ID locally so a later tenant inbox can restore the last selection.
 
 This is deliberately not wired into the legacy dashboard yet. That dashboard still calls legacy global chat, contacts, quick-reply, send, pin, delete, media, greeting, and status services. Unlocking it for tenant users before every operation is tenant-scoped would risk exposing or modifying another workspace's data. The next integration stage must move the entire dashboard onto organization-aware services and keep tenant access blocked until that is complete.
+
+
+## Tenant contacts and Quick Replies read foundation
+
+The frontend now has separate read-only services for contacts and saved Quick Replies under the active organization's own Firestore paths. These services never read the legacy `users/{uid}` collections. Firestore permits active organization members to read these tenant-owned records; browser writes remain denied until authenticated backend create/update/delete endpoints with role checks and input validation are implemented. The legacy owner dashboard still uses legacy personal collections and has not been switched to these services.
