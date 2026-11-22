@@ -4,6 +4,7 @@ const {
   getTenantChatRef,
   getTenantMessageRef,
   claimTenantSendRequest,
+  getRetryableTenantTextMessage,
   resolveTenantReplyContext,
   getTenantReplyMessageFields
 } = require("../src/tenantMessaging");
@@ -89,4 +90,43 @@ test("tenant reply lookup cannot read another organization's message", async () 
     }),
     { statusCode: 404 }
   );
+});
+
+test("only failed outgoing text messages with their original WhatsApp number are retryable", () => {
+  const retryable = getRetryableTenantTextMessage({
+    direction: "outgoing",
+    type: "text",
+    status: "failed",
+    text: "  Please confirm  ",
+    phoneNumberId: "phone-123"
+  });
+  assert.deepEqual(retryable, { text: "Please confirm", phoneNumberId: "phone-123" });
+});
+
+test("retry rejects incoming, non-text, non-failed and empty messages", () => {
+  const base = {
+    direction: "outgoing",
+    type: "text",
+    status: "failed",
+    text: "Hello",
+    phoneNumberId: "phone-123"
+  };
+  for (const patch of [
+    { direction: "incoming" },
+    { type: "image" },
+    { status: "sent" },
+    { text: "   " },
+    { text: null }
+  ]) {
+    assert.throws(() => getRetryableTenantTextMessage({ ...base, ...patch }), { statusCode: 409 });
+  }
+});
+
+test("retry rejects messages without the original WhatsApp sender number", () => {
+  assert.throws(() => getRetryableTenantTextMessage({
+    direction: "outgoing",
+    type: "text",
+    status: "failed",
+    text: "Hello"
+  }), { statusCode: 409 });
 });
