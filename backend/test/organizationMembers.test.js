@@ -4,7 +4,8 @@ const {
   addOrganizationMember,
   updateOrganizationMemberRole,
   removeOrganizationMember,
-  listOrganizationMembers
+  listOrganizationMembers,
+  listOrganizationMemberAudit
 } = require("../src/organizationMembers");
 
 function fakeDb() {
@@ -326,4 +327,21 @@ test("member listing clamps oversized page sizes and rejects invalid cursors", a
     () => listOrganizationMembers(db, organization, { cursor: "missing_uid" }),
     { statusCode: 400 }
   );
+});
+
+
+test("member role changes are recorded in a tenant-scoped audit log", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_audit", ref: db.collection("organizations").doc("org_audit"), createdBy: "owner_uid" };
+  await organization.ref.collection("members").doc("agent_uid").set({ role: "agent", status: "active" });
+  await updateOrganizationMemberRole(organization, { uid: "owner_uid", role: "owner" }, { uid: "agent_uid", role: "admin" });
+  const auditEntries = [...records.entries()].filter(([path]) => path.startsWith("organizations/org_audit/auditLogs/"));
+  assert.equal(auditEntries.length, 1);
+  assert.equal(auditEntries[0][1].action, "member.role_changed");
+  assert.equal(auditEntries[0][1].actorUid, "owner_uid");
+  assert.equal(auditEntries[0][1].targetUid, "agent_uid");
+  assert.equal(auditEntries[0][1].details.role, "admin");
+  const page = await listOrganizationMemberAudit(db, organization, { limit: 10 });
+  assert.equal(page.events.length, 1);
+  assert.equal(page.events[0].action, "member.role_changed");
 });
