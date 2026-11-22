@@ -24,7 +24,8 @@ const {
   saveMessageMedia,
   uploadWhatsAppMedia,
   validateMedia,
-  validateMediaContent
+  validateMediaContent,
+  fetchWhatsAppMediaForProxy
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
@@ -1046,6 +1047,37 @@ async function sendMediaMessage(event) {
   });
 }
 
+async function retrieveTenantMessageMedia(event) {
+  const decoded = await authenticateUser(event);
+  const params = event.queryStringParameters || {};
+  const organization = await requireOrganization(getDb(), decoded, params.organizationId);
+  requirePermission(organization, "chats:read");
+  const chatId = normalizePhoneNumber(params.chatId);
+  const messageId = String(params.messageId || "");
+  if (!/^\d{6,20}$/.test(chatId) || !/^[A-Za-z0-9._:-]{1,256}$/.test(messageId)) {
+    return jsonResponse(event, 400, { error: "Valid chatId and messageId are required." });
+  }
+  const snapshot = await getTenantMessageRef(getDb(), organization.id, chatId, messageId).get();
+  if (!snapshot.exists) return jsonResponse(event, 404, { error: "Message was not found in this workspace." });
+  const message = snapshot.data();
+  if (!message.mediaId) return jsonResponse(event, 404, { error: "This message has no WhatsApp media ID." });
+  const credentials = await getWhatsAppCredentials(getDb(), organization.id);
+  const media = await fetchWhatsAppMediaForProxy(message.mediaId, credentials);
+  return {
+    statusCode: 200,
+    isBase64Encoded: true,
+    headers: {
+      "Content-Type": media.mimeType,
+      "Content-Disposition": \`inline; filename="\${media.filename || "whatsapp-media"}"\`,
+      "Content-Length": String(media.buffer.length),
+      "Cache-Control": "private, no-store, max-age=0",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox"
+    },
+    body: media.buffer.toString("base64")
+  };
+}
+
 async function retrieveMessageMedia(event) {
   await authenticateOwner(event);
   const params = event.queryStringParameters || {};
@@ -1364,6 +1396,14 @@ exports.handler = async (event) => {
       });
     } finally {
       logLatency("lambda_send_ms", startedAt, { media: true });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/media")) {
+    try { return await retrieveTenantMessageMedia(event); }
+    catch (error) {
+      console.error("Tenant media proxy failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Media could not be retrieved." });
     }
   }
 
