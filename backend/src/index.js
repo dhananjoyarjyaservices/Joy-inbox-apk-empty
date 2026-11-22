@@ -30,6 +30,7 @@ const {
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
+const { listOrganizationMembers, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
 const { requireOrganization, requirePermission, saveWhatsAppConnection, getWhatsAppCredentials } = require("./tenancy");
@@ -165,6 +166,38 @@ async function handleOrganizations(event) {
   }
   const organization = await createOrganization(getDb(), decoded, body);
   return jsonResponse(event, 201, { organization });
+}
+
+async function handleOrganizationMembers(event) {
+  const decoded = await authenticateUser(event);
+  const method = getMethod(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organizationId = method === "GET"
+    ? event.queryStringParameters?.organizationId
+    : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "members:manage");
+  const actor = { uid: decoded.uid, role: organization.role };
+  if (method === "GET") {
+    return jsonResponse(event, 200, { members: await listOrganizationMembers(getDb(), organization) });
+  }
+  if (method === "POST") {
+    const member = await addOrganizationMember(getDb(), getFirebaseAdmin().auth(), organization, actor, body);
+    return jsonResponse(event, 201, { member });
+  }
+  if (method === "PUT") {
+    const member = await updateOrganizationMemberRole(organization, actor, body);
+    return jsonResponse(event, 200, { member });
+  }
+  if (method === "DELETE") {
+    const member = await removeOrganizationMember(organization, actor, body);
+    return jsonResponse(event, 200, { member });
+  }
+  return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
 async function handleTenantResource(event, resource) {
@@ -1276,6 +1309,14 @@ exports.handler = async (event) => {
       result.statusCode,
       result.body
     );
+  }
+
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/members")) {
+    try { return await handleOrganizationMembers(event); }
+    catch (error) {
+      console.error("Organization member request failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Organization members could not be updated." });
+    }
   }
 
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/contacts")) {
