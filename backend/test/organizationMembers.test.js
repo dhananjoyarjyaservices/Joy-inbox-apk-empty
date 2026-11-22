@@ -94,3 +94,65 @@ test("member removal revokes active organization index", async () => {
   assert.equal(records.get("organizations/org_a/members/agent_uid").status, "removed");
   assert.equal(records.get("users/agent_uid/organizations/org_a").status, "removed");
 });
+
+test("agents cannot add, change, or remove organization members", async () => {
+  const { db } = fakeDb();
+  const organization = { id: "org_a", ref: db.collection("organizations").doc("org_a"), createdBy: "owner_uid" };
+  const auth = { async getUserByEmail() { throw new Error("must not look up users"); } };
+  const agent = { uid: "agent_uid", role: "agent" };
+  await assert.rejects(
+    () => addOrganizationMember(db, auth, organization, agent, { email: "new@example.com" }),
+    { statusCode: 403 }
+  );
+  await assert.rejects(
+    () => updateOrganizationMemberRole(organization, agent, { uid: "other_uid", role: "agent" }),
+    { statusCode: 403 }
+  );
+  await assert.rejects(
+    () => removeOrganizationMember(organization, agent, { uid: "other_uid" }),
+    { statusCode: 403 }
+  );
+});
+
+test("admins may add agents but cannot assign the owner role", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_a", ref: db.collection("organizations").doc("org_a") };
+  const auth = { async getUserByEmail(email) { return { uid: "agent_uid", email }; } };
+  const admin = { uid: "admin_uid", role: "admin" };
+  const added = await addOrganizationMember(db, auth, organization, admin, { email: "agent@example.com", role: "agent" });
+  assert.equal(added.role, "agent");
+  assert.equal(records.get("organizations/org_a/members/agent_uid").status, "active");
+  await assert.rejects(
+    () => addOrganizationMember(db, auth, organization, { role: "owner" }, { email: "owner2@example.com", role: "owner" }),
+    { statusCode: 403 }
+  );
+});
+
+test("duplicate active members cannot be added twice", async () => {
+  const { db } = fakeDb();
+  const organization = { id: "org_a", ref: db.collection("organizations").doc("org_a") };
+  await organization.ref.collection("members").doc("existing_uid").set({ status: "active", role: "agent" });
+  const auth = { async getUserByEmail(email) { return { uid: "existing_uid", email }; } };
+  await assert.rejects(
+    () => addOrganizationMember(db, auth, organization, { role: "owner" }, { email: "existing@example.com" }),
+    { statusCode: 409 }
+  );
+});
+
+test("invalid member IDs and roles are rejected before writes", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_a", ref: db.collection("organizations").doc("org_a") };
+  await assert.rejects(
+    () => updateOrganizationMemberRole(organization, { role: "owner" }, { uid: "../other", role: "agent" }),
+    { statusCode: 400 }
+  );
+  await assert.rejects(
+    () => updateOrganizationMemberRole(organization, { role: "owner" }, { uid: "agent_uid", role: "owner" }),
+    { statusCode: 400 }
+  );
+  await assert.rejects(
+    () => removeOrganizationMember(organization, { role: "owner" }, { uid: "../other" }),
+    { statusCode: 400 }
+  );
+  assert.equal(records.size, 0);
+});
