@@ -10,7 +10,21 @@ const {
 function fakeDb() {
   const records = new Map();
   const db = {
-    collection(name) { return collection(name); }
+    collection(name) { return collection(name); },
+    async runTransaction(callback) {
+      const writes = [];
+      const transaction = {
+        async get(reference) {
+          const data = records.get(reference.path);
+          return { exists: Boolean(data), data: () => data };
+        },
+        set(reference, data, options) {
+          writes.push([reference.path, options ? { ...(records.get(reference.path) || {}), ...data } : data]);
+        }
+      };
+      await callback(transaction);
+      for (const [path, data] of writes) records.set(path, data);
+    }
   };
   function ref(path) {
     return {
@@ -155,4 +169,24 @@ test("invalid member IDs and roles are rejected before writes", async () => {
     { statusCode: 400 }
   );
   assert.equal(records.size, 0);
+});
+
+test("role changes update the tenant member and user organization index together", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_a", ref: db.collection("organizations").doc("org_a"), createdBy: "owner_uid" };
+  await organization.ref.collection("members").doc("agent_uid").set({ role: "agent", status: "active" });
+  await db.collection("users").doc("agent_uid").collection("organizations").doc("org_a").set({ role: "agent", status: "active" });
+  await updateOrganizationMemberRole(organization, { role: "owner" }, { uid: "agent_uid", role: "admin" });
+  assert.equal(records.get("organizations/org_a/members/agent_uid").role, "admin");
+  assert.equal(records.get("users/agent_uid/organizations/org_a").role, "admin");
+});
+
+test("removal updates the tenant member and user organization index together", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_a", ref: db.collection("organizations").doc("org_a"), createdBy: "owner_uid" };
+  await organization.ref.collection("members").doc("agent_uid").set({ role: "agent", status: "active" });
+  await db.collection("users").doc("agent_uid").collection("organizations").doc("org_a").set({ role: "agent", status: "active" });
+  await removeOrganizationMember(organization, { role: "owner" }, { uid: "agent_uid" });
+  assert.equal(records.get("organizations/org_a/members/agent_uid").status, "removed");
+  assert.equal(records.get("users/agent_uid/organizations/org_a").status, "removed");
 });
