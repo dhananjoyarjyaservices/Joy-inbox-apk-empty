@@ -46,25 +46,30 @@ async function addOrganizationMember(db, auth, organization, actor, input) {
   }
   if (!validUid(user.uid)) throw httpError("The selected account has an invalid user ID.", 400);
   const ref = organization.ref.collection("members").doc(user.uid);
-  const existing = await ref.get();
-  if (existing.exists && existing.data().status === "active") throw httpError("This person is already an active organization member.", 409);
+  const indexRef = db.collection("users").doc(user.uid).collection("organizations").doc(organization.id);
   const now = new Date();
-  await ref.set({
-    uid: user.uid,
-    email: user.email || email,
-    displayName: user.displayName || "",
-    role,
-    status: "active",
-    joinedAt: now,
-    updatedAt: now
-  }, { merge: true });
-  await db.collection("users").doc(user.uid).collection("organizations").doc(organization.id).set({
-    organizationId: organization.id,
-    name: organization.name || "",
-    role,
-    status: "active",
-    createdAt: now
-  }, { merge: true });
+  await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(ref);
+    if (existing.exists && existing.data().status === "active") {
+      throw httpError("This person is already an active organization member.", 409);
+    }
+    transaction.set(ref, {
+      uid: user.uid,
+      email: user.email || email,
+      displayName: user.displayName || "",
+      role,
+      status: "active",
+      joinedAt: now,
+      updatedAt: now
+    }, { merge: true });
+    transaction.set(indexRef, {
+      organizationId: organization.id,
+      name: organization.name || "",
+      role,
+      status: "active",
+      createdAt: now
+    }, { merge: true });
+  });
   return { uid: user.uid, email: user.email || email, displayName: user.displayName || "", role, status: "active" };
 }
 
