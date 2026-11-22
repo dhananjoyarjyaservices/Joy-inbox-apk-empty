@@ -65,11 +65,20 @@ export interface OrganizationMemberAuditEvent {
   createdAt?: unknown;
 }
 
+export interface OrganizationMemberAuditPage {
+  events: OrganizationMemberAuditEvent[];
+  nextCursor: string | null;
+}
+
 export async function listOrganizationMemberAudit(
   organizationId: string,
-  limit = 25
-): Promise<OrganizationMemberAuditEvent[]> {
-  const params = new URLSearchParams({ organizationId, limit: String(limit) });
+  options: { limit?: number; cursor?: string } = {}
+): Promise<OrganizationMemberAuditPage> {
+  const params = new URLSearchParams({ organizationId, limit: String(options.limit ?? 25) });
+  if (options.cursor) params.set("cursor", options.cursor);
   const result = await request(`/organizations/member-audit?${params.toString()}`);
-  return Array.isArray(result.events) ? result.events : [];
+  return {
+    events: Array.isArray(result.events) ? result.events : [],
+    nextCursor: typeof result.nextCursor === "string" ? result.nextCursor : null
+  };
 }
