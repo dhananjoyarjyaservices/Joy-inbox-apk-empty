@@ -4,6 +4,7 @@ import { Mail, Lock, MessageCircle } from "lucide-react";
 
 import {
   loginWithEmail,
+  registerWithEmail,
   loginWithGoogle,
 } from "../services/auth";
 
@@ -13,6 +14,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState("");
 
   async function handleEmailLogin(event: FormEvent<HTMLFormElement>) {
@@ -21,10 +23,11 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await loginWithEmail(email, password);
+      if (isRegister) await registerWithEmail(email, password);
+      else await loginWithEmail(email, password);
       navigate("/", { replace: true });
     } catch {
-      setError("Login failed. Email aur password check karo.");
+      setError(isRegister ? "Account create nahi hua. Email check karo aur password kam se kam 6 characters ka rakho." : "Login failed. Email aur password check karo.");
     } finally {
       setLoading(false);
     }
@@ -57,7 +60,7 @@ export default function Login() {
           </h1>
 
           <p className="mt-2 text-sm text-gray-500">
-            Sign in to your customer support inbox
+            {isRegister ? "Create your business inbox account" : "Sign in to your customer support inbox"}
           </p>
         </div>
 
@@ -109,9 +112,11 @@ export default function Login() {
             disabled={loading}
             className="w-full rounded-xl bg-[#075e54] py-3 font-semibold text-white transition hover:bg-[#064c44] disabled:opacity-60"
           >
-            {loading ? "Please wait..." : "Sign in"}
+            {loading ? "Please wait..." : isRegister ? "Create account" : "Sign in"}
           </button>
         </form>
+
+        <button type="button" onClick={() => { setIsRegister((value) => !value); setError(""); }} className="mt-3 w-full py-2 text-sm font-medium text-[#075e54]">{isRegister ? "Already have an account? Sign in" : "New to Joy Inbox? Create account"}</button>
 
         <div className="my-5 flex items-center gap-3">
           <div className="h-px flex-1 bg-gray-200" />
@@ -129,7 +134,7 @@ export default function Login() {
         </button>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          Private access · JOY INBOX
+          Business workspace setup · JOY INBOX
         </p>
       </section>
     </main>
