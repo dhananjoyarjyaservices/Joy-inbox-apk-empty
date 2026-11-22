@@ -305,8 +305,78 @@ async function uploadWhatsAppMedia(buffer, mimeType, filename, credentials) {
   return { mediaId: result.id, mimeType: normalizedType };
 }
 
+
+const QUICK_REPLY_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
+const QUICK_REPLY_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
+
+function quickReplyImagePath(organizationId, quickReplyId) {
+  const validId = /^[A-Za-z0-9_-]{1,128}$/;
+  if (!validId.test(String(organizationId || "")) || !validId.test(String(quickReplyId || ""))) {
+    const error = new Error("Organization and Quick Reply IDs are invalid.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return `organizations/${organizationId}/quickReplies/${quickReplyId}`;
+}
+
+function validateQuickReplyImage(mimeType, buffer) {
+  const normalizedType = String(mimeType || "").split(";")[0].trim().toLowerCase();
+  if (!QUICK_REPLY_IMAGE_TYPES.has(normalizedType)) {
+    const error = new Error("Quick Reply images must be JPEG or PNG.");
+    error.statusCode = 400;
+    throw error;
+  }
+  try {
+    validateMedia(normalizedType, buffer?.length, QUICK_REPLY_IMAGE_MAX_BYTES);
+    validateMediaContent(normalizedType, buffer);
+  } catch (cause) {
+    const error = new Error(cause.message);
+    error.statusCode = 400;
+    throw error;
+  }
+  return normalizedType;
+}
+
+async function saveQuickReplyImage(organizationId, quickReplyId, buffer, mimeType) {
+  const normalizedType = validateQuickReplyImage(mimeType, buffer);
+  const storagePath = quickReplyImagePath(organizationId, quickReplyId);
+  const file = getStorageBucket().file(storagePath);
+  await file.save(buffer, {
+    resumable: false,
+    validation: "md5",
+    metadata: {
+      contentType: normalizedType,
+      cacheControl: "private, no-store",
+      metadata: { organizationId, quickReplyId, purpose: "saved-quick-reply-image" }
+    }
+  });
+  return { storagePath, mimeType: normalizedType, size: buffer.length };
+}
+
+async function getQuickReplyImage(organizationId, quickReplyId) {
+  const storagePath = quickReplyImagePath(organizationId, quickReplyId);
+  const file = getStorageBucket().file(storagePath);
+  const [exists] = await file.exists();
+  if (!exists) return null;
+  const [buffer] = await file.download();
+  const [metadata] = await file.getMetadata();
+  const mimeType = validateQuickReplyImage(metadata.contentType, buffer);
+  return { buffer, mimeType, size: buffer.length, storagePath };
+}
+
+async function deleteQuickReplyImage(organizationId, quickReplyId) {
+  const storagePath = quickReplyImagePath(organizationId, quickReplyId);
+  await getStorageBucket().file(storagePath).delete({ ignoreNotFound: true });
+}
+
 module.exports = {
   MAX_UPLOAD_BYTES,
+  QUICK_REPLY_IMAGE_MAX_BYTES,
+  quickReplyImagePath,
+  validateQuickReplyImage,
+  saveQuickReplyImage,
+  getQuickReplyImage,
+  deleteQuickReplyImage,
   SUPPORTED_MEDIA_TYPES,
   downloadWhatsAppMedia,
   deleteMessageMedia,
