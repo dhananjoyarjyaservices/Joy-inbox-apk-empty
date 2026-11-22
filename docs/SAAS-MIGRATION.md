@@ -113,3 +113,14 @@ The backend now includes organization-scoped chat management endpoints:
 - `POST /organizations/delete-chats`: delete 1–50 conversations and their nested Firestore data.
 
 Each endpoint authenticates the Firebase user, verifies active membership and checks `chats:manage`. All document references are constructed below the verified organization path. Deletion validates IDs and checks selected documents before removing them. These routes do not invoke legacy Firebase Storage cleanup, and they do not delete or persist media bytes; media metadata is removed with its message document. Frontend wiring and end-to-end tests remain outstanding.
+
+
+## Tenant greeting and connection diagnostics APIs
+
+The backend now provides organization-scoped endpoints for greeting configuration and WhatsApp connection diagnostics:
+
+- `GET /organizations/greeting-settings?organizationId=...`
+- `POST /organizations/greeting-settings` with `organizationId`, `enabled` and `text`.
+- `GET /organizations/status?organizationId=...`
+
+These routes authenticate the Firebase user and verify active organization membership. Greeting settings require `settings:manage` and are stored below the selected organization's `settings/greeting` document. Connection diagnostics require `chats:read` and check the selected organization's encrypted WhatsApp credentials and organization chat collection. The previous owner-only `/greeting-settings` and `/status` routes remain for the legacy dashboard. Tenant frontend integration and automated end-to-end validation remain outstanding.
