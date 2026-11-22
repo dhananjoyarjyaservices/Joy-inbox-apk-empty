@@ -71,6 +71,9 @@ test("WhatsApp credentials are encrypted and mapped to exactly one tenant", asyn
   assert.notEqual(stored.accessToken.ciphertext, Buffer.from("EAA_example_secret_token").toString("base64"));
   const credentials = await getWhatsAppCredentials(db, "org_test");
   assert.equal(credentials.accessToken, "EAA_example_secret_token");
+  const numberCredentials = await getWhatsAppCredentials(db, "org_test", "123456789012345");
+  assert.equal(numberCredentials.accessToken, "EAA_example_secret_token");
+  assert.equal(numberCredentials.phoneNumberId, "123456789012345");
   const mapped = await resolvePhoneNumberOrganization(db, "123456789012345");
   assert.equal(mapped.id, "org_test");
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
