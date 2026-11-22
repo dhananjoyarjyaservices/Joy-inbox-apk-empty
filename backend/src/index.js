@@ -169,7 +169,10 @@ async function handleTenantResource(event, resource) {
   if (method !== "GET") {
     try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   }
-  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  const organizationId = method === "GET"
+    ? event.queryStringParameters?.organizationId
+    : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, resource === "contacts" ? "contacts:manage" : "quickReplies:manage");
   if (method === "GET") {
     const items = await listTenantResource(getDb(), organization.id, resource);
