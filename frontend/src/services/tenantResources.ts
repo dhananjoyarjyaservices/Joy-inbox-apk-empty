@@ -50,3 +50,14 @@ export async function updateTenantMessageState(org: string, data: { chatId: stri
 export async function deleteTenantChat(org: string, chatId: string) {
   return call("/organizations/delete-chats", "POST", { organizationId: org, chatIds: [chatId] });
 }
+
+export async function getTenantGreeting(org: string): Promise<{ enabled: boolean; text: string; trigger: string }> {
+  const result = await call("/organizations/greeting-settings", "GET", undefined, org);
+  return { enabled: Boolean(result.enabled), text: String(result.text || ""), trigger: String(result.trigger || "first_inbound") };
+}
+export async function saveTenantGreeting(org: string, enabled: boolean, text: string) {
+  return call("/organizations/greeting-settings", "POST", { organizationId: org, enabled, text });
+}
+export async function getTenantStatus(org: string) {
+  return call("/organizations/status", "GET", undefined, org);
+}
