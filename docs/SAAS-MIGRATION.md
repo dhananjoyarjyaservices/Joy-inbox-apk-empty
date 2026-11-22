@@ -101,3 +101,15 @@ Authenticated organization-scoped endpoints now support listing, creating, updat
 - `GET/POST/PUT/DELETE /organizations/quick-replies`
 
 Every request verifies the Firebase ID token, active organization membership and the matching `contacts:manage` or `quickReplies:manage` permission. Resource data is stored only below the requested organization path. Contact IDs are normalized phone-number digits; Quick Reply IDs are generated server-side. Inputs reject unknown fields and enforce length/format limits. These endpoints are not yet connected to the tenant dashboard, and integration tests against a real Firebase project remain outstanding.
+
+
+## Tenant chat management APIs
+
+The backend now includes organization-scoped chat management endpoints:
+
+- `POST /organizations/chat-state`: pin, archive and mark a conversation read.
+- `POST /organizations/message-state`: pin or unpin a message.
+- `POST /organizations/delete-messages`: delete 1–50 selected messages.
+- `POST /organizations/delete-chats`: delete 1–50 conversations and their nested Firestore data.
+
+Each endpoint authenticates the Firebase user, verifies active membership and checks `chats:manage`. All document references are constructed below the verified organization path. Deletion validates IDs and checks selected documents before removing them. These routes do not invoke legacy Firebase Storage cleanup, and they do not delete or persist media bytes; media metadata is removed with its message document. Frontend wiring and end-to-end tests remain outstanding.
