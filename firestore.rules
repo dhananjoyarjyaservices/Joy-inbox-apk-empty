@@ -8,6 +8,32 @@ service cloud.firestore {
         && request.auth.uid == "Vy49nGnw74gR5SFHmjN0DOQ2QFE3";
     }
 
+    function isActiveOrganizationMember(organizationId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid)).data.status == "active";
+    }
+
+    // Users can only read their own organization switcher index.
+    match /users/{userId}/organizations/{organizationId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Organization metadata and membership are server-managed.
+    // Members can read their own organization and their own membership record only.
+    match /organizations/{organizationId} {
+      allow read: if isActiveOrganizationMember(organizationId);
+      allow write: if false;
+
+      match /members/{memberUid} {
+        allow read: if request.auth != null
+          && request.auth.uid == memberUid
+          && isActiveOrganizationMember(organizationId);
+        allow write: if false;
+      }
+    }
+
     // FCM tokens are only accessed by the authenticated Lambda API.
     // The top-level collection check keeps device credentials private from all clients.
     match /{collection}/{document=**} {
