@@ -26,6 +26,7 @@ const {
   validateMedia
 } = require("./media");
 const { OWNER_UID } = require("./owner");
+const { createOrganization, listOrganizations } = require("./organizations");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
   claimSendRequest,
@@ -82,6 +83,44 @@ function logLatency(name, startedAt, details = {}) {
     durationMs: Math.max(0, Date.now() - startedAt),
     ...details
   }));
+}
+
+async function authenticateUser(event) {
+  const authorization = getHeader(event, "authorization");
+  if (!authorization || !authorization.startsWith("Bearer ")) {
+    const error = new Error("Authentication required.");
+    error.statusCode = 401;
+    throw error;
+  }
+  const idToken = authorization.slice(7).trim();
+  if (!idToken) {
+    const error = new Error("Firebase ID token is missing.");
+    error.statusCode = 401;
+    throw error;
+  }
+  try {
+    return await getFirebaseAdmin().auth().verifyIdToken(idToken);
+  } catch {
+    const error = new Error("Firebase ID token is invalid or expired.");
+    error.statusCode = 401;
+    throw error;
+  }
+}
+
+async function handleOrganizations(event) {
+  const decoded = await authenticateUser(event);
+  if (getMethod(event) === "GET") {
+    const organizations = await listOrganizations(getDb(), decoded);
+    return jsonResponse(event, 200, { organizations });
+  }
+  let body;
+  try {
+    body = parseBody(event);
+  } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  const organization = await createOrganization(getDb(), decoded, body);
+  return jsonResponse(event, 201, { organization });
 }
 
 async function authenticateOwner(event) {
@@ -817,6 +856,17 @@ exports.handler = async (event) => {
 
   if (method === "OPTIONS") {
     return emptyResponse(event, 204);
+  }
+
+  if ((method === "GET" || method === "POST") && path.endsWith("/organizations")) {
+    try {
+      return await handleOrganizations(event);
+    } catch (error) {
+      console.error("Organization request failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Organization request could not be completed."
+      });
+    }
   }
 
   if (method === "GET" && path.endsWith("/webhook")) {
