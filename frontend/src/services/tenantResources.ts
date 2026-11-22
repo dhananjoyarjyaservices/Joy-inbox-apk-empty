@@ -61,7 +61,7 @@ export async function deleteTenantQuickReply(org: string, resourceId: string) {
 export async function updateTenantChatState(org: string, data: { chatId: string; pinned?: boolean; archived?: boolean; markRead?: boolean }) {
   return call("/organizations/chat-state", "POST", { organizationId: org, ...data });
 }
-export async function updateTenantMessageState(org: string, data: { chatId: string; messageId: string; pinned: boolean }) {
+export async function updateTenantMessageState(org: string, data: { chatId: string; messageId: string; pinned?: boolean; saved?: boolean }) {
   return call("/organizations/message-state", "POST", { organizationId: org, ...data });
 }
 export async function deleteTenantChat(org: string, chatId: string) {
