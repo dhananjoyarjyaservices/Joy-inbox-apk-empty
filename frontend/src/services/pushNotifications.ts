@@ -1,5 +1,6 @@
 import { getMessaging, getToken, isSupported } from "firebase/messaging";
 import { auth, firebaseApp } from "../firebase/config";
+import { getActiveOrganizationId } from "./activeOrganization";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
@@ -130,12 +131,15 @@ export async function syncPushToken(): Promise<void> {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const token = await requestFcmToken();
   const installationId = getInstallationId();
-  await authenticatedRequest("/fcm-tokens/register", { token, installationId });
+  const organizationId = getActiveOrganizationId();
+  if (!organizationId) throw new Error("Please select an organization before enabling notifications.");
+  await authenticatedRequest("/organizations/fcm-tokens/register", { token, installationId, organizationId });
 }
 
 export async function disablePushNotifications(): Promise<void> {
   const installationId = localStorage.getItem(INSTALLATION_ID_KEY);
-  if (installationId) {
-    await authenticatedRequest("/fcm-tokens/remove", { installationId });
+  const organizationId = getActiveOrganizationId();
+  if (installationId && organizationId) {
+    await authenticatedRequest("/organizations/fcm-tokens/remove", { installationId, organizationId });
   }
 }
