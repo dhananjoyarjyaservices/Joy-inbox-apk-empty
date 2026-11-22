@@ -1,4 +1,4 @@
-const CHAT_ID_PATTERN = /^\\d{6,20}$/;
+const CHAT_ID_PATTERN = /^\d{6,20}$/;
 const UID_PATTERN = /^[A-Za-z0-9:_-]{1,128}$/;
 const CHAT_STATUSES = new Set(["open", "pending", "resolved"]);
 
