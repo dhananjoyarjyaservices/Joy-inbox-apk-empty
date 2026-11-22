@@ -11,14 +11,14 @@ function contactInput(input) {
   const allowed = ["name", "phone", "email", "notes", "source"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Unsupported contact field.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
-  const rawPhone = typeof input.phone === "string" ? input.phone.trim().replace(/[\\s().-]/g, "") : "";
+  const rawPhone = typeof input.phone === "string" ? input.phone.trim().replace(/[\s().-]/g, "") : "";
   const phone = rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`;
   const email = typeof input.email === "string" ? input.email.trim() : "";
   const notes = typeof input.notes === "string" ? input.notes.trim() : "";
   const source = input.source === "whatsapp" ? "whatsapp" : "local";
   if (!name || name.length > 100) throw httpError("Contact name is required (maximum 100 characters).", 400);
-  if (!/^\\+[1-9]\\d{6,14}$/.test(phone)) throw httpError("Enter a valid international phone number.", 400);
-  if (email.length > 254 || (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))) throw httpError("Enter a valid email address.", 400);
+  if (!/^\+[1-9]\d{6,14}$/.test(phone)) throw httpError("Enter a valid international phone number.", 400);
+  if (email.length > 254 || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw httpError("Enter a valid email address.", 400);
   if (notes.length > 1000) throw httpError("Contact notes are too long.", 400);
   return { name, phone, phoneId: phone.slice(1), email, notes, source };
 }
@@ -28,7 +28,7 @@ function quickReplyInput(input) {
   const allowed = ["title", "shortcut", "message"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Unsupported Quick Reply field.", 400);
   const title = typeof input.title === "string" ? input.title.trim() : "";
-  const shortcut = typeof input.shortcut === "string" ? input.shortcut.trim().replace(/^\\/+/, "").toLowerCase() : "";
+  const shortcut = typeof input.shortcut === "string" ? input.shortcut.trim().replace(/^\/+/, "").toLowerCase() : "";
   const message = typeof input.message === "string" ? input.message.trim() : "";
   if (!title || title.length > 60 || !message || message.length > 4096) throw httpError("Title (max 60) and message (max 4096) are required.", 400);
   if (shortcut.length > 30 || (shortcut && !/^[a-z0-9_-]+$/.test(shortcut))) throw httpError("Shortcut must use letters, numbers, underscores or hyphens (maximum 30).", 400);
