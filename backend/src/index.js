@@ -124,7 +124,7 @@ async function handleWhatsAppConnections(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
   const organization = await requireOrganization(getDb(), decoded, organizationId);
-  requirePermission(organization, "whatsapp:manage");
+  requirePermission(organization, "chats:read");
   const connections = await listWhatsAppConnections(getDb(), organization.id);
   return jsonResponse(event, 200, { connections });
 }
@@ -532,12 +532,13 @@ async function sendTenantMessage(event) {
   }
 
   const db = getDb();
-  const credentials = await getWhatsAppCredentials(db, organization.id);
+  const credentials = await getWhatsAppCredentials(db, organization.id, body.phoneNumberId);
   const replyContext = await resolveTenantReplyContext(db, organization.id, chatId, body);
   const clientMessageId = getClientMessageId(body.clientMessageId);
   const source = body.source === "quick_reply" ? "quick_reply" : "manual";
   const payloadHash = hashSendPayload({
     organizationId: organization.id,
+    phoneNumberId: credentials.phoneNumberId || null,
     to,
     text: messageText,
     source,
@@ -569,6 +570,7 @@ async function sendTenantMessage(event) {
     chatId,
     organizationId: organization.id,
     direction: "outgoing",
+    phoneNumberId: credentials.phoneNumberId || null,
     type: "text",
     text: messageText,
     timestamp,
@@ -579,6 +581,7 @@ async function sendTenantMessage(event) {
   });
   batch.set(chatRef, {
     customerPhone: chatId,
+    ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
     lastMessage: messageText,
     lastMessageAt: timestamp,
     lastMessageDirection: "outgoing",
@@ -656,12 +659,12 @@ async function sendTenantMediaMessage(event) {
   const batch = db.batch();
   batch.set(messageRef, {
     messageId: result.messageId, clientMessageId, chatId, organizationId: organization.id,
-    direction: "outgoing", type, text: caption, timestamp, status: "sending", source, sender: decoded.uid,
+    direction: "outgoing", phoneNumberId: credentials.phoneNumberId || null, type, text: caption, timestamp, status: "sending", source, sender: decoded.uid,
     ...getTenantReplyMessageFields(replyContext),
     mediaId: uploaded.mediaId, mediaMimeType: mimeType, mediaSize: buffer.length, mediaFilename: filename,
     mediaStorage: "meta"
   });
-  batch.set(chatRef, { customerPhone: chatId, lastMessage: preview, lastMessageAt: timestamp, lastMessageDirection: "outgoing", updatedAt: timestamp }, { merge: true });
+  batch.set(chatRef, { customerPhone: chatId, ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}), lastMessage: preview, lastMessageAt: timestamp, lastMessageDirection: "outgoing", updatedAt: timestamp }, { merge: true });
   batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
   await batch.commit();
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
@@ -695,7 +698,8 @@ async function sendTenantQuickReplyImage(event) {
       caption: String(replySnapshot.data().message || "").slice(0, 1024),
       filename: "quick-reply-image",
       source: "quick_reply",
-      clientMessageId: body.clientMessageId
+      clientMessageId: body.clientMessageId,
+      phoneNumberId: body.phoneNumberId
     }),
     isBase64Encoded: false
   };
