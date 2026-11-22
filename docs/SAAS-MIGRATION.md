@@ -79,3 +79,10 @@ Firestore rules now allow active organization members to read that organization'
 The frontend now permits Firebase email/password account registration and no longer automatically signs out every non-legacy-owner user. Non-owner authenticated users are redirected away from the legacy owner dashboard to a protected `/setup` route. The setup screen calls the authenticated organization APIs to list workspaces, create a business workspace, and connect a WhatsApp Cloud API number using the Meta Phone Number ID and access token. The access token is sent only to the backend connection endpoint and cleared from the form after a successful response.
 
 The legacy owner account continues to use the existing dashboard while tenant users are kept out of that owner-only dashboard. This is intentionally a limited onboarding milestone: tenant chat UI, organization switching in the inbox, organization-scoped Firestore listeners and tenant-aware message/media actions are not yet wired. Google sign-in can also create a Firebase account and then proceeds to the same setup route. Do not treat this as a complete or production-ready SaaS release.
+
+
+## Organization-scoped frontend data access (foundation)
+
+The frontend now has a separate tenant chat service that reads only from `organizations/{organizationId}/chats` and its `messages` subcollections. It provides tenant-specific chat/message lookups, realtime listeners, and cursor pagination. It does not fall back to the legacy top-level `chats` collection. The setup page also remembers the selected workspace ID locally so a later tenant inbox can restore the last selection.
+
+This is deliberately not wired into the legacy dashboard yet. That dashboard still calls legacy global chat, contacts, quick-reply, send, pin, delete, media, greeting, and status services. Unlocking it for tenant users before every operation is tenant-scoped would risk exposing or modifying another workspace's data. The next integration stage must move the entire dashboard onto organization-aware services and keep tenant access blocked until that is complete.
