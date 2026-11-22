@@ -144,7 +144,7 @@ export async function loadOlderTenantMessages(
     limit(MESSAGE_PAGE_SIZE)
   ));
   return {
-    messages: snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as ChatMessage[] .reverse(),
+    messages: (snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as ChatMessage[]).reverse(),
     cursor: snapshot.docs.at(-1) || cursor,
     hasOlder: snapshot.size === MESSAGE_PAGE_SIZE,
   };
