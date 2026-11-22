@@ -1,0 +1,61 @@
+const crypto = require("crypto");
+
+const ROLES = new Set(["owner", "admin", "agent"]);
+const ROLE_PERMISSIONS = {
+  owner: new Set(["members:manage", "settings:manage", "whatsapp:manage", "chats:read", "messages:send", "contacts:manage", "quickReplies:manage"]),
+  admin: new Set(["members:manage", "settings:manage", "whatsapp:manage", "chats:read", "messages:send", "contacts:manage", "quickReplies:manage"]),
+  agent: new Set(["chats:read", "messages:send", "contacts:manage", "quickReplies:manage"])
+};
+
+function httpError(message, statusCode) { const error = new Error(message); error.statusCode = statusCode; return error; }
+function validId(value) { return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value); }
+
+async function requireOrganization(db, decoded, organizationId) {
+  if (!decoded?.uid) throw httpError("Authentication required.", 401);
+  if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
+  const memberRef = db.collection("organizations").doc(organizationId).collection("members").doc(decoded.uid);
+  const [org, member] = await Promise.all([db.collection("organizations").doc(organizationId).get(), memberRef.get()]);
+  if (!org.exists || !member.exists || member.data().status !== "active" || !ROLES.has(member.data().role)) {
+    throw httpError("You are not an active member of this organization.", 403);
+  }
+  return { id: organizationId, ref: org.ref, memberRef, role: member.data().role, uid: decoded.uid };
+}
+
+function requirePermission(organization, permission) {
+  if (!organization || !ROLE_PERMISSIONS[organization.role]?.has(permission)) throw httpError("Insufficient organization permissions.", 403);
+}
+
+function encryptSecret(plaintext, keyValue = process.env.TENANT_SECRET_ENCRYPTION_KEY) {
+  if (!keyValue) throw new Error("TENANT_SECRET_ENCRYPTION_KEY is not configured.");
+  const key = Buffer.from(keyValue, "base64");
+  if (key.length !== 32) throw new Error("TENANT_SECRET_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(String(plaintext), "utf8"), cipher.final()]);
+  return { version: 1, algorithm: "aes-256-gcm", iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), ciphertext: ciphertext.toString("base64") };
+}
+
+function decryptSecret(record, keyValue = process.env.TENANT_SECRET_ENCRYPTION_KEY) {
+  if (!keyValue) throw new Error("TENANT_SECRET_ENCRYPTION_KEY is not configured.");
+  const key = Buffer.from(keyValue, "base64");
+  if (key.length !== 32 || record?.algorithm !== "aes-256-gcm" || record.version !== 1) throw new Error("Tenant secret format or encryption key is invalid.");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(record.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(record.tag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(record.ciphertext, "base64")), decipher.final()]).toString("utf8");
+}
+
+async function resolvePhoneNumberOrganization(db, phoneNumberId) {
+  if (!validId(phoneNumberId)) throw httpError("Invalid WhatsApp phone number ID.", 400);
+  const mapping = await db.collection("whatsappPhoneNumbers").doc(phoneNumberId).get();
+  if (!mapping.exists || !validId(mapping.data().organizationId)) throw httpError("No organization is connected to this WhatsApp number.", 404);
+  return requireOrganizationForWebhook(db, mapping.data().organizationId);
+}
+
+async function requireOrganizationForWebhook(db, organizationId) {
+  const ref = db.collection("organizations").doc(organizationId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data().status !== "active") throw httpError("WhatsApp organization is inactive.", 403);
+  return { id: organizationId, ref, ...snap.data() };
+}
+
+module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, resolvePhoneNumberOrganization };
