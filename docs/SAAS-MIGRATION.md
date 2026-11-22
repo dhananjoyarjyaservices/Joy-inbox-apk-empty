@@ -149,3 +149,12 @@ The tenant inbox now has Contacts and Quick Replies views backed by the organiza
 ## Tenant chat actions and Quick Reply insertion
 
 The tenant inbox now calls organization-scoped chat-state, message-state and delete-chat endpoints. Chat rows expose pin/unpin, archive/unarchive, mark-read and delete actions; individual messages expose pin/unpin. Typing a forward slash in the composer filters the current workspace's saved Quick Replies by shortcut/title, and selecting a result inserts its message into the composer. These controls depend on the existing backend permission `chats:manage`; agent-role permission currently includes that capability. Archived-chat filtering/navigation, bulk actions and end-to-end interaction testing remain outstanding.
+
+
+## Tenant media frontend and workspace settings
+
+The tenant inbox now has a media attachment picker and previews for supported image, video, audio and document messages. Outgoing files are bounded to 3 MB in the browser and sent through the authenticated tenant media endpoint; incoming previews are fetched through the authenticated media proxy and held only as temporary browser Blob URLs, revoked when the conversation changes or the component unmounts. No customer media bytes are written to Firebase Storage, S3 or local disk by these tenant flows. Current supported MIME types are limited to the explicit allowlist in the backend; unsupported formats such as WebP stickers are not yet supported. The proxy currently caps previews at 4 MB.
+
+The Settings view now displays WhatsApp/Firestore connection diagnostics and lets owner/admin members configure the first-inbound greeting message. Agent users do not see the settings tab. Archived conversations can be shown separately from the inbox list.
+
+Remaining validation: execute backend tests and frontend TypeScript/Vite build; test the binary Lambda proxy through the actual API Gateway/Lambda integration; verify CORS_ORIGINS includes the deployed frontend origin; verify Meta's media host and MIME/signature behavior with real supported samples; test large-file behavior and role-based UI/API permissions. This remains non-production code until those checks pass.
