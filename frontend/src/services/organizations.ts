@@ -45,6 +45,12 @@ export async function sendTenantText(organizationId: string, to: string, text: s
   });
 }
 
+export async function retryTenantFailedText(organizationId: string, chatId: string, originalMessageId: string) {
+  return request("/organizations/retry", "POST", {
+    organizationId, chatId, originalMessageId, clientMessageId: crypto.randomUUID()
+  });
+}
+
 export interface WhatsAppConnection {
   phoneNumberId: string;
   displayPhoneNumber: string;
