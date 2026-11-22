@@ -175,6 +175,8 @@ const MESSAGE_STATUS_RANK = { failed: 0, sent: 1, delivered: 2, read: 3 };
 
 function shouldApplyMessageStatus(currentStatus, nextStatus) {
   if (!Object.prototype.hasOwnProperty.call(MESSAGE_STATUS_RANK, nextStatus)) return false;
+  if (nextStatus === "failed") return !["failed", "delivered", "read"].includes(currentStatus);
+  if (["delivered", "read"].includes(currentStatus)) return false;
   return MESSAGE_STATUS_RANK[nextStatus] > (MESSAGE_STATUS_RANK[currentStatus] ?? -1);
 }
 
@@ -185,10 +187,21 @@ async function updateTenantMessageStatus(organization, status) {
   if (!/^[A-Za-z0-9._:-]{1,256}$/.test(messageId) || !recipient ||
       !Object.prototype.hasOwnProperty.call(MESSAGE_STATUS_RANK, nextStatus)) return;
   const ref = organization.ref.collection("chats").doc(recipient).collection("messages").doc(messageId);
+  const metaError = Array.isArray(status.errors) ? status.errors[0] : null;
+  const deliveryError = nextStatus === "failed" && metaError ? {
+    code: String(metaError.code || "").slice(0, 40),
+    title: String(metaError.title || "Message delivery failed.").slice(0, 160),
+    message: String(metaError.message || metaError.error_data?.details || "WhatsApp could not deliver this message.").slice(0, 300),
+    details: String(metaError.error_data?.details || "").slice(0, 300)
+  } : null;
   await ref.firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists || !shouldApplyMessageStatus(snapshot.data()?.status, nextStatus)) return;
-    transaction.update(ref, { status: nextStatus, statusUpdatedAt: new Date() });
+    transaction.update(ref, {
+      status: nextStatus,
+      statusUpdatedAt: new Date(),
+      ...(deliveryError ? { deliveryError } : {})
+    });
   });
 }
 
