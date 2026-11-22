@@ -20,7 +20,7 @@ messaging.onBackgroundMessage(async (payload) => {
     return;
   }
 
-  const target = new URL(self.registration.scope);
+  const target = new URL("inbox", self.registration.scope);
   target.searchParams.set("chatId", data.chatId);
   target.searchParams.set("messageId", data.messageId);
 
