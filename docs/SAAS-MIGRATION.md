@@ -144,3 +144,8 @@ A protected `/inbox` route is now available to authenticated workspace members. 
 ## Tenant contacts and Quick Replies frontend
 
 The tenant inbox now has Contacts and Quick Replies views backed by the organization-scoped API routes. Both lists are loaded for the selected organization, and create/delete operations send the organization ID with authenticated requests. These are initial management screens; contact editing, shortcut-triggered insertion into the chat composer, media attachments in Quick Replies, and full interaction testing remain outstanding. The existing owner-only legacy dashboard and user-level resource services are not used by these new tenant views.
+
+
+## Tenant chat actions and Quick Reply insertion
+
+The tenant inbox now calls organization-scoped chat-state, message-state and delete-chat endpoints. Chat rows expose pin/unpin, archive/unarchive, mark-read and delete actions; individual messages expose pin/unpin. Typing a forward slash in the composer filters the current workspace's saved Quick Replies by shortcut/title, and selecting a result inserts its message into the composer. These controls depend on the existing backend permission `chats:manage`; agent-role permission currently includes that capability. Archived-chat filtering/navigation, bulk actions and end-to-end interaction testing remain outstanding.
