@@ -33,11 +33,10 @@ function fakeDb({ organization = { status: "active", name: "Workspace" }, member
       assert.equal(name, "organizations");
       return {
         doc(id) {
-          assert.equal(id, "org_1");
           return {
             ref: organizationRef,
             async get() {
-              return organization
+              return id === "org_1" && organization
                 ? { exists: true, data: () => organization, ref: organizationRef }
                 : { exists: false, data: () => undefined };
             }
@@ -140,6 +139,6 @@ test("a user cannot borrow another user's membership or a different workspace ID
   );
   await assert.rejects(
     () => requireOrganization(fakeDb(), { uid: "user_1" }, "org_2"),
-    (error) => error.statusCode === 400
+    httpError(403)
   );
 });
