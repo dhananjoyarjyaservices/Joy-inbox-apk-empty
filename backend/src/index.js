@@ -199,21 +199,22 @@ async function handleTenantChatAction(event, action) {
   let body;
   try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse(event, 400, { error: "A valid request object is required." });
-  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  const { organizationId, ...actionInput } = body;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "chats:manage");
   if (action === "chat-state") {
-    await updateTenantChatState(getDb(), organization.id, body);
+    await updateTenantChatState(getDb(), organization.id, actionInput);
     return jsonResponse(event, 200, { success: true });
   }
   if (action === "message-state") {
-    await updateTenantMessageState(getDb(), organization.id, body);
+    await updateTenantMessageState(getDb(), organization.id, actionInput);
     return jsonResponse(event, 200, { success: true });
   }
   if (action === "delete-messages") {
-    const deletedMessageIds = await deleteTenantMessages(getDb(), organization.id, body);
+    const deletedMessageIds = await deleteTenantMessages(getDb(), organization.id, actionInput);
     return jsonResponse(event, 200, { success: true, deletedMessageIds });
   }
-  const deletedChatIds = await deleteTenantChats(getDb(), organization.id, body);
+  const deletedChatIds = await deleteTenantChats(getDb(), organization.id, actionInput);
   return jsonResponse(event, 200, { success: true, deletedChatIds });
 }
 
