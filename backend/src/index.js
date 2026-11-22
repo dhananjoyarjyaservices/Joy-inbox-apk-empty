@@ -38,7 +38,7 @@ const { listOrganizationMembers, addOrganizationMember, updateOrganizationMember
 const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
 const { requireOrganization, requirePermission, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
-const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
+const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
   claimSendRequest,
@@ -663,17 +663,11 @@ async function retryTenantFailedText(event) {
   const originalSnapshot = await originalRef.get();
   if (!originalSnapshot.exists) return jsonResponse(event, 404, { error: "Original message was not found." });
   const original = originalSnapshot.data();
-  if (original.direction !== "outgoing" || original.type !== "text" || original.status !== "failed" ||
-      typeof original.text !== "string" || !original.text.trim()) {
-    return jsonResponse(event, 409, { error: "Only failed outgoing text messages can be retried." });
-  }
-  if (!original.phoneNumberId) {
-    return jsonResponse(event, 409, { error: "The original WhatsApp number is missing. Send the message manually instead." });
-  }
+  const retryable = getRetryableTenantTextMessage(original);
 
-  const credentials = await getWhatsAppCredentials(db, organization.id, original.phoneNumberId);
+  const credentials = await getWhatsAppCredentials(db, organization.id, retryable.phoneNumberId);
   const clientMessageId = getClientMessageId(body.clientMessageId);
-  const messageText = original.text.trim();
+  const messageText = retryable.text;
   const payloadHash = hashSendPayload({
     organizationId: organization.id,
     phoneNumberId: credentials.phoneNumberId || null,
