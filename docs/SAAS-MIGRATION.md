@@ -91,3 +91,13 @@ This is deliberately not wired into the legacy dashboard yet. That dashboard sti
 ## Tenant contacts and Quick Replies read foundation
 
 The frontend now has separate read-only services for contacts and saved Quick Replies under the active organization's own Firestore paths. These services never read the legacy `users/{uid}` collections. Firestore permits active organization members to read these tenant-owned records; browser writes remain denied until authenticated backend create/update/delete endpoints with role checks and input validation are implemented. The legacy owner dashboard still uses legacy personal collections and has not been switched to these services.
+
+
+## Tenant contacts and Quick Replies backend APIs
+
+Authenticated organization-scoped endpoints now support listing, creating, updating and deleting contacts and Quick Replies:
+
+- `GET/POST/PUT/DELETE /organizations/contacts`
+- `GET/POST/PUT/DELETE /organizations/quick-replies`
+
+Every request verifies the Firebase ID token, active organization membership and the matching `contacts:manage` or `quickReplies:manage` permission. Resource data is stored only below the requested organization path. Contact IDs are normalized phone-number digits; Quick Reply IDs are generated server-side. Inputs reject unknown fields and enforce length/format limits. These endpoints are not yet connected to the tenant dashboard, and integration tests against a real Firebase project remain outstanding.
