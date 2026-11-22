@@ -21,3 +21,8 @@ test("tenant organization writes remain server-only", () => {
   assert.match(rules, /match \/organizations\/\{organizationId\}[\s\S]*?allow write: if false;/);
   assert.match(rules, /match \/chats\/\{chatId\}[\s\S]*?allow write: if false;/);
 });
+
+test("tenant Firestore reads require an active recognized membership role", () => {
+  assert.match(rules, /\.data\.status == "active"/);
+  assert.match(rules, /\.data\.role in \["owner", "admin", "agent"\]/);
+});
