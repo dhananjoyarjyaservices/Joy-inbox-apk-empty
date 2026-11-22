@@ -1,4 +1,4 @@
-const CHAT_ID_PATTERN = /^\\d{6,20}$/;
+const CHAT_ID_PATTERN = /^\d{6,20}$/;
 const MESSAGE_ID_PATTERN = /^[A-Za-z0-9._:-]{1,256}$/;
 
 function httpError(message, statusCode) {
