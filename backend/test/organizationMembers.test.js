@@ -236,3 +236,38 @@ test("failed duplicate-member transaction does not write either membership recor
   assert.deepEqual(records.get("organizations/org_duplicate/members/active_uid"), beforeMember);
   assert.deepEqual(records.get("users/active_uid/organizations/org_duplicate"), beforeIndex);
 });
+
+test("Firebase user lookup maps missing, disabled, and transient errors safely", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_lookup", ref: db.collection("organizations").doc("org_lookup") };
+  const actor = { role: "owner" };
+  for (const [code, statusCode] of [
+    ["auth/user-not-found", 404],
+    ["auth/user-disabled", 403],
+    ["auth/invalid-email", 400],
+    ["auth/too-many-requests", 503],
+    ["auth/internal-error", 503],
+    ["auth/network-request-failed", 503],
+    ["auth/unexpected-provider-error", 502]
+  ]) {
+    const auth = { async getUserByEmail() { throw Object.assign(new Error("private provider detail"), { code }); } };
+    await assert.rejects(
+      () => addOrganizationMember(db, auth, organization, actor, { email: "person@example.com" }),
+      (error) => error.statusCode === statusCode && !error.message.includes("private provider detail")
+    );
+  }
+  assert.equal(records.size, 0);
+});
+
+test("malformed Firebase user lookup results are rejected without membership writes", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_bad_result", ref: db.collection("organizations").doc("org_bad_result") };
+  for (const result of [null, {}, { uid: "../bad", email: "person@example.com" }, { uid: "valid_uid", email: 123 }]) {
+    const auth = { async getUserByEmail() { return result; } };
+    await assert.rejects(
+      () => addOrganizationMember(db, auth, organization, { role: "owner" }, { email: "person@example.com" }),
+      { statusCode: 502 }
+    );
+  }
+  assert.equal(records.size, 0);
+});
