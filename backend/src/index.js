@@ -1068,7 +1068,7 @@ async function retrieveTenantMessageMedia(event) {
     isBase64Encoded: true,
     headers: {
       "Content-Type": media.mimeType,
-      "Content-Disposition": \`inline; filename="\${media.filename || "whatsapp-media"}"\`,
+      "Content-Disposition": `inline; filename="${media.filename || "whatsapp-media"}"`,
       "Content-Length": String(media.buffer.length),
       "Cache-Control": "private, no-store, max-age=0",
       "X-Content-Type-Options": "nosniff",
