@@ -65,3 +65,11 @@ The WhatsApp API client now accepts an explicit credential object for text sends
 The backend now exposes `POST /organizations/send` as a separate tenant-aware text-send route. It verifies the Firebase ID token, checks active organization membership and the `messages:send` permission, loads the organization's decrypted WhatsApp credentials server-side, and writes chats, messages, and idempotency records below `organizations/{organizationId}/chats/{chatId}`. Reply lookup is constrained to the same organization's message subcollection. The legacy `POST /send` route remains unchanged for the existing owner-only application.
 
 This is a backend foundation, not a completed SaaS chat rollout: the current frontend has not yet been switched to this endpoint or to organization-scoped Firestore listeners. Tenant media sending, webhook ingestion/status updates, tenant chat-state/delete routes, and media proxy/no-retention behavior remain outstanding. Do not treat the new endpoint as production-ready until automated tests and integration validation pass.
+
+## Tenant webhook routing and media retention
+
+Incoming webhook changes are now routed using the trusted `value.metadata.phone_number_id` field. The server resolves that ID through the `whatsappPhoneNumbers` mapping and loads the organization's encrypted WhatsApp credentials; unlinked or inactive numbers are ignored. Incoming messages and delivery statuses are written under `organizations/{organizationId}/chats/{chatId}`. Greeting settings and sends are also organization-specific.
+
+The new tenant webhook path stores incoming media references and metadata (Meta media ID, MIME type, file size, filename, and hash) only. It does not download or persist the customer media bytes in Firebase Storage. This is metadata-only retention, **not yet a media viewing proxy**. The legacy media upload/retrieval functions and owner-only media routes still exist; tenant media sending and authenticated short-lived media retrieval remain to be implemented.
+
+Firestore rules now allow active organization members to read that organization's chat and message documents while keeping writes server-only. This is an incremental rule set; the legacy owner-only rules and old data paths remain for the current application until the full frontend and migration are completed.
