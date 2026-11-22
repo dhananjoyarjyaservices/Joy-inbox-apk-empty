@@ -633,7 +633,7 @@ async function sendTenantMediaMessage(event) {
     return jsonResponse(event, 400, { error: "Caption is invalid for this media type." });
   }
   const db = getDb();
-  const credentials = await getWhatsAppCredentials(db, organization.id);
+  const credentials = await getWhatsAppCredentials(db, organization.id, body.phoneNumberId);
   const replyContext = await resolveTenantReplyContext(db, organization.id, chatId, body);
   const clientMessageId = getClientMessageId(body.clientMessageId);
   const source = body.source === "quick_reply" ? "quick_reply" : "manual";
