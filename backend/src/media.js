@@ -255,5 +255,6 @@ module.exports = {
   getSignedMediaUrl,
   saveMessageMedia,
   uploadWhatsAppMedia,
-  validateMedia
+  validateMedia,
+  validateMediaContent
 };
