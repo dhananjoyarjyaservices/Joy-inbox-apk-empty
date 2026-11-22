@@ -6,7 +6,7 @@ async function request(path: string, method = "GET", body?: unknown) {
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in again.");
   const token = await user.getIdToken();
-  const response = await fetch(`${API_URL.replace(/\\/$/, "")}${path}`, {
+  const response = await fetch(`${API_URL.replace(/\/$/, "")}${path}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {})
