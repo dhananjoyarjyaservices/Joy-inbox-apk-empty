@@ -37,7 +37,7 @@ service cloud.firestore {
     // FCM tokens are only accessed by the authenticated Lambda API.
     // The top-level collection check keeps device credentials private from all clients.
     match /{collection}/{document=**} {
-      allow read: if isOwner() && collection != "fcmTokens";
+      allow read: if isOwner() && collection != "fcmTokens" && collection != "organizations";
       allow write: if false;
     }
 
