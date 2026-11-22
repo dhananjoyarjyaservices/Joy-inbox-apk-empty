@@ -60,6 +60,7 @@ async function addOrganizationMember(db, auth, organization, actor, input) {
       role,
       status: "active",
       joinedAt: now,
+      removedAt: null,
       updatedAt: now
     }, { merge: true });
     transaction.set(indexRef, {
@@ -67,6 +68,7 @@ async function addOrganizationMember(db, auth, organization, actor, input) {
       name: organization.name || "",
       role,
       status: "active",
+      removedAt: null,
       createdAt: now
     }, { merge: true });
   });
