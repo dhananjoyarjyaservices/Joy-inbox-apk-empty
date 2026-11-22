@@ -34,6 +34,9 @@ export async function createOrganization(name: string): Promise<Organization> {
 export async function connectWhatsApp(organizationId: string, phoneNumberId: string, accessToken: string) {
   return request("/whatsapp/connect", "POST", { organizationId, phoneNumberId, accessToken });
 }
+export async function disconnectWhatsApp(organizationId: string, phoneNumberId: string) {
+  return request("/whatsapp/connect", "DELETE", { organizationId, phoneNumberId });
+}
 
 export async function sendTenantText(organizationId: string, to: string, text: string, phoneNumberId?: string) {
   return request("/organizations/send", "POST", {
