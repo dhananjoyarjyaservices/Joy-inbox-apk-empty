@@ -17,6 +17,24 @@ test("agent role cannot manage organization membership or WhatsApp settings", ()
   assert.throws(() => requirePermission(agent, "whatsapp:manage"), { statusCode: 403 });
 });
 
+test("role permission matrix denies unknown and privileged permissions to agents", () => {
+  const permissions = [
+    "members:manage", "settings:manage", "whatsapp:manage",
+    "chats:read", "chats:manage", "messages:send",
+    "contacts:manage", "quickReplies:manage"
+  ];
+  for (const permission of permissions) {
+    assert.equal(ROLE_PERMISSIONS.owner.has(permission), true, "owner: " + permission);
+    assert.equal(ROLE_PERMISSIONS.admin.has(permission), true, "admin: " + permission);
+    assert.equal(ROLE_PERMISSIONS.agent.has(permission), [
+      "chats:read", "chats:manage", "messages:send", "contacts:manage", "quickReplies:manage"
+    ].includes(permission), "agent: " + permission);
+  }
+  for (const role of ["owner", "admin", "agent", "unknown", undefined]) {
+    assert.throws(() => requirePermission({ role }, "system:root"), { statusCode: 403 });
+  }
+});
+
 test("owner role can manage organization settings", () => {
   assert.doesNotThrow(() => requirePermission({ role: "owner" }, "settings:manage"));
 });
@@ -105,6 +123,8 @@ test("WhatsApp number cannot be claimed by a second organization", async () => {
 test("organization access requires an active membership with a recognized role", async () => {
   const db = fakeTenantDb();
   db.docs.set("organizations/org_access", { status: "active" });
+  db.docs.set("organizations/org_inactive", { status: "suspended" });
+  db.docs.set("organizations/org_inactive/members/user_active", { status: "active", role: "owner" });
   db.docs.set("organizations/org_access/members/user_active", { status: "active", role: "agent" });
   db.docs.set("organizations/org_access/members/user_disabled", { status: "disabled", role: "admin" });
   db.docs.set("organizations/org_access/members/user_unknown", { status: "active", role: "superuser" });
@@ -123,6 +143,10 @@ test("organization access requires an active membership with a recognized role",
   );
   await assert.rejects(
     () => requireOrganization(db, { uid: "user_missing" }, "org_access"),
+    { statusCode: 403 }
+  );
+  await assert.rejects(
+    () => requireOrganization(db, { uid: "user_active" }, "org_inactive"),
     { statusCode: 403 }
   );
   await assert.rejects(
