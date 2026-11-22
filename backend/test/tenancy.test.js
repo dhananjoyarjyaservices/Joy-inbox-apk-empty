@@ -55,6 +55,7 @@ function fakeTenantDb() {
 
 test("WhatsApp credentials are encrypted and mapped to exactly one tenant", async () => {
   const db = fakeTenantDb();
+  db.docs.set("organizations/org_test", { status: "active" });
   const key = Buffer.alloc(32, 9).toString("base64");
   process.env.TENANT_SECRET_ENCRYPTION_KEY = key;
   const orgRef = db.collection("organizations").doc("org_test");
