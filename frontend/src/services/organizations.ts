@@ -51,6 +51,21 @@ export interface WhatsAppConnection {
   verifiedName: string;
   connected: boolean;
   updatedAt?: unknown;
+  healthStatus?: "healthy" | "attention";
+  healthCheckedAt?: string;
+  healthError?: string;
+}
+export interface WhatsAppConnectionHealthResult {
+  phoneNumberId: string;
+  status: "healthy" | "attention";
+  checkedAt: string;
+  displayPhoneNumber?: string;
+  verifiedName?: string;
+  error?: string;
+}
+export async function checkWhatsAppConnectionHealth(organizationId: string): Promise<WhatsAppConnectionHealthResult[]> {
+  const result = await request("/whatsapp/connection-health", "POST", { organizationId });
+  return Array.isArray(result.results) ? result.results : [];
 }
 export async function listWhatsAppConnections(organizationId: string): Promise<WhatsAppConnection[]> {
   const result = await request(`/whatsapp/connections?organizationId=${encodeURIComponent(organizationId)}`);
