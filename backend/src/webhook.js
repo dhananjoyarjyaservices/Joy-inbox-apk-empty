@@ -12,6 +12,21 @@ function getVerifyToken() {
   );
 }
 
+function verifyWebhook(event) {
+  const params = getQueryParameters(event);
+  const mode = params["hub.mode"];
+  const token = params["hub.verify_token"];
+  const challenge = params["hub.challenge"];
+  const expectedToken = getVerifyToken();
+  if (!expectedToken) {
+    return { statusCode: 500, body: "Webhook verification token is not configured." };
+  }
+  if (mode === "subscribe" && token === expectedToken && typeof challenge === "string" && challenge.length > 0) {
+    return { statusCode: 200, body: challenge };
+  }
+  return { statusCode: 403, body: "Webhook verification failed." };
+}
+
 function getQueryParameters(event) {
   if (event.queryStringParameters) {
     return event.queryStringParameters;
