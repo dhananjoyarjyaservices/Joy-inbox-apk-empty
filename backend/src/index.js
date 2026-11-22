@@ -638,7 +638,7 @@ async function sendTenantMediaMessage(event) {
   const clientMessageId = getClientMessageId(body.clientMessageId);
   const source = body.source === "quick_reply" ? "quick_reply" : "manual";
   const contentHash = crypto.createHash("sha256").update(buffer).digest("hex");
-  const payloadHash = hashSendPayload({ organizationId: organization.id, to, type, caption, filename, mimeType, source, contentHash, contextMessageId: replyContext?.contextMessageId || null });
+  const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId: credentials.phoneNumberId || null, to, type, caption, filename, mimeType, source, contentHash, contextMessageId: replyContext?.contextMessageId || null });
   const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
   if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
