@@ -6,7 +6,7 @@ import { logout } from "../services/auth";
 import { getActiveOrganizationId } from "../services/activeOrganization";
 import { listOrganizations, sendTenantText, type Organization } from "../services/organizations";
 import { listenToTenantChats, listenToTenantMessages } from "../services/tenantChats";
-import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, deleteTenantQuickReply, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
+import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
 
 type TenantChat = {
   id: string;
@@ -114,6 +114,36 @@ export default function TenantInbox() {
     } catch (e) { setError(e instanceof Error ? e.message : "Quick Reply could not be saved."); }
   }
 
+  const matchingReplies = useMemo(() => {
+    if (!draft.startsWith("/")) return [];
+    const query = draft.slice(1).trim().toLowerCase();
+    return replies.filter(reply => !query || reply.shortcut.toLowerCase().includes(query) || reply.title.toLowerCase().includes(query)).slice(0, 6);
+  }, [draft, replies]);
+
+  async function chatAction(action: "pin" | "archive" | "delete" | "read", chat: TenantChat) {
+    if (!organization) return;
+    try {
+      if (action === "delete") {
+        if (!confirm("Delete this conversation and its messages?")) return;
+        await deleteTenantChat(organization.id, chat.id);
+        if (selected === chat.id) { setSelected(""); setMessages([]); }
+      } else {
+        await updateTenantChatState(organization.id, {
+          chatId: chat.id,
+          ...(action === "pin" ? { pinned: !Boolean((chat as TenantChat & { pinned?: boolean }).pinned) } : {}),
+          ...(action === "archive" ? { archived: !Boolean((chat as TenantChat & { archived?: boolean }).archived) } : {}),
+          ...(action === "read" ? { markRead: true } : {})
+        });
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "Chat action failed."); }
+  }
+
+  async function toggleMessagePin(message: TenantMessage) {
+    if (!organization || !selected) return;
+    try { await updateTenantMessageState(organization.id, { chatId: selected, messageId: message.id, pinned: !Boolean((message as TenantMessage & { pinned?: boolean }).pinned) }); }
+    catch (e) { setError(e instanceof Error ? e.message : "Message pin failed."); }
+  }
+
   const currentChat = useMemo(() => chats.find((chat) => chat.id === selected), [chats, selected]);
 
   async function submit(event: FormEvent) {
@@ -139,16 +169,16 @@ export default function TenantInbox() {
         <div className="flex items-center justify-between border-b p-4"><h2 className="font-semibold">Chats</h2><button onClick={() => setError("")} title="Clear error"><RefreshCw size={16}/></button></div>
         {chats.length ? chats.map((chat) => <button key={chat.id} onClick={() => setSelected(chat.id)} className={`w-full border-b border-gray-100 p-4 text-left hover:bg-gray-50 ${selected === chat.id ? "bg-[#effaf3]" : ""}`}>
           <div className="flex justify-between gap-2"><span className="truncate font-medium">{chat.customerName || chat.customerPhone || chat.id}</span><span className="text-xs text-gray-400">{timeLabel(chat.lastMessageAt)}</span></div>
-          <p className="mt-1 truncate text-sm text-gray-500">{chat.lastMessage || "No message preview"}</p>
+          <p className="mt-1 truncate text-sm text-gray-500">{chat.lastMessage || "No message preview"}</p><div className="mt-2 flex gap-3 text-xs text-gray-500"><span onClick={(e) => { e.stopPropagation(); void chatAction("pin", chat); }} className="cursor-pointer">{(chat as TenantChat & { pinned?: boolean }).pinned ? "Unpin" : "Pin"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("archive", chat); }} className="cursor-pointer">{(chat as TenantChat & { archived?: boolean }).archived ? "Unarchive" : "Archive"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("read", chat); }} className="cursor-pointer">Read</span><span onClick={(e) => { e.stopPropagation(); void chatAction("delete", chat); }} className="cursor-pointer text-red-600">Delete</span></div>
         </button>) : <p className="p-6 text-sm text-gray-500">No conversations yet. New WhatsApp messages will appear here.</p>}
       </aside>
       <section className={`flex min-w-0 flex-1 flex-col ${selected ? "flex" : "hidden md:flex"}`}>
         {currentChat ? <>
           <div className="flex items-center gap-3 border-b bg-white p-3"><button className="md:hidden" onClick={() => setSelected("")}>←</button><div className="grid h-9 w-9 place-items-center rounded-full bg-[#d9fdd3] font-semibold text-[#075e54]">{(currentChat.customerName || currentChat.customerPhone || selected).slice(0,1).toUpperCase()}</div><div><p className="font-semibold">{currentChat.customerName || currentChat.customerPhone || selected}</p><p className="text-xs text-gray-500">{currentChat.customerPhone || selected}</p></div></div>
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.map((message) => <div key={message.id} className={`flex ${message.direction === "outgoing" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm ${message.direction === "outgoing" ? "bg-[#d9fdd3]" : "bg-white"}`}><p className="whitespace-pre-wrap break-words text-sm">{message.text || `[${message.type || "Message"}]`}</p><p className="mt-1 text-right text-[10px] text-gray-400">{timeLabel(message.timestamp)} {message.status || ""}</p></div></div>)}
+            {messages.map((message) => <div key={message.id} className={`flex ${message.direction === "outgoing" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm ${message.direction === "outgoing" ? "bg-[#d9fdd3]" : "bg-white"}`}><p className="whitespace-pre-wrap break-words text-sm">{message.text || `[${message.type || "Message"}]`}</p><button onClick={() => void toggleMessagePin(message)} className="mt-1 text-[10px] text-gray-500">{(message as TenantMessage & { pinned?: boolean }).pinned ? "Unpin message" : "Pin message"}</button><p className="mt-1 text-right text-[10px] text-gray-400">{timeLabel(message.timestamp)} {message.status || ""}</p></div></div>)}
           </div>
-          <form onSubmit={submit} className="flex gap-2 border-t bg-white p-3"><input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={4096} placeholder="Type a message" className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#075e54]"/><button disabled={sending || !draft.trim()} className="grid h-11 w-11 place-items-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18}/></button></form>
+          <form onSubmit={submit} className="relative flex gap-2 border-t bg-white p-3"><div className="relative min-w-0 flex-1"><input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={4096} placeholder="Type a message" className="w-full rounded-full border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#075e54]"/>{matchingReplies.length > 0 && <div className="absolute bottom-full left-0 z-20 mb-2 max-h-56 w-full overflow-y-auto rounded-xl border bg-white p-2 shadow-lg">{matchingReplies.map(reply => <button type="button" key={reply.id} onClick={() => setDraft(reply.message)} className="block w-full rounded-lg p-2 text-left hover:bg-gray-50"><span className="block text-sm font-medium">{reply.title} <span className="text-xs text-gray-400">/{reply.shortcut}</span></span><span className="block truncate text-xs text-gray-500">{reply.message}</span></button>)}</div>}</div><button disabled={sending || !draft.trim()} className="grid h-11 w-11 place-items-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18}/></button></form>
         </> : <div className="grid flex-1 place-items-center text-center text-sm text-gray-500"><div><MessageCircle className="mx-auto mb-2 opacity-40" size={36}/><p>Select a conversation to start</p></div></div>}
       </section>
     </div>}
