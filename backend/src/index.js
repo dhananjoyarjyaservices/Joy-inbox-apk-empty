@@ -129,6 +129,47 @@ async function handleWhatsAppConnections(event) {
   return jsonResponse(event, 200, { connections });
 }
 
+async function handleWhatsAppConnectionHealth(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "whatsapp:manage");
+  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  const version = process.env.GRAPH_API_VERSION || "v26.0";
+  const checkedAt = new Date().toISOString();
+  const results = await Promise.all(connections.filter((item) => item.connected).map(async (item) => {
+    try {
+      const credentials = await getWhatsAppCredentials(getDb(), organization.id, item.phoneNumberId);
+      const response = await fetch(
+        `https://graph.facebook.com/${version}/${encodeURIComponent(item.phoneNumberId)}?fields=id,display_phone_number,verified_name`,
+        { headers: { Authorization: `Bearer ${credentials.accessToken}` } }
+      );
+      const meta = await response.json().catch(() => ({}));
+      const healthy = response.ok && String(meta.id || "") === item.phoneNumberId;
+      return {
+        phoneNumberId: item.phoneNumberId,
+        status: healthy ? "healthy" : "attention",
+        checkedAt,
+        ...(healthy ? {
+          displayPhoneNumber: String(meta.display_phone_number || item.displayPhoneNumber || ""),
+          verifiedName: String(meta.verified_name || item.verifiedName || "")
+        } : { error: "Meta could not verify this number. Check its access token and WhatsApp permissions." })
+      };
+    } catch {
+      return {
+        phoneNumberId: item.phoneNumberId,
+        status: "attention",
+        checkedAt,
+        error: "Could not reach Meta or read this connection. Try again."
+      };
+    }
+  }));
+  return jsonResponse(event, 200, { results, checkedAt });
+}
+
 async function handleWhatsAppConnect(event) {
   const decoded = await authenticateUser(event);
   let body;
@@ -1393,6 +1434,16 @@ exports.handler = async (event) => {
       console.error("WhatsApp connections could not load:", error);
       return jsonResponse(event, error.statusCode || 500, {
         error: error.statusCode ? error.message : "WhatsApp connections could not be loaded."
+      });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/whatsapp/connection-health")) {
+    try { return await handleWhatsAppConnectionHealth(event); }
+    catch (error) {
+      console.error("WhatsApp connection health check failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "WhatsApp connection health could not be checked."
       });
     }
   }
