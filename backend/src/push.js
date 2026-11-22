@@ -65,7 +65,7 @@ async function sendIncomingTextNotification(phone, senderName, text, messageId) 
   const collection = getDeviceCollection(db);
   const admin = getFirebaseAdmin();
   const title = String(senderName || `+${phone}`).slice(0, 100);
-  const body = String(text || "New message").replace(/\\s+/g, " ").trim().slice(0, 180);
+  const body = String(text || "New message").replace(/\s+/g, " ").trim().slice(0, 180);
   await sendToDeviceCollection(admin, collection, {
     type: "incoming_whatsapp_text", title, body, chatId: phone, messageId
   });
@@ -77,7 +77,7 @@ async function sendTenantIncomingTextNotification(organizationId, phone, senderN
   const members = await organizationRef.collection("members").where("status", "==", "active").get();
   const admin = getFirebaseAdmin();
   const title = String(senderName || `+${phone}`).slice(0, 100);
-  const body = String(text || "New message").replace(/\\s+/g, " ").trim().slice(0, 180);
+  const body = String(text || "New message").replace(/\s+/g, " ").trim().slice(0, 180);
   const data = { type: "incoming_whatsapp_text", title, body, chatId: phone, messageId, organizationId };
   for (const member of members.docs) {
     if (!["owner", "admin", "agent"].includes(member.get("role"))) continue;
@@ -91,7 +91,7 @@ function isValidInstallationId(value) {
 }
 
 function isValidFcmToken(value) {
-  return typeof value === "string" && value.length > 0 && value.length <= 4096 && !/\\s/.test(value);
+  return typeof value === "string" && value.length > 0 && value.length <= 4096 && !/\s/.test(value);
 }
 
 module.exports = {
