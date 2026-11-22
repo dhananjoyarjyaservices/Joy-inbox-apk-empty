@@ -14,6 +14,7 @@ async function writeMemberAudit(organization, actor, action, target, details = {
     await auditRef.set({
       action,
       actorUid: String(actor?.uid || ""),
+      actorEmail: String(actor?.email || ""),
       actorRole: String(actor?.role || ""),
       targetUid: String(target?.uid || ""),
       targetEmail: String(target?.email || ""),
@@ -49,6 +50,7 @@ async function listOrganizationMemberAudit(db, organization, options = {}) {
         id: doc.id,
         action: String(data.action || ""),
         actorUid: String(data.actorUid || ""),
+        actorEmail: String(data.actorEmail || ""),
         actorRole: String(data.actorRole || ""),
         targetUid: String(data.targetUid || ""),
         targetEmail: String(data.targetEmail || ""),
