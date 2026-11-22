@@ -139,3 +139,8 @@ The backend now provides `GET /organizations/media?organizationId=...&chatId=...
 ## Initial tenant inbox frontend
 
 A protected `/inbox` route is now available to authenticated workspace members. It loads the active workspace, listens only to that workspace's chat and message collections, and sends text through the authenticated tenant messaging API. The setup page navigates to the inbox after a WhatsApp number is verified. This is an initial text-chat slice only: media rendering/sending, contacts and Quick Replies screens, chat actions, pagination, push notifications and full parity with the legacy owner dashboard are not yet integrated. The legacy dashboard remains restricted to its original owner account.
+
+
+## Tenant contacts and Quick Replies frontend
+
+The tenant inbox now has Contacts and Quick Replies views backed by the organization-scoped API routes. Both lists are loaded for the selected organization, and create/delete operations send the organization ID with authenticated requests. These are initial management screens; contact editing, shortcut-triggered insertion into the chat composer, media attachments in Quick Replies, and full interaction testing remain outstanding. The existing owner-only legacy dashboard and user-level resource services are not used by these new tenant views.
