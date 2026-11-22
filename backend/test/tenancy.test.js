@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { encryptSecret, decryptSecret, requireOrganization, requirePermission, ROLE_PERMISSIONS, saveWhatsAppConnection, getWhatsAppCredentials, resolvePhoneNumberOrganization } = require("../src/tenancy");
+const { encryptSecret, decryptSecret, requireOrganization, requirePermission, ROLE_PERMISSIONS, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections, resolvePhoneNumberOrganization } = require("../src/tenancy");
 
 test("tenant WhatsApp credentials encrypt and decrypt with authenticated encryption", () => {
   const key = Buffer.alloc(32, 7).toString("base64");
@@ -31,7 +31,16 @@ function fakeTenantDb() {
     };
   }
   function collection(path) {
-    return { doc(id) { return doc(path + "/" + id); } };
+    return {
+      doc(id) { return doc(path + "/" + id); },
+      async get() {
+        const prefix = path + "/";
+        const docsList = [...docs.entries()]
+          .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/"))
+          .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
+        return { docs: docsList };
+      }
+    };
   }
   return {
     docs,
@@ -120,4 +129,76 @@ test("organization access requires an active membership with a recognized role",
     () => requireOrganization(db, { uid: "user_active" }, "../other"),
     { statusCode: 400 }
   );
+});
+
+
+test("multiple WhatsApp numbers keep separate credentials and tenant mappings", async () => {
+  const db = fakeTenantDb();
+  process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 5).toString("base64");
+  const organization = { id: "org_multi", ref: db.collection("organizations").doc("org_multi") };
+  await saveWhatsAppConnection(db, organization, {
+    phoneNumberId: "111111111111111",
+    accessToken: "EAA_first_number_token",
+    displayPhoneNumber: "+1 555 0101"
+  });
+  await saveWhatsAppConnection(db, organization, {
+    phoneNumberId: "222222222222222",
+    accessToken: "EAA_second_number_token",
+    displayPhoneNumber: "+1 555 0102"
+  });
+  const first = await getWhatsAppCredentials(db, "org_multi", "111111111111111");
+  const second = await getWhatsAppCredentials(db, "org_multi", "222222222222222");
+  assert.equal(first.accessToken, "EAA_first_number_token");
+  assert.equal(second.accessToken, "EAA_second_number_token");
+  assert.notEqual(first.phoneNumberId, second.phoneNumberId);
+  const connections = await listWhatsAppConnections(db, "org_multi");
+  assert.equal(connections.length, 2);
+  assert.deepEqual(connections.map(item => item.phoneNumberId).sort(), ["111111111111111", "222222222222222"]);
+  assert.equal((await resolvePhoneNumberOrganization(db, "111111111111111")).id, "org_multi");
+  assert.equal((await resolvePhoneNumberOrganization(db, "222222222222222")).id, "org_multi");
+  delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
+});
+
+test("disconnect marks only the selected WhatsApp number inactive and preserves credentials", async () => {
+  const db = fakeTenantDb();
+  process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 6).toString("base64");
+  const organization = { id: "org_disconnect", ref: db.collection("organizations").doc("org_disconnect") };
+  await saveWhatsAppConnection(db, organization, {
+    phoneNumberId: "333333333333333",
+    accessToken: "EAA_keep_this_token"
+  });
+  await saveWhatsAppConnection(db, organization, {
+    phoneNumberId: "444444444444444",
+    accessToken: "EAA_other_token"
+  });
+  const result = await disconnectWhatsAppConnection(db, organization, "333333333333333");
+  assert.deepEqual(result, { phoneNumberId: "333333333333333", connected: false });
+  await assert.rejects(
+    () => getWhatsAppCredentials(db, "org_disconnect", "333333333333333"),
+    { statusCode: 404 }
+  );
+  assert.equal((await getWhatsAppCredentials(db, "org_disconnect", "444444444444444")).accessToken, "EAA_other_token");
+  const stored = db.docs.get("organizations/org_disconnect/settings/whatsapp/numbers/333333333333333");
+  assert.equal(stored.connected, false);
+  assert.ok(stored.accessToken);
+  assert.equal(db.docs.get("whatsappPhoneNumbers/333333333333333").status, "disconnected");
+  assert.equal(db.docs.get("whatsappPhoneNumbers/444444444444444").status, "active");
+  delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
+});
+
+test("a workspace cannot disconnect another workspace's WhatsApp number", async () => {
+  const db = fakeTenantDb();
+  process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 4).toString("base64");
+  const owner = { id: "org_owner", ref: db.collection("organizations").doc("org_owner") };
+  const other = { id: "org_other", ref: db.collection("organizations").doc("org_other") };
+  await saveWhatsAppConnection(db, owner, {
+    phoneNumberId: "555555555555555",
+    accessToken: "EAA_owner_token"
+  });
+  await assert.rejects(
+    () => disconnectWhatsAppConnection(db, other, "555555555555555"),
+    { statusCode: 404 }
+  );
+  assert.equal((await getWhatsAppCredentials(db, "org_owner", "555555555555555")).accessToken, "EAA_owner_token");
+  delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
