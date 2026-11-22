@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { UserPlus, RefreshCw, Shield, Trash2, Search, History } from "lucide-react";
 import { addOrganizationMember, listOrganizationMembers, removeOrganizationMember, updateOrganizationMemberRole, type OrganizationMember, listOrganizationMemberAudit, type OrganizationMemberAuditEvent } from "../services/organizationMembers";
 
@@ -17,6 +17,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
   const [auditEvents, setAuditEvents] = useState<OrganizationMemberAuditEvent[]>([]);
   const [showAudit, setShowAudit] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
+  const auditRequestId = useRef(0);
   const [auditCursor, setAuditCursor] = useState<string | null>(null);
   const canManage = actorRole === "owner" || actorRole === "admin";
 
@@ -30,6 +31,13 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     catch (e) { setError(e instanceof Error ? e.message : "Members could not be loaded."); }
   }, [organizationId]);
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    auditRequestId.current += 1;
+    setAuditEvents([]);
+    setAuditCursor(null);
+    setShowAudit(false);
+    setAuditLoading(false);
+  }, [organizationId]);
   const filteredMembers = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
     return members.filter(member => {
@@ -44,28 +52,33 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     if (showAudit) { setShowAudit(false); return; }
     setShowAudit(true);
     if (auditEvents.length || auditLoading) return;
+    const requestId = ++auditRequestId.current;
     setAuditLoading(true);
     try {
       const page = await listOrganizationMemberAudit(organizationId, { limit: 25 });
+      if (requestId !== auditRequestId.current) return;
       setAuditEvents(page.events);
       setAuditCursor(page.nextCursor);
-    }
-    catch (e) { setError(e instanceof Error ? e.message : "Member activity could not be loaded."); }
-    finally { setAuditLoading(false); }
+    } catch (e) {
+      if (requestId === auditRequestId.current) setError(e instanceof Error ? e.message : "Member activity could not be loaded.");
+    } finally { if (requestId === auditRequestId.current) setAuditLoading(false); }
   }
 
   async function loadMoreAudit() {
     if (!auditCursor || auditLoading) return;
+    const requestId = ++auditRequestId.current;
     setAuditLoading(true);
     try {
       const page = await listOrganizationMemberAudit(organizationId, { limit: 25, cursor: auditCursor });
+      if (requestId !== auditRequestId.current) return;
       setAuditEvents(current => {
         const seen = new Set(current.map(event => event.id));
         return [...current, ...page.events.filter(event => !seen.has(event.id))];
       });
       setAuditCursor(page.nextCursor);
-    } catch (e) { setError(e instanceof Error ? e.message : "More activity could not be loaded."); }
-    finally { setAuditLoading(false); }
+    } catch (e) {
+      if (requestId === auditRequestId.current) setError(e instanceof Error ? e.message : "More activity could not be loaded.");
+    } finally { if (requestId === auditRequestId.current) setAuditLoading(false); }
   }
   function auditDescription(event: OrganizationMemberAuditEvent) {
     if (event.action === "member.added") return "Added " + (event.targetEmail || event.targetUid) + " as " + String(event.details.role || "member");
