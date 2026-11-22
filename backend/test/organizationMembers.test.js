@@ -35,7 +35,7 @@ function fakeDb() {
       collection(name) { return collection(path + "/" + name); },
       async get() {
         const data = records.get(path);
-        return { exists: Boolean(data), data: () => data };
+        return { exists: Boolean(data), id: path.split("/").at(-1), data: () => data };
       },
       async set(data, options) {
         records.set(path, options ? { ...(records.get(path) || {}), ...data } : data);
@@ -52,7 +52,7 @@ function fakeDb() {
           .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
         return { docs };
       },
-      orderBy() {
+      orderBy(field, direction = "asc") {
         let afterId = "";
         let max = Infinity;
         const query = {
@@ -63,8 +63,13 @@ function fakeDb() {
             const docs = [...records.entries()]
               .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/"))
               .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }))
-              .sort((a, b) => a.id.localeCompare(b.id))
-              .filter(item => !afterId || item.id > afterId)
+              .sort((a, b) => {
+                if (field === "__name__") return a.id.localeCompare(b.id);
+                const left = a.data()[field]?.getTime?.() ?? 0;
+                const right = b.data()[field]?.getTime?.() ?? 0;
+                return direction === "desc" ? right - left : left - right;
+              })
+              .filter(item => !afterId || (field === "__name__" ? item.id > afterId : true))
               .slice(0, max);
             return { docs };
           }
@@ -346,4 +351,27 @@ test("member role changes are recorded in a tenant-scoped audit log", async () =
   assert.equal(page.events.length, 1);
   assert.equal(page.events[0].action, "member.role_changed");
   assert.equal(page.events[0].targetEmail, "agent@example.com");
+});
+
+test("member audit history returns bounded cursor pages in newest-first order", async () => {
+  const { db } = fakeDb();
+  const organization = { id: "org_audit_pages", ref: db.collection("organizations").doc("org_audit_pages") };
+  const audit = organization.ref.collection("auditLogs");
+  for (let index = 1; index <= 4; index += 1) {
+    await audit.doc("event_" + index).set({
+      action: "member.added",
+      targetUid: "member_" + index,
+      createdAt: new Date(2026, 0, index)
+    });
+  }
+  const first = await listOrganizationMemberAudit(db, organization, { limit: 2 });
+  assert.deepEqual(first.events.map(event => event.id), ["event_4", "event_3"]);
+  assert.equal(first.nextCursor, "event_3");
+  const second = await listOrganizationMemberAudit(db, organization, { limit: 2, cursor: first.nextCursor });
+  assert.deepEqual(second.events.map(event => event.id), ["event_2", "event_1"]);
+  assert.equal(second.nextCursor, null);
+  await assert.rejects(
+    () => listOrganizationMemberAudit(db, organization, { cursor: "../invalid" }),
+    { statusCode: 400 }
+  );
 });
