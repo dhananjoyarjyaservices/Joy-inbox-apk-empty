@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { UserPlus, RefreshCw, Shield, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { UserPlus, RefreshCw, Shield, Trash2, Search } from "lucide-react";
 import { addOrganizationMember, listOrganizationMembers, removeOrganizationMember, updateOrganizationMemberRole, type OrganizationMember } from "../services/organizationMembers";
 
 type Props = { organizationId: string; actorRole: "owner" | "admin" | "agent" };
@@ -9,6 +9,9 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
   const [loadingMore, setLoadingMore] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "agent">("agent");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"active" | "removed" | "disabled" | "all">("active");
+  const [roleFilter, setRoleFilter] = useState<"all" | "owner" | "admin" | "agent">("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canManage = actorRole === "owner" || actorRole === "admin";
@@ -23,6 +26,16 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     catch (e) { setError(e instanceof Error ? e.message : "Members could not be loaded."); }
   }, [organizationId]);
   useEffect(() => { void refresh(); }, [refresh]);
+  const filteredMembers = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase();
+    return members.filter(member => {
+      const matchesSearch = !term || [member.displayName, member.email, member.uid].some(value => value.toLocaleLowerCase().includes(term));
+      const matchesStatus = statusFilter === "all" || member.status === statusFilter;
+      const matchesRole = roleFilter === "all" || member.role === roleFilter;
+      return matchesSearch && matchesStatus && matchesRole;
+    });
+  }, [members, search, statusFilter, roleFilter]);
+
   async function loadMore() {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true); setError("");
@@ -36,7 +49,6 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     } catch (e) { setError(e instanceof Error ? e.message : "More members could not be loaded."); }
     finally { setLoadingMore(false); }
   }
-
 
   async function add(event: FormEvent) {
     event.preventDefault();
@@ -74,13 +86,19 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     </form>}
     <p className="mb-3 text-xs text-gray-500">Members must already have a Joy Inbox account. This does not send an email invitation.</p>
     {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-    <div className="divide-y">{members.filter(m => m.status === "active").map(member => <div key={member.uid} className="flex flex-wrap items-center justify-between gap-3 py-3">
-      <div className="min-w-0"><p className="truncate font-medium">{member.displayName || member.email || member.uid}</p><p className="truncate text-xs text-gray-500">{member.email}</p></div>
-      <div className="flex items-center gap-2"><span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs capitalize"><Shield size={13}/>{member.role}</span>
-        {canManage && member.role !== "owner" && <><select aria-label={`Role for ${member.email}`} disabled={busy || (member.role === "admin" && actorRole !== "owner")} value={member.role} onChange={e => void changeRole(member, e.target.value as "admin" | "agent")} className="rounded-lg border px-2 py-1.5 text-xs"><option value="agent">Agent</option>{actorRole === "owner" && <option value="admin">Admin</option>}</select><button disabled={busy} onClick={() => void remove(member)} className="rounded-lg p-2 text-red-600 hover:bg-red-50" aria-label={`Remove ${member.email}`}><Trash2 size={16}/></button></>}
+    <div className="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_140px]">
+      <label className="relative block"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search loaded members by name, email or ID" aria-label="Search loaded members" className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm"/></label>
+      <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="Filter members by status" className="rounded-lg border bg-white px-3 py-2 text-sm"><option value="active">Active members</option><option value="removed">Removed members</option><option value="disabled">Disabled members</option><option value="all">All statuses</option></select>
+      <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as typeof roleFilter)} aria-label="Filter members by role" className="rounded-lg border bg-white px-3 py-2 text-sm"><option value="all">All roles</option><option value="owner">Owner</option><option value="admin">Admin</option><option value="agent">Agent</option></select>
+    </div>
+    <p className="mb-2 text-xs text-gray-500">Showing {filteredMembers.length} of {members.length} loaded members{nextCursor ? " · Load more to search additional members" : ""}.</p>
+    <div className="divide-y">{filteredMembers.map(member => <div key={member.uid} className="flex flex-wrap items-center justify-between gap-3 py-3">
+      <div className="min-w-0"><p className="truncate font-medium">{member.displayName || member.email || member.uid}</p><p className="truncate text-xs text-gray-500">{member.email || member.uid}</p></div>
+      <div className="flex items-center gap-2"><span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs capitalize"><Shield size={13}/>{member.role} · {member.status}</span>
+        {canManage && member.status === "active" && member.role !== "owner" && <><select aria-label={`Role for ${member.email}`} disabled={busy || (member.role === "admin" && actorRole !== "owner")} value={member.role} onChange={e => void changeRole(member, e.target.value as "admin" | "agent")} className="rounded-lg border px-2 py-1.5 text-xs"><option value="agent">Agent</option>{actorRole === "owner" && <option value="admin">Admin</option>}</select><button disabled={busy} onClick={() => void remove(member)} className="rounded-lg p-2 text-red-600 hover:bg-red-50" aria-label={`Remove ${member.email}`}><Trash2 size={16}/></button></>}
       </div>
     </div>)}</div>
-    {!members.some(m => m.status === "active") && !error && <p className="py-8 text-center text-sm text-gray-500">No active members found.</p>}
+    {filteredMembers.length === 0 && !error && <p className="py-8 text-center text-sm text-gray-500">{members.length ? "No loaded members match these filters." : "No members found."}</p>}
     {nextCursor && <div className="flex justify-center py-4"><button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="rounded-lg border px-4 py-2 text-sm disabled:opacity-50">{loadingMore ? "Loading..." : "Load more members"}</button></div>}
   </section>;
 }
