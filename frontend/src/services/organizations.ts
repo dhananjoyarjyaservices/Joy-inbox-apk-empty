@@ -34,3 +34,10 @@ export async function createOrganization(name: string): Promise<Organization> {
 export async function connectWhatsApp(organizationId: string, phoneNumberId: string, accessToken: string) {
   return request("/whatsapp/connect", "POST", { organizationId, phoneNumberId, accessToken });
 }
+
+export async function sendTenantText(organizationId: string, to: string, text: string) {
+  return request("/organizations/send", "POST", {
+    organizationId, to, chatId: to, text,
+    clientMessageId: crypto.randomUUID()
+  });
+}
