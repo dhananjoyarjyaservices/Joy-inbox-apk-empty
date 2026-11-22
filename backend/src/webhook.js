@@ -39,7 +39,7 @@ function getQueryParameters(event) {
   return Object.fromEntries(params.entries());
 }
 
-async function saveTenantIncomingMessage(db, organization, message, contactName) {
+async function saveTenantIncomingMessage(db, organization, message, contactName, phoneNumberId) {
   const phone = normalizePhoneNumber(message.from);
   const messageId = String(message.id || "");
   if (!phone || !/^[A-Za-z0-9._:-]{1,256}$/.test(messageId)) return false;
@@ -81,6 +81,7 @@ async function saveTenantIncomingMessage(db, organization, message, contactName)
       messageId,
       chatId: phone,
       organizationId: organization.id,
+      phoneNumberId: String(phoneNumberId || ""),
       direction: "incoming",
       type: String(message.type || "unknown"),
       text,
@@ -97,6 +98,7 @@ async function saveTenantIncomingMessage(db, organization, message, contactName)
     });
     transaction.set(chatRef, {
       customerPhone: phone,
+      ...(phoneNumberId ? { phoneNumberId: String(phoneNumberId) } : {}),
       customerName: contactName || phone,
       lastMessage: text,
       lastMessageAt: timestamp,
@@ -147,6 +149,7 @@ async function maybeSendTenantGreeting(db, organization, credentials, phone, inb
         timestamp,
         status: "sent",
         source: "greeting",
+        phoneNumberId: credentials.phoneNumberId || null,
         sender: "system"
       });
       transaction.set(chatRef, {
@@ -155,6 +158,7 @@ async function maybeSendTenantGreeting(db, organization, credentials, phone, inb
         lastMessage: greetingText,
         lastMessageAt: timestamp,
         lastMessageDirection: "outgoing",
+        ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
         updatedAt: timestamp
       }, { merge: true });
     });
@@ -211,7 +215,7 @@ async function processWebhookPayload(payload) {
       for (const message of value.messages || []) {
         const contact = contacts.find((item) => item.wa_id === message.from);
         const name = contact?.profile?.name || message.from;
-        const created = await saveTenantIncomingMessage(db, organization, message, name);
+        const created = await saveTenantIncomingMessage(db, organization, message, name, String(phoneNumberId));
         if (created) {
           const phone = normalizePhoneNumber(message.from);
           await maybeSendTenantGreeting(db, organization, credentials, phone, message);
