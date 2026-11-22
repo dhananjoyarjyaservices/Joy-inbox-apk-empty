@@ -4,7 +4,7 @@ import { LogOut, MessageCircle, Send, Settings, RefreshCw, Paperclip, FileText }
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
 import { getActiveOrganizationId } from "../services/activeOrganization";
-import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, sendTenantText, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult } from "../services/organizations";
+import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, sendTenantText, retryTenantFailedText, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult } from "../services/organizations";
 import OrganizationMembers from "../components/OrganizationMembers";
 import { listenToTenantChats, listenToTenantMessages } from "../services/tenantChats";
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
@@ -349,7 +349,7 @@ export default function TenantInbox() {
     setRetryingMessageIds(current => [...current, message.id]);
     setError("");
     try {
-      await sendTenantText(organization.id, selected, message.text, message.phoneNumberId);
+      await retryTenantFailedText(organization.id, selected, message.id);
       setRetriedMessageIds(current => [...current, message.id]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Message retry could not be sent.");
