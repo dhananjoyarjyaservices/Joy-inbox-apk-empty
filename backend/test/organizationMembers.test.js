@@ -17,7 +17,7 @@ function fakeDb() {
       const transaction = {
         async get(reference) {
           const data = records.get(reference.path);
-          return { exists: Boolean(data), data: () => data };
+          return { exists: Boolean(data), id: path.split("/").at(-1), data: () => data };
         },
         set(reference, data, options) {
           writes.push([reference.path, options ? { ...(records.get(reference.path) || {}), ...data } : data]);
