@@ -241,7 +241,10 @@ async function handleOrganizationMembers(event) {
   requirePermission(organization, "members:manage");
   const actor = { uid: decoded.uid, role: organization.role };
   if (method === "GET") {
-    return jsonResponse(event, 200, { members: await listOrganizationMembers(getDb(), organization) });
+    const limit = event.queryStringParameters?.limit;
+    const cursor = event.queryStringParameters?.cursor;
+    const page = await listOrganizationMembers(getDb(), organization, { limit, cursor });
+    return jsonResponse(event, 200, page);
   }
   if (method === "POST") {
     const member = await addOrganizationMember(getDb(), getFirebaseAdmin().auth(), organization, actor, body);
