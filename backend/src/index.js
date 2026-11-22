@@ -237,6 +237,23 @@ async function handleTenantResource(event, resource) {
 }
 
 
+async function getTenantQuickReplyImage(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const quickReplyId = event.queryStringParameters?.quickReplyId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "quickReplies:manage");
+  if (typeof quickReplyId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(quickReplyId)) {
+    return jsonResponse(event, 400, { error: "A valid Quick Reply ID is required." });
+  }
+  const ref = organization.ref.collection("quickReplies").doc(quickReplyId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists || !snapshot.data()?.hasImage) return jsonResponse(event, 404, { error: "Saved Quick Reply image was not found." });
+  const saved = await getQuickReplyImage(organization.id, quickReplyId);
+  if (!saved) return jsonResponse(event, 404, { error: "Saved Quick Reply image was not found." });
+  return jsonResponse(event, 200, { mimeType: saved.mimeType, fileBase64: saved.buffer.toString("base64") });
+}
+
 async function saveTenantQuickReplyImage(event) {
   const decoded = await authenticateUser(event);
   let body;
@@ -1391,8 +1408,8 @@ exports.handler = async (event) => {
   }
 
 
-  if (method === "POST" && path.endsWith("/organizations/quick-replies/image")) {
-    try { return await saveTenantQuickReplyImage(event); }
+  if (["GET", "POST"].includes(method) && path.endsWith("/organizations/quick-replies/image")) {
+    try { return method === "GET" ? await getTenantQuickReplyImage(event) : await saveTenantQuickReplyImage(event); }
     catch (error) { console.error("Quick Reply image upload failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Reply image could not be saved." }); }
   }
 
