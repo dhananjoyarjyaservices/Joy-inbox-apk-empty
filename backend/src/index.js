@@ -28,6 +28,7 @@ const {
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
 const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
+const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
 const { requireOrganization, requirePermission, saveWhatsAppConnection, getWhatsAppCredentials } = require("./tenancy");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
@@ -191,6 +192,29 @@ async function handleTenantResource(event, resource) {
     return jsonResponse(event, 200, { success: true });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+async function handleTenantChatAction(event, action) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse(event, 400, { error: "A valid request object is required." });
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "chats:manage");
+  if (action === "chat-state") {
+    await updateTenantChatState(getDb(), organization.id, body);
+    return jsonResponse(event, 200, { success: true });
+  }
+  if (action === "message-state") {
+    await updateTenantMessageState(getDb(), organization.id, body);
+    return jsonResponse(event, 200, { success: true });
+  }
+  if (action === "delete-messages") {
+    const deletedMessageIds = await deleteTenantMessages(getDb(), organization.id, body);
+    return jsonResponse(event, 200, { success: true, deletedMessageIds });
+  }
+  const deletedChatIds = await deleteTenantChats(getDb(), organization.id, body);
+  return jsonResponse(event, 200, { success: true, deletedChatIds });
 }
 
 async function authenticateOwner(event) {
@@ -1057,6 +1081,15 @@ exports.handler = async (event) => {
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/quick-replies")) {
     try { return await handleTenantResource(event, "quickReplies"); }
     catch (error) { console.error("Tenant Quick Replies request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Replies request could not be completed." }); }
+  }
+
+  if (method === "POST" && ["/organizations/chat-state", "/organizations/message-state", "/organizations/delete-messages", "/organizations/delete-chats"].some((suffix) => path.endsWith(suffix))) {
+    const action = path.slice(path.lastIndexOf("/") + 1);
+    try { return await handleTenantChatAction(event, action); }
+    catch (error) {
+      console.error("Tenant chat action failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Conversation action could not be completed." });
+    }
   }
 
   if (method === "POST" && path.endsWith("/organizations/send")) {
