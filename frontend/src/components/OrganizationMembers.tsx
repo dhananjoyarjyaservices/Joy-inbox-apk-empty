@@ -5,6 +5,8 @@ import { addOrganizationMember, listOrganizationMembers, removeOrganizationMembe
 type Props = { organizationId: string; actorRole: "owner" | "admin" | "agent" };
 export default function OrganizationMembers({ organizationId, actorRole }: Props) {
   const [members, setMembers] = useState<OrganizationMember[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "agent">("agent");
   const [busy, setBusy] = useState(false);
@@ -13,10 +15,28 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
 
   const refresh = useCallback(async () => {
     setError("");
-    try { setMembers(await listOrganizationMembers(organizationId)); }
+    try {
+      const page = await listOrganizationMembers(organizationId, { limit: 25 });
+      setMembers(page.members);
+      setNextCursor(page.nextCursor);
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Members could not be loaded."); }
   }, [organizationId]);
   useEffect(() => { void refresh(); }, [refresh]);
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true); setError("");
+    try {
+      const page = await listOrganizationMembers(organizationId, { limit: 25, cursor: nextCursor });
+      setMembers(current => {
+        const seen = new Set(current.map(member => member.uid));
+        return [...current, ...page.members.filter(member => !seen.has(member.uid))];
+      });
+      setNextCursor(page.nextCursor);
+    } catch (e) { setError(e instanceof Error ? e.message : "More members could not be loaded."); }
+    finally { setLoadingMore(false); }
+  }
+
 
   async function add(event: FormEvent) {
     event.preventDefault();
@@ -61,5 +81,6 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
       </div>
     </div>)}</div>
     {!members.some(m => m.status === "active") && !error && <p className="py-8 text-center text-sm text-gray-500">No active members found.</p>}
+    {nextCursor && <div className="flex justify-center py-4"><button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="rounded-lg border px-4 py-2 text-sm disabled:opacity-50">{loadingMore ? "Loading..." : "Load more members"}</button></div>}
   </section>;
 }
