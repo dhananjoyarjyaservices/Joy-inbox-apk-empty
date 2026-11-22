@@ -51,6 +51,9 @@ export async function uploadTenantQuickReplyImage(org: string, quickReplyId: str
     organizationId: org, quickReplyId, mimeType: file.type, fileBase64
   });
 }
+export async function sendTenantQuickReplyImage(org: string, chatId: string, quickReplyId: string) {
+  return call("/organizations/send-quick-reply", "POST", { organizationId: org, chatId, quickReplyId });
+}
 export async function deleteTenantQuickReply(org: string, resourceId: string) {
   return call("/organizations/quick-replies", "DELETE", { organizationId: org, resourceId });
 }
