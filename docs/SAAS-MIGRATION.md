@@ -38,3 +38,19 @@ The product requirement is to support WhatsApp media without permanently storing
 ## Not yet complete
 
 The existing production handlers still use the legacy owner UID, global WhatsApp credentials, top-level chat collections and Firebase Storage media functions. The new tenancy helpers are a foundation only; they are not yet wired into every route or webhook. The frontend signup/onboarding flow, tenant-aware Firestore rules, migration utility, webhook routing, per-tenant secret provisioning, and no-persistent-media proxy must be completed before launch.
+
+
+## Incremental implementation update
+
+The branch now also contains a server-side organization onboarding service and authenticated `GET /organizations` / `POST /organizations` routes. It creates the organization, first owner membership, and user organization index in one Firestore transaction.
+
+An authenticated `POST /whatsapp/connect` endpoint now:
+1. verifies the Firebase ID token,
+2. checks active organization membership and `whatsapp:manage` permission,
+3. validates the supplied Phone Number ID and access token against Meta Graph API,
+4. encrypts the access token using AES-256-GCM with `TENANT_SECRET_ENCRYPTION_KEY`,
+5. stores the encrypted connection under the organization settings and reserves the Phone Number ID in the server-side mapping collection.
+
+The endpoint never returns the access token. Configure a base64-encoded 32-byte `TENANT_SECRET_ENCRYPTION_KEY` only in the backend secret environment. Never place it in Vite/client environment variables or commit it.
+
+**Critical remaining integration:** Existing send, media, status, greeting and webhook code still uses legacy global WhatsApp credentials and legacy top-level chat paths. The new stored tenant credentials are not yet used by those message flows. The media implementation still persists customer media in Firebase Storage. Do not connect live customer tenants or deploy this branch until the message paths, webhook routing, tenant-scoped data paths and no-permanent-media-storage design are implemented and tested.
