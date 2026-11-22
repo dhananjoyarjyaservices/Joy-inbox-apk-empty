@@ -35,6 +35,7 @@ function fakeDb({ organization = { status: "active", name: "Workspace" }, member
         doc(id) {
           return {
             ref: organizationRef,
+            collection: organizationRef.collection.bind(organizationRef),
             async get() {
               return id === "org_1" && organization
                 ? { exists: true, data: () => organization, ref: organizationRef }
