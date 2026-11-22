@@ -6,6 +6,7 @@ import { logout } from "../services/auth";
 import { getActiveOrganizationId } from "../services/activeOrganization";
 import { listOrganizations, sendTenantText, type Organization } from "../services/organizations";
 import { listenToTenantChats, listenToTenantMessages } from "../services/tenantChats";
+import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, deleteTenantQuickReply, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
 
 type TenantChat = {
   id: string;
@@ -45,6 +46,14 @@ export default function TenantInbox() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [view, setView] = useState<"chats" | "contacts" | "replies">("chats");
+  const [contacts, setContacts] = useState<TenantContact[]>([]);
+  const [replies, setReplies] = useState<TenantQuickReply[]>([]);
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [replyTitle, setReplyTitle] = useState("");
+  const [replyShortcut, setReplyShortcut] = useState("");
+  const [replyMessage, setReplyMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -72,6 +81,39 @@ export default function TenantInbox() {
     return listenToTenantMessages(organization.id, selected, (items) => setMessages(items as TenantMessage[]), (e) => setError(e.message));
   }, [organization, selected]);
 
+  useEffect(() => {
+    if (!organization) return;
+    let active = true;
+    Promise.all([listTenantContacts(organization.id), listTenantQuickReplies(organization.id)])
+      .then(([savedContacts, savedReplies]) => { if (active) { setContacts(savedContacts); setReplies(savedReplies); } })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Contacts or Quick Replies could not load."); });
+    return () => { active = false; };
+  }, [organization]);
+
+  async function refreshResources() {
+    if (!organization) return;
+    const [savedContacts, savedReplies] = await Promise.all([listTenantContacts(organization.id), listTenantQuickReplies(organization.id)]);
+    setContacts(savedContacts); setReplies(savedReplies);
+  }
+
+  async function addContact(event: FormEvent) {
+    event.preventDefault();
+    if (!organization) return;
+    try {
+      await saveTenantContact(organization.id, { name: contactName.trim(), phone: contactPhone.trim(), email: "", notes: "", source: "local" });
+      setContactName(""); setContactPhone(""); await refreshResources();
+    } catch (e) { setError(e instanceof Error ? e.message : "Contact could not be saved."); }
+  }
+
+  async function addReply(event: FormEvent) {
+    event.preventDefault();
+    if (!organization) return;
+    try {
+      await saveTenantQuickReply(organization.id, { title: replyTitle.trim(), shortcut: replyShortcut.trim(), message: replyMessage.trim() });
+      setReplyTitle(""); setReplyShortcut(""); setReplyMessage(""); await refreshResources();
+    } catch (e) { setError(e instanceof Error ? e.message : "Quick Reply could not be saved."); }
+  }
+
   const currentChat = useMemo(() => chats.find((chat) => chat.id === selected), [chats, selected]);
 
   async function submit(event: FormEvent) {
@@ -91,7 +133,8 @@ export default function TenantInbox() {
       <div className="flex items-center gap-3"><MessageCircle/><div><h1 className="font-bold">JOY INBOX</h1><p className="text-xs text-white/75">{organization?.name || user?.email}</p></div></div>
       <div className="flex gap-3"><button onClick={() => navigate("/setup")} title="Workspace settings"><Settings size={19}/></button><button onClick={() => void logout()} title="Sign out"><LogOut size={19}/></button></div>
     </header>
-    <div className="flex min-h-0 flex-1">
+    <nav className="flex gap-2 border-b bg-white px-3 py-2">{(["chats", "contacts", "replies"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-full px-4 py-2 text-sm capitalize ${view === item ? "bg-[#075e54] text-white" : "bg-gray-100 text-gray-700"}`}>{item === "replies" ? "Quick Replies" : item}</button>)}</nav>
+    {view === "contacts" ? <section className="flex-1 overflow-y-auto bg-white p-4"><h2 className="mb-3 font-semibold">Business contacts</h2><form onSubmit={addContact} className="mb-4 grid gap-2 sm:grid-cols-3"><input required value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Customer name" className="rounded-lg border p-2 text-sm"/><input required value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+919876543210" className="rounded-lg border p-2 text-sm"/><button className="rounded-lg bg-[#075e54] p-2 text-sm text-white">Add contact</button></form>{contacts.map(contact => <div key={contact.id} className="flex items-center justify-between border-b py-3"><div><p className="font-medium">{contact.name}</p><p className="text-sm text-gray-500">{contact.phone}</p></div><button onClick={async () => { if (organization && confirm("Delete this contact?")) { await deleteTenantContact(organization.id, contact.id); await refreshResources(); } }} className="text-sm text-red-600">Delete</button></div>)}{!contacts.length && <p className="text-sm text-gray-500">No saved contacts yet.</p>}</section> : view === "replies" ? <section className="flex-1 overflow-y-auto bg-white p-4"><h2 className="mb-3 font-semibold">Saved Quick Replies</h2><form onSubmit={addReply} className="mb-4 grid gap-2"><input required maxLength={60} value={replyTitle} onChange={e => setReplyTitle(e.target.value)} placeholder="Reply title" className="rounded-lg border p-2 text-sm"/><input maxLength={30} value={replyShortcut} onChange={e => setReplyShortcut(e.target.value)} placeholder="Shortcut e.g. greeting" className="rounded-lg border p-2 text-sm"/><textarea required maxLength={4096} value={replyMessage} onChange={e => setReplyMessage(e.target.value)} placeholder="Saved message" className="rounded-lg border p-2 text-sm"/><button className="rounded-lg bg-[#075e54] p-2 text-sm text-white">Save Quick Reply</button></form>{replies.map(reply => <div key={reply.id} className="flex items-start justify-between gap-3 border-b py-3"><div><p className="font-medium">{reply.title} <span className="text-xs text-gray-400">/{reply.shortcut}</span></p><p className="whitespace-pre-wrap text-sm text-gray-600">{reply.message}</p></div><button onClick={async () => { if (organization && confirm("Delete this Quick Reply?")) { await deleteTenantQuickReply(organization.id, reply.id); await refreshResources(); } }} className="text-sm text-red-600">Delete</button></div>)}{!replies.length && <p className="text-sm text-gray-500">No Quick Replies saved yet.</p>}</section> : <div className="flex min-h-0 flex-1">
       <aside className={\`w-full max-w-sm overflow-y-auto border-r border-gray-200 bg-white \${selected ? "hidden md:block" : "block"}\`}>
         <div className="flex items-center justify-between border-b p-4"><h2 className="font-semibold">Chats</h2><button onClick={() => setError("")} title="Clear error"><RefreshCw size={16}/></button></div>
         {chats.length ? chats.map((chat) => <button key={chat.id} onClick={() => setSelected(chat.id)} className={\`w-full border-b border-gray-100 p-4 text-left hover:bg-gray-50 \${selected === chat.id ? "bg-[#effaf3]" : ""}\`}>
@@ -108,7 +151,7 @@ export default function TenantInbox() {
           <form onSubmit={submit} className="flex gap-2 border-t bg-white p-3"><input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={4096} placeholder="Type a message" className="min-w-0 flex-1 rounded-full border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#075e54]"/><button disabled={sending || !draft.trim()} className="grid h-11 w-11 place-items-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18}/></button></form>
         </> : <div className="grid flex-1 place-items-center text-center text-sm text-gray-500"><div><MessageCircle className="mx-auto mb-2 opacity-40" size={36}/><p>Select a conversation to start</p></div></div>}
       </section>
-    </div>
+    </div>}
     {error && <div role="alert" className="bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
   </main>;
 }
