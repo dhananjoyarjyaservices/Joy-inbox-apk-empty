@@ -296,6 +296,7 @@ export default function TenantInbox() {
   const visibleContacts = useMemo(() => contacts.filter(contact => !contactSearch.trim() || `${contact.name} ${contact.phone} ${contact.email || ""} ${contact.notes || ""}`.toLowerCase().includes(contactSearch.trim().toLowerCase())), [contacts, contactSearch]);
   const visibleMessages = useMemo(() => messages.filter(message => (!savedOnly || Boolean((message as TenantMessage & { saved?: boolean }).saved)) && (!messageSearch.trim() || `${message.text || ""} ${message.type || ""} ${message.mediaFilename || ""}`.toLowerCase().includes(messageSearch.trim().toLowerCase()))), [messages, messageSearch, savedOnly]);
   const currentChat = useMemo(() => chats.find((chat) => chat.id === selected), [chats, selected]);
+  useEffect(() => { if (currentChat?.phoneNumberId) setSelectedPhoneNumberId(currentChat.phoneNumberId); }, [currentChat?.phoneNumberId]);
   const currentContact = useMemo(() => {
     const phone = (currentChat?.customerPhone || selected).replace(/[^0-9]/g, "");
     return contacts.find(contact => contact.phone.replace(/[^0-9]/g, "") === phone);
