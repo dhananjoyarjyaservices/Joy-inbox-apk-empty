@@ -20,6 +20,13 @@ test("validates Quick Reply content and normalizes shortcut", () => {
   assert.deepEqual(result, { title: "Stock", shortcut: "mstock", message: "Hello" });
 });
 
+test("allows image-only Quick Replies while keeping the title required", () => {
+  assert.deepEqual(quickReplyInput({ title: "Product photo", shortcut: "photo", message: "" }), {
+    title: "Product photo", shortcut: "photo", message: ""
+  });
+  assert.throws(() => quickReplyInput({ title: "", shortcut: "photo", message: "" }), { statusCode: 400 });
+});
+
 test("rejects invalid Quick Reply shortcut and oversized message", () => {
   assert.throws(() => quickReplyInput({ title: "x", shortcut: "bad shortcut", message: "ok" }), { statusCode: 400 });
   assert.throws(() => quickReplyInput({ title: "x", shortcut: "", message: "x".repeat(4097) }), { statusCode: 400 });
