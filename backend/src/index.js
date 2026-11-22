@@ -4,6 +4,7 @@ const { getFirebaseAdmin, getDb } = require("./firebase");
 const {
   getHeader,
   jsonResponse,
+  getCorsHeaders,
   textResponse,
   emptyResponse
 } = require("./security");
@@ -1067,6 +1068,7 @@ async function retrieveTenantMessageMedia(event) {
     statusCode: 200,
     isBase64Encoded: true,
     headers: {
+      ...getCorsHeaders(event),
       "Content-Type": media.mimeType,
       "Content-Disposition": `inline; filename="${media.filename || "whatsapp-media"}"`,
       "Content-Length": String(media.buffer.length),
