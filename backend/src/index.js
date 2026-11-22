@@ -228,6 +228,7 @@ async function handleTenantResource(event, resource) {
     return jsonResponse(event, 200, { item });
   }
   if (method === "DELETE") {
+    if (resource === "quickReplies") await deleteQuickReplyImage(organization.id, body.resourceId);
     await deleteTenantResource(getDb(), organization.id, resource, body.resourceId);
     return jsonResponse(event, 200, { success: true });
   }
