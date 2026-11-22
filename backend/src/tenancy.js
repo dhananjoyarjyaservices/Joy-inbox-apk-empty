@@ -58,4 +58,55 @@ async function requireOrganizationForWebhook(db, organizationId) {
   return { id: organizationId, ref, ...snap.data() };
 }
 
-module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, resolvePhoneNumberOrganization };
+
+async function saveWhatsAppConnection(db, organization, input) {
+  if (!organization?.id || !organization.ref) throw httpError("Organization context is required.", 400);
+  const phoneNumberId = String(input?.phoneNumberId || "").trim();
+  const accessToken = String(input?.accessToken || "").trim();
+  const displayPhoneNumber = String(input?.displayPhoneNumber || "").trim().slice(0, 40);
+  const verifiedName = String(input?.verifiedName || "").trim().slice(0, 100);
+  if (!validId(phoneNumberId) || !/^EAA[A-Za-z0-9]+$/.test(accessToken) || accessToken.length > 4096) {
+    throw httpError("A valid WhatsApp Phone Number ID and access token are required.", 400);
+  }
+  const encrypted = encryptSecret(accessToken);
+  const phoneRef = db.collection("whatsappPhoneNumbers").doc(phoneNumberId);
+  const settingsRef = organization.ref.collection("settings").doc("whatsapp");
+  await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(phoneRef);
+    if (existing.exists && existing.data().organizationId !== organization.id) {
+      throw httpError("This WhatsApp phone number is already connected to another organization.", 409);
+    }
+    transaction.set(settingsRef, {
+      phoneNumberId,
+      accessToken: encrypted,
+      displayPhoneNumber,
+      verifiedName,
+      connected: true,
+      updatedAt: new Date()
+    }, { merge: true });
+    transaction.set(phoneRef, {
+      organizationId: organization.id,
+      status: "active",
+      updatedAt: new Date()
+    }, { merge: true });
+  });
+  return { phoneNumberId, displayPhoneNumber, verifiedName, connected: true };
+}
+
+async function getWhatsAppCredentials(db, organizationId) {
+  if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
+  const snapshot = await db.collection("organizations").doc(organizationId)
+    .collection("settings").doc("whatsapp").get();
+  if (!snapshot.exists || snapshot.data().connected !== true) {
+    throw httpError("WhatsApp is not connected for this organization.", 404);
+  }
+  const data = snapshot.data();
+  return {
+    phoneNumberId: data.phoneNumberId,
+    accessToken: decryptSecret(data.accessToken),
+    displayPhoneNumber: data.displayPhoneNumber || "",
+    verifiedName: data.verifiedName || ""
+  };
+}
+
+module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, getWhatsAppCredentials };
