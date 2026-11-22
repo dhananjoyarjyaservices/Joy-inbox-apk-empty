@@ -26,7 +26,10 @@ const {
   uploadWhatsAppMedia,
   validateMedia,
   validateMediaContent,
-  fetchWhatsAppMediaForProxy
+  fetchWhatsAppMediaForProxy,
+  QUICK_REPLY_IMAGE_MAX_BYTES,
+  saveQuickReplyImage,
+  deleteQuickReplyImage
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
@@ -229,6 +232,32 @@ async function handleTenantResource(event, resource) {
     return jsonResponse(event, 200, { success: true });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+
+async function saveTenantQuickReplyImage(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse(event, 400, { error: "Image upload details are required." });
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "quickReplies:manage");
+  if (typeof body.quickReplyId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(body.quickReplyId)) {
+    return jsonResponse(event, 400, { error: "A valid Quick Reply ID is required." });
+  }
+  const ref = organization.ref.collection("quickReplies").doc(body.quickReplyId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) return jsonResponse(event, 404, { error: "Quick Reply was not found." });
+  const encoded = String(body.fileBase64 || "");
+  const maxEncodedLength = Math.ceil(QUICK_REPLY_IMAGE_MAX_BYTES / 3) * 4;
+  if (!encoded || encoded.length > maxEncodedLength || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    return jsonResponse(event, 400, { error: "Image payload is invalid or exceeds 3 MB." });
+  }
+  const buffer = Buffer.from(encoded, "base64");
+  if (buffer.toString("base64") !== encoded) return jsonResponse(event, 400, { error: "Image payload is not valid base64." });
+  const saved = await saveQuickReplyImage(organization.id, body.quickReplyId, buffer, body.mimeType);
+  await ref.set({ hasImage: true, imageMimeType: saved.mimeType, updatedAt: new Date() }, { merge: true });
+  return jsonResponse(event, 200, { success: true, hasImage: true, imageMimeType: saved.mimeType });
 }
 
 async function handleTenantChatAction(event, action) {
@@ -1322,6 +1351,12 @@ exports.handler = async (event) => {
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/contacts")) {
     try { return await handleTenantResource(event, "contacts"); }
     catch (error) { console.error("Tenant contacts request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Contacts request could not be completed." }); }
+  }
+
+
+  if (method === "POST" && path.endsWith("/organizations/quick-replies/image")) {
+    try { return await saveTenantQuickReplyImage(event); }
+    catch (error) { console.error("Quick Reply image upload failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Reply image could not be saved." }); }
   }
 
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/quick-replies")) {
