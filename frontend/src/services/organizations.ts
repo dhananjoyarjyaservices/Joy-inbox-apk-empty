@@ -35,9 +35,9 @@ export async function connectWhatsApp(organizationId: string, phoneNumberId: str
   return request("/whatsapp/connect", "POST", { organizationId, phoneNumberId, accessToken });
 }
 
-export async function sendTenantText(organizationId: string, to: string, text: string) {
+export async function sendTenantText(organizationId: string, to: string, text: string, phoneNumberId?: string) {
   return request("/organizations/send", "POST", {
-    organizationId, to, chatId: to, text,
+    organizationId, to, chatId: to, text, ...(phoneNumberId ? { phoneNumberId } : {}),
     clientMessageId: crypto.randomUUID()
   });
 }
