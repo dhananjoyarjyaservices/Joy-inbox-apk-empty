@@ -65,7 +65,7 @@ async function saveWhatsAppConnection(db, organization, input) {
   const accessToken = String(input?.accessToken || "").trim();
   const displayPhoneNumber = String(input?.displayPhoneNumber || "").trim().slice(0, 40);
   const verifiedName = String(input?.verifiedName || "").trim().slice(0, 100);
-  if (!validId(phoneNumberId) || !/^EAA[A-Za-z0-9]+$/.test(accessToken) || accessToken.length > 4096) {
+  if (!validId(phoneNumberId) || !/^EAA[A-Za-z0-9_-]+$/.test(accessToken) || accessToken.length > 4096) {
     throw httpError("A valid WhatsApp Phone Number ID and access token are required.", 400);
   }
   const encrypted = encryptSecret(accessToken);
