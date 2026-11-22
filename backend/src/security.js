@@ -123,6 +123,7 @@ function emptyResponse(event, statusCode = 204) {
 module.exports = {
   getHeader,
   getRawBody,
+  getCorsHeaders,
   verifyMetaSignature,
   jsonResponse,
   textResponse,
