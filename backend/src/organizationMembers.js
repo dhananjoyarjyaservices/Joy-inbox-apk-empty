@@ -9,16 +9,20 @@ function validUid(value) {
 }
 
 async function writeMemberAudit(organization, actor, action, target, details = {}) {
-  const auditRef = organization.ref.collection("auditLogs").doc();
-  await auditRef.set({
-    action,
-    actorUid: String(actor?.uid || ""),
-    actorRole: String(actor?.role || ""),
-    targetUid: String(target?.uid || ""),
-    targetEmail: String(target?.email || ""),
-    details,
-    createdAt: new Date()
-  });
+  try {
+    const auditRef = organization.ref.collection("auditLogs").doc();
+    await auditRef.set({
+      action,
+      actorUid: String(actor?.uid || ""),
+      actorRole: String(actor?.role || ""),
+      targetUid: String(target?.uid || ""),
+      targetEmail: String(target?.email || ""),
+      details,
+      createdAt: new Date()
+    });
+  } catch (error) {
+    console.error("Workspace member audit write failed:", error);
+  }
 }
 
 async function listOrganizationMemberAudit(db, organization, options = {}) {
