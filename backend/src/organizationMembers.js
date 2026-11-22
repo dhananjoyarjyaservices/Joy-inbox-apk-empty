@@ -28,10 +28,22 @@ async function writeMemberAudit(organization, actor, action, target, details = {
 async function listOrganizationMemberAudit(db, organization, options = {}) {
   const requestedLimit = Number(options.limit);
   const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 25;
-  const snapshot = await organization.ref.collection("auditLogs")
-    .orderBy("createdAt", "desc").limit(limit).get();
+  const cursor = options.cursor || "";
+  if (cursor && !/^[A-Za-z0-9_-]{1,150}$/.test(cursor)) {
+    throw httpError("A valid activity page cursor is required.", 400);
+  }
+  const auditRef = organization.ref.collection("auditLogs");
+  let query = auditRef.orderBy("createdAt", "desc");
+  if (cursor) {
+    const cursorSnapshot = await auditRef.doc(cursor).get();
+    if (!cursorSnapshot.exists) throw httpError("The activity page cursor is no longer valid. Refresh the history.", 400);
+    query = query.startAfter(cursorSnapshot);
+  }
+  const snapshot = await query.limit(limit + 1).get();
+  const hasMore = snapshot.docs.length > limit;
+  const pageDocs = snapshot.docs.slice(0, limit);
   return {
-    events: snapshot.docs.map(doc => {
+    events: pageDocs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -43,7 +55,8 @@ async function listOrganizationMemberAudit(db, organization, options = {}) {
         details: data.details && typeof data.details === "object" ? data.details : {},
         createdAt: data.createdAt || null
       };
-    })
+    }),
+    nextCursor: hasMore ? pageDocs[pageDocs.length - 1].id : null
   };
 }
 
