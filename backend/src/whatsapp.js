@@ -20,6 +20,17 @@ function definitiveError(message) {
   return error;
 }
 
+// Tenant credentials are supplied by trusted server-side code after membership
+// checks. Never accept this object directly from an HTTP request.
+function resolveCredentials(credentials) {
+  const accessToken = credentials?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = credentials?.phoneNumberId || process.env.PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) {
+    throw definitiveError("WhatsApp API credentials are missing.");
+  }
+  return { accessToken, phoneNumberId };
+}
+
 async function readSendResponse(response, startedAt, type, fallbackMessage) {
   let result;
   try {
@@ -41,13 +52,8 @@ async function readSendResponse(response, startedAt, type, fallbackMessage) {
   return result;
 }
 
-async function sendWhatsAppText(to, text, contextMessageId) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
-
-  if (!accessToken || !phoneNumberId) {
-    throw definitiveError("WhatsApp API credentials are missing.");
-  }
+async function sendWhatsAppText(to, text, contextMessageId, credentials) {
+  const { accessToken, phoneNumberId } = resolveCredentials(credentials);
 
   const recipient = normalizePhoneNumber(to);
 
@@ -108,14 +114,9 @@ async function sendWhatsAppText(to, text, contextMessageId) {
   };
 }
 
-async function sendWhatsAppMedia(to, type, mediaId, caption, filename, contextMessageId) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+async function sendWhatsAppMedia(to, type, mediaId, caption, filename, contextMessageId, credentials) {
+  const { accessToken, phoneNumberId } = resolveCredentials(credentials);
   const recipient = normalizePhoneNumber(to);
-
-  if (!accessToken || !phoneNumberId) {
-    throw definitiveError("WhatsApp API credentials are missing.");
-  }
   if (!recipient || !mediaId) {
     throw definitiveError("A valid recipient and uploaded media ID are required.");
   }
@@ -170,10 +171,12 @@ async function sendWhatsAppMedia(to, type, mediaId, caption, filename, contextMe
   return { messageId, response: result };
 }
 
-async function checkWhatsAppConnection() {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
-  if (!accessToken || !phoneNumberId) {
+async function checkWhatsAppConnection(credentials) {
+  let accessToken;
+  let phoneNumberId;
+  try {
+    ({ accessToken, phoneNumberId } = resolveCredentials(credentials));
+  } catch {
     return {
       connected: false,
       error: { code: "MISSING_CONFIGURATION", message: "WhatsApp Cloud API credentials are not configured." }
@@ -205,6 +208,7 @@ async function checkWhatsAppConnection() {
 
 module.exports = {
   normalizePhoneNumber,
+  resolveCredentials,
   sendWhatsAppText,
   sendWhatsAppMedia,
   checkWhatsAppConnection
