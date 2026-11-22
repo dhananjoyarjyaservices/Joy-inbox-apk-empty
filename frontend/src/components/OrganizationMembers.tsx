@@ -17,6 +17,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
   const [auditEvents, setAuditEvents] = useState<OrganizationMemberAuditEvent[]>([]);
   const [showAudit, setShowAudit] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState("");
   const auditRequestId = useRef(0);
   const [auditCursor, setAuditCursor] = useState<string | null>(null);
   const canManage = actorRole === "owner" || actorRole === "admin";
@@ -35,6 +36,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     auditRequestId.current += 1;
     setAuditEvents([]);
     setAuditCursor(null);
+    setAuditError("");
     setShowAudit(false);
     setAuditLoading(false);
   }, [organizationId]);
@@ -48,26 +50,31 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     });
   }, [members, search, statusFilter, roleFilter]);
 
-  async function toggleAudit() {
-    if (showAudit) { setShowAudit(false); return; }
-    setShowAudit(true);
-    if (auditEvents.length || auditLoading) return;
+  async function loadAudit() {
     const requestId = ++auditRequestId.current;
     setAuditLoading(true);
+    setAuditError("");
     try {
       const page = await listOrganizationMemberAudit(organizationId, { limit: 25 });
       if (requestId !== auditRequestId.current) return;
       setAuditEvents(page.events);
       setAuditCursor(page.nextCursor);
     } catch (e) {
-      if (requestId === auditRequestId.current) setError(e instanceof Error ? e.message : "Member activity could not be loaded.");
+      if (requestId === auditRequestId.current) setAuditError(e instanceof Error ? e.message : "Member activity could not be loaded.");
     } finally { if (requestId === auditRequestId.current) setAuditLoading(false); }
   }
 
+  async function toggleAudit() {
+    if (showAudit) { setShowAudit(false); return; }
+    setShowAudit(true);
+    if (auditEvents.length || auditLoading) return;
+    await loadAudit();
+  }
   async function loadMoreAudit() {
     if (!auditCursor || auditLoading) return;
     const requestId = ++auditRequestId.current;
     setAuditLoading(true);
+    setAuditError("");
     try {
       const page = await listOrganizationMemberAudit(organizationId, { limit: 25, cursor: auditCursor });
       if (requestId !== auditRequestId.current) return;
@@ -77,7 +84,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
       });
       setAuditCursor(page.nextCursor);
     } catch (e) {
-      if (requestId === auditRequestId.current) setError(e instanceof Error ? e.message : "More activity could not be loaded.");
+      if (requestId === auditRequestId.current) setAuditError(e instanceof Error ? e.message : "More activity could not be loaded.");
     } finally { if (requestId === auditRequestId.current) setAuditLoading(false); }
   }
   function auditDescription(event: OrganizationMemberAuditEvent) {
@@ -127,7 +134,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
 
   return <section className="flex-1 overflow-y-auto bg-white p-4">
     <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Workspace members</h2><p className="text-sm text-gray-500">Manage who can access this business inbox.</p></div><div className="flex gap-2">{canManage && <button onClick={() => void toggleAudit()} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" aria-expanded={showAudit}><History size={15}/>{showAudit ? "Hide activity" : "Activity history"}</button>}<button onClick={() => void refresh()} className="rounded-lg border p-2" aria-label="Refresh members"><RefreshCw size={17}/></button></div></div>
-    {showAudit && <div className="mb-5 rounded-xl border p-3"><h3 className="mb-2 text-sm font-semibold">Recent member activity</h3>{auditLoading ? <p className="py-3 text-sm text-gray-500">Loading activity...</p> : auditEvents.length ? <div className="divide-y">{auditEvents.map(event => <div key={event.id} className="py-2"><p className="text-sm">{auditDescription(event)}</p><p className="text-xs text-gray-500">By {event.actorEmail || event.actorUid || "Unknown"} · {event.actorRole || "member"} · {event.createdAt && typeof event.createdAt === "object" && "toDate" in event.createdAt && typeof event.createdAt.toDate === "function" ? event.createdAt.toDate().toLocaleString() : event.createdAt ? new Date(String(event.createdAt)).toLocaleString() : "Time unavailable"}</p></div>)}{auditCursor && <div className="pt-3 text-center"><button type="button" disabled={auditLoading} onClick={() => void loadMoreAudit()} className="rounded-lg border px-4 py-2 text-xs disabled:opacity-50">{auditLoading ? "Loading..." : "Load more activity"}</button></div>}</div> : <p className="py-3 text-sm text-gray-500">No member activity recorded yet.</p>}</div>}
+    {showAudit && <div className="mb-5 rounded-xl border p-3"><h3 className="mb-2 text-sm font-semibold">Recent member activity</h3>{auditLoading ? <p className="py-3 text-sm text-gray-500">Loading activity...</p> : auditError ? <div className="py-3"><p role="alert" className="mb-2 text-sm text-red-700">{auditError}</p><button type="button" onClick={() => void loadAudit()} className="rounded-lg border px-3 py-2 text-xs">Retry loading activity</button></div> : auditEvents.length ? <div className="divide-y">{auditEvents.map(event => <div key={event.id} className="py-2"><p className="text-sm">{auditDescription(event)}</p><p className="text-xs text-gray-500">By {event.actorEmail || event.actorUid || "Unknown"} · {event.actorRole || "member"} · {event.createdAt && typeof event.createdAt === "object" && "toDate" in event.createdAt && typeof event.createdAt.toDate === "function" ? event.createdAt.toDate().toLocaleString() : event.createdAt ? new Date(String(event.createdAt)).toLocaleString() : "Time unavailable"}</p></div>)}{auditCursor && <div className="pt-3 text-center"><button type="button" disabled={auditLoading} onClick={() => void loadMoreAudit()} className="rounded-lg border px-4 py-2 text-xs disabled:opacity-50">{auditLoading ? "Loading..." : "Load more activity"}</button></div>}</div> : <p className="py-3 text-sm text-gray-500">No member activity recorded yet.</p>}</div>}
     {canManage && <form onSubmit={add} className="mb-5 grid gap-2 rounded-xl border bg-gray-50 p-3 sm:grid-cols-[1fr_140px_auto]">
       <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Existing Joy Inbox account email" className="min-w-0 rounded-lg border bg-white px-3 py-2 text-sm"/>
       <select value={role} onChange={e => setRole(e.target.value as "admin" | "agent")} className="rounded-lg border bg-white px-3 py-2 text-sm">
