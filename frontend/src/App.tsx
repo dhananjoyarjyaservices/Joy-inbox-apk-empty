@@ -5,6 +5,7 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Setup from "./pages/Setup";
 
 export default function App() {
   useEffect(() => {
@@ -28,6 +29,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/setup" element={<Setup />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Dashboard />} />
