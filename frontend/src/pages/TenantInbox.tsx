@@ -16,6 +16,8 @@ type TenantChat = {
   lastMessage?: string;
   lastMessageAt?: { toDate?: () => Date } | Date | string;
   unreadCount?: number;
+  archived?: boolean;
+  pinned?: boolean;
 };
 type TenantMessage = {
   id: string;
@@ -51,6 +53,7 @@ export default function TenantInbox() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState<"chats" | "contacts" | "replies">("chats");
+  const [showArchived, setShowArchived] = useState(false);
   const [contacts, setContacts] = useState<TenantContact[]>([]);
   const [replies, setReplies] = useState<TenantQuickReply[]>([]);
   const [contactName, setContactName] = useState("");
@@ -136,8 +139,8 @@ export default function TenantInbox() {
       } else {
         await updateTenantChatState(organization.id, {
           chatId: chat.id,
-          ...(action === "pin" ? { pinned: !Boolean((chat as TenantChat & { pinned?: boolean }).pinned) } : {}),
-          ...(action === "archive" ? { archived: !Boolean((chat as TenantChat & { archived?: boolean }).archived) } : {}),
+          ...(action === "pin" ? { pinned: !Boolean(chat.pinned) } : {}),
+          ...(action === "archive" ? { archived: !Boolean(chat.archived) } : {}),
           ...(action === "read" ? { markRead: true } : {})
         });
       }
@@ -159,6 +162,7 @@ export default function TenantInbox() {
       try {
         const blob = await fetchTenantMedia(organization.id, selected, message.id);
         const url = URL.createObjectURL(blob);
+        if (!active) { URL.revokeObjectURL(url); return [message.id, ""] as const; }
         created.push(url);
         return [message.id, url] as const;
       } catch (e) {
@@ -179,6 +183,7 @@ export default function TenantInbox() {
     finally { setSending(false); }
   }
 
+  const visibleChats = useMemo(() => chats.filter(chat => Boolean(chat.archived) === showArchived), [chats, showArchived]);
   const currentChat = useMemo(() => chats.find((chat) => chat.id === selected), [chats, selected]);
 
   async function submit(event: FormEvent) {
@@ -201,8 +206,8 @@ export default function TenantInbox() {
     <nav className="flex gap-2 border-b bg-white px-3 py-2">{(["chats", "contacts", "replies"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-full px-4 py-2 text-sm capitalize ${view === item ? "bg-[#075e54] text-white" : "bg-gray-100 text-gray-700"}`}>{item === "replies" ? "Quick Replies" : item}</button>)}</nav>
     {view === "contacts" ? <section className="flex-1 overflow-y-auto bg-white p-4"><h2 className="mb-3 font-semibold">Business contacts</h2><form onSubmit={addContact} className="mb-4 grid gap-2 sm:grid-cols-3"><input required value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Customer name" className="rounded-lg border p-2 text-sm"/><input required value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+919876543210" className="rounded-lg border p-2 text-sm"/><button className="rounded-lg bg-[#075e54] p-2 text-sm text-white">Add contact</button></form>{contacts.map(contact => <div key={contact.id} className="flex items-center justify-between border-b py-3"><div><p className="font-medium">{contact.name}</p><p className="text-sm text-gray-500">{contact.phone}</p></div><button onClick={async () => { if (organization && confirm("Delete this contact?")) { await deleteTenantContact(organization.id, contact.id); await refreshResources(); } }} className="text-sm text-red-600">Delete</button></div>)}{!contacts.length && <p className="text-sm text-gray-500">No saved contacts yet.</p>}</section> : view === "replies" ? <section className="flex-1 overflow-y-auto bg-white p-4"><h2 className="mb-3 font-semibold">Saved Quick Replies</h2><form onSubmit={addReply} className="mb-4 grid gap-2"><input required maxLength={60} value={replyTitle} onChange={e => setReplyTitle(e.target.value)} placeholder="Reply title" className="rounded-lg border p-2 text-sm"/><input maxLength={30} value={replyShortcut} onChange={e => setReplyShortcut(e.target.value)} placeholder="Shortcut e.g. greeting" className="rounded-lg border p-2 text-sm"/><textarea required maxLength={4096} value={replyMessage} onChange={e => setReplyMessage(e.target.value)} placeholder="Saved message" className="rounded-lg border p-2 text-sm"/><button className="rounded-lg bg-[#075e54] p-2 text-sm text-white">Save Quick Reply</button></form>{replies.map(reply => <div key={reply.id} className="flex items-start justify-between gap-3 border-b py-3"><div><p className="font-medium">{reply.title} <span className="text-xs text-gray-400">/{reply.shortcut}</span></p><p className="whitespace-pre-wrap text-sm text-gray-600">{reply.message}</p></div><button onClick={async () => { if (organization && confirm("Delete this Quick Reply?")) { await deleteTenantQuickReply(organization.id, reply.id); await refreshResources(); } }} className="text-sm text-red-600">Delete</button></div>)}{!replies.length && <p className="text-sm text-gray-500">No Quick Replies saved yet.</p>}</section> : <div className="flex min-h-0 flex-1">
       <aside className={`w-full max-w-sm overflow-y-auto border-r border-gray-200 bg-white ${selected ? "hidden md:block" : "block"}`}>
-        <div className="flex items-center justify-between border-b p-4"><h2 className="font-semibold">Chats</h2><button onClick={() => setError("")} title="Clear error"><RefreshCw size={16}/></button></div>
-        {chats.length ? chats.map((chat) => <button key={chat.id} onClick={() => setSelected(chat.id)} className={`w-full border-b border-gray-100 p-4 text-left hover:bg-gray-50 ${selected === chat.id ? "bg-[#effaf3]" : ""}`}>
+        <div className="flex items-center justify-between border-b p-4"><h2 className="font-semibold">{showArchived ? "Archived chats" : "Chats"}</h2><button onClick={() => setShowArchived(value => !value)} className="mr-2 text-xs text-[#075e54]">{showArchived ? "Inbox" : "Archived"}</button><button onClick={() => setError("")} title="Clear error"><RefreshCw size={16}/></button></div>
+        {visibleChats.length ? visibleChats.map((chat) => <button key={chat.id} onClick={() => setSelected(chat.id)} className={`w-full border-b border-gray-100 p-4 text-left hover:bg-gray-50 ${selected === chat.id ? "bg-[#effaf3]" : ""}`}>
           <div className="flex justify-between gap-2"><span className="truncate font-medium">{chat.customerName || chat.customerPhone || chat.id}</span><span className="text-xs text-gray-400">{timeLabel(chat.lastMessageAt)}</span></div>
           <p className="mt-1 truncate text-sm text-gray-500">{chat.lastMessage || "No message preview"}</p><div className="mt-2 flex gap-3 text-xs text-gray-500"><span onClick={(e) => { e.stopPropagation(); void chatAction("pin", chat); }} className="cursor-pointer">{(chat as TenantChat & { pinned?: boolean }).pinned ? "Unpin" : "Pin"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("archive", chat); }} className="cursor-pointer">{(chat as TenantChat & { archived?: boolean }).archived ? "Unarchive" : "Archive"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("read", chat); }} className="cursor-pointer">Read</span><span onClick={(e) => { e.stopPropagation(); void chatAction("delete", chat); }} className="cursor-pointer text-red-600">Delete</span></div>
         </button>) : <p className="p-6 text-sm text-gray-500">No conversations yet. New WhatsApp messages will appear here.</p>}
