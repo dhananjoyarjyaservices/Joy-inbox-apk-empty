@@ -251,7 +251,7 @@ async function handleOrganizationMembers(event) {
     : body.organizationId;
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "members:manage");
-  const actor = { uid: decoded.uid, role: organization.role };
+  const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };
   if (method === "GET") {
     const limit = event.queryStringParameters?.limit;
     const cursor = event.queryStringParameters?.cursor;
