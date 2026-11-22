@@ -8,7 +8,7 @@ import { listOrganizations, sendTenantText, type Organization } from "../service
 import OrganizationMembers from "../components/OrganizationMembers";
 import { listenToTenantChats, listenToTenantMessages } from "../services/tenantChats";
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
-import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
+import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
 
 type TenantChat = {
   id: string;
@@ -161,6 +161,20 @@ export default function TenantInbox() {
     } catch (e) { setError(e instanceof Error ? e.message : "Quick Reply could not be saved."); }
   }
 
+  async function chooseQuickReply(reply: TenantQuickReply) {
+    if (reply.hasImage) {
+      if (!organization || !selected || sending) return;
+      setSending(true); setError("");
+      try {
+        await sendTenantQuickReplyImage(organization.id, selected, reply.id);
+        setDraft("");
+      } catch (e) { setError(e instanceof Error ? e.message : "Quick Reply image could not be sent."); }
+      finally { setSending(false); }
+      return;
+    }
+    setDraft(reply.message);
+  }
+
   const matchingReplies = useMemo(() => {
     if (!draft.startsWith("/")) return [];
     const query = draft.slice(1).trim().toLowerCase();
@@ -256,7 +270,7 @@ export default function TenantInbox() {
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
             {messages.map((message) => <div key={message.id} id={"message-" + message.id} className={`flex ${message.direction === "outgoing" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm ${message.direction === "outgoing" ? "bg-[#d9fdd3]" : "bg-white"}`}>{mediaUrls[message.id] ? <div className="mb-2">{message.type === "image" ? <img src={mediaUrls[message.id]} alt={message.mediaFilename || "WhatsApp image"} className="max-h-64 max-w-full rounded-lg object-contain"/> : message.type === "video" ? <video src={mediaUrls[message.id]} controls className="max-h-64 max-w-full rounded-lg"/> : message.type === "audio" ? <audio src={mediaUrls[message.id]} controls className="max-w-full"/> : <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-[#075e54] underline"><FileText size={18}/>{message.mediaFilename || "Open attachment"}</a>}</div> : message.mediaId ? <p className="mb-2 text-xs text-gray-500">Loading attachment or preview unavailable</p> : null}<p className="whitespace-pre-wrap break-words text-sm">{message.text || (message.mediaId ? "" : `[${message.type || "Message"}]`)}</p><button onClick={() => void toggleMessagePin(message)} className="mt-1 text-[10px] text-gray-500">{(message as TenantMessage & { pinned?: boolean }).pinned ? "Unpin message" : "Pin message"}</button><p className="mt-1 text-right text-[10px] text-gray-400">{timeLabel(message.timestamp)} {message.status || ""}</p></div></div>)}
           </div>
-          <form onSubmit={event => { if (attachment) { event.preventDefault(); void sendAttachment(); } else void submit(event); }} className="relative flex gap-2 border-t bg-white p-3"><label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full bg-gray-100 text-gray-600" title="Attach image, video, audio or document"><Paperclip size={18}/><input type="file" className="hidden" accept="image/jpeg,image/png,video/mp4,video/3gpp,audio/aac,audio/amr,audio/mpeg,audio/mp4,audio/ogg,application/pdf,text/plain,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={e => setAttachment(e.target.files?.[0] || null)}/></label><div className="relative min-w-0 flex-1"><input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={attachment ? 1024 : 4096} placeholder={attachment ? attachment.name + " · optional caption" : "Type a message"} className="w-full rounded-full border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#075e54]"/>{matchingReplies.length > 0 && <div className="absolute bottom-full left-0 z-20 mb-2 max-h-56 w-full overflow-y-auto rounded-xl border bg-white p-2 shadow-lg">{matchingReplies.map(reply => <button type="button" key={reply.id} onClick={() => setDraft(reply.message)} className="block w-full rounded-lg p-2 text-left hover:bg-gray-50"><span className="block text-sm font-medium">{reply.title} <span className="text-xs text-gray-400">/{reply.shortcut}</span></span><span className="block truncate text-xs text-gray-500">{reply.message}</span></button>)}</div>}</div><button disabled={sending || (!draft.trim() && !attachment)} className="grid h-11 w-11 place-items-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18}/></button></form>
+          <form onSubmit={event => { if (attachment) { event.preventDefault(); void sendAttachment(); } else void submit(event); }} className="relative flex gap-2 border-t bg-white p-3"><label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full bg-gray-100 text-gray-600" title="Attach image, video, audio or document"><Paperclip size={18}/><input type="file" className="hidden" accept="image/jpeg,image/png,video/mp4,video/3gpp,audio/aac,audio/amr,audio/mpeg,audio/mp4,audio/ogg,application/pdf,text/plain,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={e => setAttachment(e.target.files?.[0] || null)}/></label><div className="relative min-w-0 flex-1"><input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={attachment ? 1024 : 4096} placeholder={attachment ? attachment.name + " · optional caption" : "Type a message"} className="w-full rounded-full border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#075e54]"/>{matchingReplies.length > 0 && <div className="absolute bottom-full left-0 z-20 mb-2 max-h-56 w-full overflow-y-auto rounded-xl border bg-white p-2 shadow-lg">{matchingReplies.map(reply => <button type="button" key={reply.id} onClick={() => void chooseQuickReply(reply)} className="block w-full rounded-lg p-2 text-left hover:bg-gray-50"><span className="block text-sm font-medium">{reply.title} <span className="text-xs text-gray-400">/{reply.shortcut}</span></span><span className="block truncate text-xs text-gray-500">{reply.hasImage ? "Tap to send saved image" : reply.message}</span></button>)}</div>}</div><button disabled={sending || (!draft.trim() && !attachment)} className="grid h-11 w-11 place-items-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18}/></button></form>
         </> : <div className="grid flex-1 place-items-center text-center text-sm text-gray-500"><div><MessageCircle className="mx-auto mb-2 opacity-40" size={36}/><p>Select a conversation to start</p></div></div>}
       </section>
     </div>}
