@@ -58,6 +58,7 @@ export interface OrganizationMemberAuditEvent {
   id: string;
   action: string;
   actorUid: string;
+  actorEmail: string;
   actorRole: string;
   targetUid: string;
   targetEmail: string;
