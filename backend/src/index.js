@@ -218,6 +218,68 @@ async function handleTenantChatAction(event, action) {
   return jsonResponse(event, 200, { success: true, deletedChatIds });
 }
 
+async function getTenantGreetingSettings(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "settings:manage");
+  const snapshot = await organization.ref.collection("settings").doc("greeting").get();
+  const data = snapshot.exists ? snapshot.data() : {};
+  return jsonResponse(event, 200, {
+    enabled: Boolean(data.enabled),
+    text: String(data.text || ""),
+    trigger: "first_inbound"
+  });
+}
+
+async function saveTenantGreetingSettings(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
+      typeof body.organizationId !== "string" ||
+      typeof body.enabled !== "boolean" || typeof body.text !== "string") {
+    return jsonResponse(event, 400, { error: "Organization ID, greeting enabled state and text are required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "settings:manage");
+  const text = body.text.trim();
+  if (text.length > 1024 || (body.enabled && !text)) {
+    return jsonResponse(event, 400, { error: "Enabled greetings require text of at most 1024 characters." });
+  }
+  await organization.ref.collection("settings").doc("greeting").set({
+    enabled: body.enabled,
+    text,
+    trigger: "first_inbound",
+    updatedAt: new Date()
+  }, { merge: true });
+  return jsonResponse(event, 200, { success: true, enabled: body.enabled, text, trigger: "first_inbound" });
+}
+
+async function getTenantConnectionStatus(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "chats:read");
+  let whatsapp = { connected: false, error: { code: "NOT_CONNECTED", message: "WhatsApp is not connected." } };
+  try {
+    const credentials = await getWhatsAppCredentials(getDb(), organization.id);
+    whatsapp = await checkWhatsAppConnection(credentials);
+  } catch (error) {
+    if (error.statusCode !== 404) throw error;
+  }
+  let firestore;
+  try {
+    await organization.ref.collection("chats").limit(1).get();
+    firestore = { connected: true };
+  } catch (error) {
+    firestore = { connected: false, error: String(error.message || "Firestore access check failed.").slice(0, 200) };
+  }
+  return jsonResponse(event, 200, { whatsapp, firestore, checkedAt: new Date().toISOString() });
+}
+
 async function authenticateOwner(event) {
   const authorization = getHeader(event, "authorization");
 
@@ -1233,6 +1295,30 @@ exports.handler = async (event) => {
           ? error.message
           : "Media could not be retrieved."
       });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/status")) {
+    try { return await getTenantConnectionStatus(event); }
+    catch (error) {
+      console.error("Tenant connection diagnostics failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Connection diagnostics could not be completed." });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/greeting-settings")) {
+    try { return await getTenantGreetingSettings(event); }
+    catch (error) {
+      console.error("Tenant greeting settings load failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Greeting settings could not be loaded." });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/greeting-settings")) {
+    try { return await saveTenantGreetingSettings(event); }
+    catch (error) {
+      console.error("Tenant greeting settings save failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Greeting settings could not be saved." });
     }
   }
 
