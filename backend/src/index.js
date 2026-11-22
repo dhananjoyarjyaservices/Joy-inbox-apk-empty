@@ -237,6 +237,24 @@ async function handleTenantResource(event, resource) {
 }
 
 
+async function removeTenantQuickReplyImage(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "quickReplies:manage");
+  const quickReplyId = body.quickReplyId;
+  if (typeof quickReplyId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(quickReplyId)) {
+    return jsonResponse(event, 400, { error: "A valid Quick Reply ID is required." });
+  }
+  const ref = organization.ref.collection("quickReplies").doc(quickReplyId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) return jsonResponse(event, 404, { error: "Quick Reply was not found." });
+  await deleteQuickReplyImage(organization.id, quickReplyId);
+  await ref.set({ hasImage: false, imageMimeType: null, updatedAt: new Date() }, { merge: true });
+  return jsonResponse(event, 200, { success: true, hasImage: false });
+}
+
 async function getTenantQuickReplyImage(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
@@ -1408,8 +1426,8 @@ exports.handler = async (event) => {
   }
 
 
-  if (["GET", "POST"].includes(method) && path.endsWith("/organizations/quick-replies/image")) {
-    try { return method === "GET" ? await getTenantQuickReplyImage(event) : await saveTenantQuickReplyImage(event); }
+  if (["GET", "POST", "DELETE"].includes(method) && path.endsWith("/organizations/quick-replies/image")) {
+    try { return method === "GET" ? await getTenantQuickReplyImage(event) : method === "DELETE" ? await removeTenantQuickReplyImage(event) : await saveTenantQuickReplyImage(event); }
     catch (error) { console.error("Quick Reply image upload failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Reply image could not be saved." }); }
   }
 
