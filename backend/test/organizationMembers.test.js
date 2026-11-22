@@ -50,6 +50,25 @@ function fakeDb() {
           .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/"))
           .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
         return { docs };
+      },
+      orderBy() {
+        let afterId = "";
+        let max = Infinity;
+        const query = {
+          startAfter(snapshot) { afterId = snapshot.id; return query; },
+          limit(value) { max = value; return query; },
+          async get() {
+            const prefix = path + "/";
+            const docs = [...records.entries()]
+              .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/"))
+              .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }))
+              .sort((a, b) => a.id.localeCompare(b.id))
+              .filter(item => !afterId || item.id > afterId)
+              .slice(0, max);
+            return { docs };
+          }
+        };
+        return query;
       }
     };
   }
@@ -68,7 +87,7 @@ test("owner can add existing Firebase users as agents and list members", async (
   assert.equal(member.uid, "agent_uid");
   assert.equal(records.get("organizations/org_a/members/agent_uid").status, "active");
   assert.equal(records.get("users/agent_uid/organizations/org_a").role, "agent");
-  assert.equal((await listOrganizationMembers(db, organization)).length, 1);
+  assert.equal((await listOrganizationMembers(db, organization)).members.length, 1);
 });
 
 test("admins cannot add or promote other admins", async () => {
@@ -270,4 +289,41 @@ test("malformed Firebase user lookup results are rejected without membership wri
     );
   }
   assert.equal(records.size, 0);
+});
+
+test("member listing returns bounded pages and a stable next cursor", async () => {
+  const { db } = fakeDb();
+  const organization = { id: "org_pages", ref: db.collection("organizations").doc("org_pages") };
+  for (const uid of ["member_01", "member_02", "member_03", "member_04", "member_05"]) {
+    await organization.ref.collection("members").doc(uid).set({ uid, email: uid + "@example.com", role: "agent", status: "active" });
+  }
+  const first = await listOrganizationMembers(db, organization, { limit: 2 });
+  assert.deepEqual(first.members.map(member => member.uid), ["member_01", "member_02"]);
+  assert.equal(first.nextCursor, "member_02");
+  const second = await listOrganizationMembers(db, organization, { limit: 2, cursor: first.nextCursor });
+  assert.deepEqual(second.members.map(member => member.uid), ["member_03", "member_04"]);
+  assert.equal(second.nextCursor, "member_04");
+  const third = await listOrganizationMembers(db, organization, { limit: 2, cursor: second.nextCursor });
+  assert.deepEqual(third.members.map(member => member.uid), ["member_05"]);
+  assert.equal(third.nextCursor, null);
+});
+
+test("member listing clamps oversized page sizes and rejects invalid cursors", async () => {
+  const { db } = fakeDb();
+  const organization = { id: "org_limits", ref: db.collection("organizations").doc("org_limits") };
+  for (let index = 1; index <= 105; index += 1) {
+    const uid = "user_" + String(index).padStart(3, "0");
+    await organization.ref.collection("members").doc(uid).set({ role: "agent", status: "active" });
+  }
+  const page = await listOrganizationMembers(db, organization, { limit: 1000 });
+  assert.equal(page.members.length, 100);
+  assert.ok(page.nextCursor);
+  await assert.rejects(
+    () => listOrganizationMembers(db, organization, { cursor: "../invalid" }),
+    { statusCode: 400 }
+  );
+  await assert.rejects(
+    () => listOrganizationMembers(db, organization, { cursor: "missing_uid" }),
+    { statusCode: 400 }
+  );
 });
