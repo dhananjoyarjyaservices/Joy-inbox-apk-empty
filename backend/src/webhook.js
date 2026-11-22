@@ -2,9 +2,7 @@
 const { getDb } = require("./firebase");
 const { verifyMetaSignature, getRawBody } = require("./security");
 const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
-const { downloadWhatsAppMedia } = require("./media");
-const { OWNER_UID } = require("./owner");
-const { sendIncomingTextNotification } = require("./push");
+const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
 
 function getVerifyToken() {
   return (
@@ -362,46 +360,176 @@ async function updateMessageStatus(status) {
   });
 }
 
+async function saveTenantIncomingMessage(db, organization, message, contactName) {
+  const phone = normalizePhoneNumber(message.from);
+  const messageId = String(message.id || "");
+  if (!phone || !/^[A-Za-z0-9._:-]{1,256}$/.test(messageId)) return false;
+
+  const chatRef = organization.ref.collection("chats").doc(phone);
+  const messageRef = chatRef.collection("messages").doc(messageId);
+  const timestamp = message.timestamp ? new Date(Number(message.timestamp) * 1000) : new Date();
+  if (Number.isNaN(timestamp.getTime())) return false;
+  const mediaMessage = message[message.type] || {};
+  const text = message.type === "text"
+    ? String(message.text?.body || "")
+    : String(mediaMessage.caption || mediaMessage.title ||
+      (message.type === "location" && message.location
+        ? `${message.location.latitude}, ${message.location.longitude}`
+        : `${message.type || "Unsupported"} message`));
+
+  return db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(messageRef);
+    if (existing.exists) return false;
+    const chatSnapshot = await transaction.get(chatRef);
+    const previousUnread = chatSnapshot.exists ? Number(chatSnapshot.data().unreadCount || 0) : 0;
+    const contextMessageId = typeof message.context?.id === "string" &&
+      /^[A-Za-z0-9._:-]{1,256}$/.test(message.context.id) ? message.context.id : "";
+    let replyFields = {};
+    if (contextMessageId) {
+      const contextRef = chatRef.collection("messages").doc(contextMessageId);
+      const contextSnapshot = await transaction.get(contextRef);
+      if (contextSnapshot.exists) {
+        const original = contextSnapshot.data();
+        replyFields = {
+          replyToMessageId: contextSnapshot.id,
+          replyToMessageText: String(original.text || ""),
+          replyToMessageSender: original.direction === "outgoing" ? "You" : String(original.sender || phone),
+          replyToMessageType: String(original.type || "unknown")
+        };
+      }
+    }
+    transaction.set(messageRef, {
+      messageId,
+      chatId: phone,
+      organizationId: organization.id,
+      direction: "incoming",
+      type: String(message.type || "unknown"),
+      text,
+      timestamp,
+      status: "received",
+      source: "whatsapp",
+      sender: phone,
+      mediaId: mediaMessage.id || null,
+      mediaMimeType: mediaMessage.mime_type || null,
+      mediaSize: Number(mediaMessage.file_size) || null,
+      mediaFilename: String(mediaMessage.filename || "").slice(0, 180) || null,
+      mediaSha256: String(mediaMessage.sha256 || "").slice(0, 128) || null,
+      ...replyFields
+    });
+    transaction.set(chatRef, {
+      customerPhone: phone,
+      customerName: contactName || phone,
+      lastMessage: text,
+      lastMessageAt: timestamp,
+      lastMessageDirection: "incoming",
+      unreadCount: previousUnread + 1,
+      pinned: chatSnapshot.exists ? Boolean(chatSnapshot.data().pinned) : false,
+      archived: chatSnapshot.exists ? Boolean(chatSnapshot.data().archived) : false,
+      updatedAt: new Date()
+    }, { merge: true });
+    return true;
+  });
+}
+
+async function maybeSendTenantGreeting(db, organization, credentials, phone, inboundMessage) {
+  const settingsSnapshot = await organization.ref.collection("settings").doc("greeting").get();
+  const settings = settingsSnapshot.exists ? settingsSnapshot.data() : {};
+  const greetingText = String(settings.text || "").trim();
+  if (!settings.enabled || !greetingText || greetingText.length > 1024) return;
+  const chatRef = organization.ref.collection("chats").doc(phone);
+  const inboundTime = Number(inboundMessage.timestamp)
+    ? new Date(Number(inboundMessage.timestamp) * 1000) : new Date();
+  const withinWindow = inboundTime.getTime() <= Date.now() + 5 * 60 * 1000 &&
+    Date.now() - inboundTime.getTime() < 24 * 60 * 60 * 1000;
+  const claimed = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(chatRef);
+    if (!snapshot.exists || snapshot.data().greetingAttemptedFor) return false;
+    transaction.set(chatRef, {
+      greetingAttemptedFor: inboundMessage.id,
+      greetingStatus: withinWindow ? "sending" : "outside_service_window",
+      greetingAttemptedAt: new Date()
+    }, { merge: true });
+    return true;
+  });
+  if (!claimed || !withinWindow) return;
+  try {
+    const result = await sendWhatsAppText(phone, greetingText, undefined, credentials);
+    const timestamp = new Date();
+    await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(chatRef);
+      if (current.data()?.greetingAttemptedFor !== inboundMessage.id) return;
+      transaction.set(chatRef.collection("messages").doc(result.messageId), {
+        messageId: result.messageId,
+        chatId: phone,
+        organizationId: organization.id,
+        direction: "outgoing",
+        type: "text",
+        text: greetingText,
+        timestamp,
+        status: "sent",
+        source: "greeting",
+        sender: "system"
+      });
+      transaction.set(chatRef, {
+        greetingStatus: "sent",
+        greetingSentAt: timestamp,
+        lastMessage: greetingText,
+        lastMessageAt: timestamp,
+        lastMessageDirection: "outgoing",
+        updatedAt: timestamp
+      }, { merge: true });
+    });
+  } catch (error) {
+    await chatRef.set({
+      greetingStatus: "failed",
+      greetingLastError: String(error?.message || "Greeting could not be sent.").slice(0, 300),
+      greetingFailedAt: new Date()
+    }, { merge: true });
+  }
+}
+
+async function updateTenantMessageStatus(organization, status) {
+  const messageId = String(status.id || "");
+  const recipient = normalizePhoneNumber(status.recipient_id);
+  const nextStatus = status.status;
+  if (!/^[A-Za-z0-9._:-]{1,256}$/.test(messageId) || !recipient ||
+      !["sent", "delivered", "read", "failed"].includes(nextStatus)) return;
+  const ref = organization.ref.collection("chats").doc(recipient).collection("messages").doc(messageId);
+  await ref.update({ status: nextStatus, statusUpdatedAt: new Date() }).catch((error) => {
+    if (error.code !== 5 && error.code !== "not-found") throw error;
+  });
+}
+
 async function processWebhookPayload(payload) {
+  const db = getDb();
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
       const value = change.value || {};
-
+      const phoneNumberId = value.metadata?.phone_number_id;
+      if (!phoneNumberId) {
+        console.warn("Ignoring WhatsApp webhook change without metadata.phone_number_id.");
+        continue;
+      }
+      let organization;
+      let credentials;
+      try {
+        organization = await resolvePhoneNumberOrganization(db, String(phoneNumberId));
+        credentials = await getWhatsAppCredentials(db, organization.id);
+      } catch (error) {
+        console.warn("Ignoring webhook for an unlinked or inactive WhatsApp number:", error.message);
+        continue;
+      }
       const contacts = value.contacts || [];
-      const messages = value.messages || [];
-
-      for (const message of messages) {
-        const contact = contacts.find(
-          (item) => item.wa_id === message.from
-        );
-
-        const contactName =
-          contact?.profile?.name || message.from;
-
-        const created = await saveIncomingMessage(message, contactName);
+      for (const message of value.messages || []) {
+        const contact = contacts.find((item) => item.wa_id === message.from);
+        const name = contact?.profile?.name || message.from;
+        const created = await saveTenantIncomingMessage(db, organization, message, name);
         if (created) {
-          if (message.type === "text") {
-            try {
-              await sendIncomingTextNotification(
-                normalizePhoneNumber(message.from),
-                contactName,
-                message.text?.body,
-                message.id
-              );
-            } catch (error) {
-              console.error("Incoming message push notification failed:", error);
-            }
-          }
-
-          await maybeSendGreeting(
-            normalizePhoneNumber(message.from),
-            message
-          );
+          await maybeSendTenantGreeting(db, organization, credentials, normalizePhoneNumber(message.from), message);
         }
       }
-
       for (const status of value.statuses || []) {
-        await updateMessageStatus(status);
+        await updateTenantMessageStatus(organization, status);
       }
     }
   }
