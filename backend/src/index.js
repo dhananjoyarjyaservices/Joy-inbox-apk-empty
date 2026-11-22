@@ -642,6 +642,92 @@ async function sendTenantMessage(event) {
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
 
+async function retryTenantFailedText(event) {
+  const body = parseBody(event);
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "messages:send");
+
+  const chatId = normalizePhoneNumber(body.chatId);
+  const originalMessageId = String(body.originalMessageId || "").trim();
+  if (!chatId || !originalMessageId || originalMessageId.length > 256) {
+    return jsonResponse(event, 400, { error: "A valid chat and original message ID are required." });
+  }
+
+  const db = getDb();
+  const chatRef = getTenantChatRef(db, organization.id, chatId);
+  const chatSnapshot = await chatRef.get();
+  if (!chatSnapshot.exists) return jsonResponse(event, 404, { error: "Conversation was not found." });
+
+  const originalRef = getTenantMessageRef(db, organization.id, chatId, originalMessageId);
+  const originalSnapshot = await originalRef.get();
+  if (!originalSnapshot.exists) return jsonResponse(event, 404, { error: "Original message was not found." });
+  const original = originalSnapshot.data();
+  if (original.direction !== "outgoing" || original.type !== "text" || original.status !== "failed" ||
+      typeof original.text !== "string" || !original.text.trim()) {
+    return jsonResponse(event, 409, { error: "Only failed outgoing text messages can be retried." });
+  }
+  if (!original.phoneNumberId) {
+    return jsonResponse(event, 409, { error: "The original WhatsApp number is missing. Send the message manually instead." });
+  }
+
+  const credentials = await getWhatsAppCredentials(db, organization.id, original.phoneNumberId);
+  const clientMessageId = getClientMessageId(body.clientMessageId);
+  const messageText = original.text.trim();
+  const payloadHash = hashSendPayload({
+    organizationId: organization.id,
+    phoneNumberId: credentials.phoneNumberId || null,
+    to: chatId,
+    text: messageText,
+    retryOf: originalMessageId
+  });
+  const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
+  if (claim.state === "completed") {
+    return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  }
+  if (claim.state === "pending") {
+    return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
+  }
+
+  let result;
+  try {
+    result = await sendWhatsAppText(chatId, messageText, undefined, credentials);
+  } catch (error) {
+    await markTenantSendRequestFailed(claim.ref, error);
+    throw error;
+  }
+
+  const timestamp = new Date();
+  const messageRef = getTenantMessageRef(db, organization.id, chatId, result.messageId);
+  const batch = db.batch();
+  batch.set(messageRef, {
+    messageId: result.messageId,
+    clientMessageId,
+    chatId,
+    organizationId: organization.id,
+    direction: "outgoing",
+    phoneNumberId: credentials.phoneNumberId || null,
+    type: "text",
+    text: messageText,
+    timestamp,
+    status: "sending",
+    source: "retry",
+    retryOf: originalMessageId,
+    sender: decoded.uid
+  });
+  batch.set(chatRef, {
+    customerPhone: chatId,
+    ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
+    lastMessage: messageText,
+    lastMessageAt: timestamp,
+    lastMessageDirection: "outgoing",
+    updatedAt: timestamp
+  }, { merge: true });
+  batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
+  await batch.commit();
+  return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
+}
+
 async function sendTenantMediaMessage(event) {
   const body = parseBody(event);
   const decoded = await authenticateUser(event);
@@ -1527,6 +1613,17 @@ exports.handler = async (event) => {
   if (method === "POST" && path.endsWith("/organizations/send-quick-reply")) {
     try { return await sendTenantQuickReplyImage(event); }
     catch (error) { console.error("Quick Reply image send failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Reply image could not be sent.", retryable: error.retryable ?? !error.definitive }); }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/retry")) {
+    try { return await retryTenantFailedText(event); }
+    catch (error) {
+      console.error("Tenant failed text retry error:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Message retry could not be sent.",
+        retryable: error.retryable ?? !error.definitive
+      });
+    }
   }
 
   if (method === "POST" && path.endsWith("/organizations/send-media")) {
