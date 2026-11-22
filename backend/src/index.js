@@ -41,6 +41,7 @@ const {
 } = require("./sendRequests");
 const {
   getDeviceDocument,
+  getTenantDeviceDocument,
   isValidFcmToken,
   isValidInstallationId
 } = require("./push");
@@ -370,6 +371,39 @@ async function removeFcmToken(event) {
   }
 
   await getDeviceDocument(getDb(), owner.uid, body.installationId).delete();
+  return jsonResponse(event, 200, { success: true });
+}
+
+async function registerTenantFcmToken(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); }
+  catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
+      !isValidFcmToken(body.token) || !isValidInstallationId(body.installationId)) {
+    return jsonResponse(event, 400, { error: "A valid FCM token and installation ID are required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "chats:read");
+  await getTenantDeviceDocument(getDb(), organization.id, decoded.uid, body.installationId).set({
+    token: body.token,
+    updatedAt: new Date()
+  }, { merge: true });
+  return jsonResponse(event, 200, { success: true });
+}
+
+async function removeTenantFcmToken(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); }
+  catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
+      !isValidInstallationId(body.installationId)) {
+    return jsonResponse(event, 400, { error: "A valid installation ID is required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "chats:read");
+  await getTenantDeviceDocument(getDb(), organization.id, decoded.uid, body.installationId).delete();
   return jsonResponse(event, 200, { success: true });
 }
 
@@ -1302,6 +1336,22 @@ exports.handler = async (event) => {
       );
     } finally {
       logLatency("lambda_send_ms", startedAt);
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/fcm-tokens/register")) {
+    try { return await registerTenantFcmToken(event); }
+    catch (error) {
+      console.error("Tenant FCM token registration failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Push notification registration could not be completed." });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/fcm-tokens/remove")) {
+    try { return await removeTenantFcmToken(event); }
+    catch (error) {
+      console.error("Tenant FCM token removal failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Push notification registration could not be removed." });
     }
   }
 
