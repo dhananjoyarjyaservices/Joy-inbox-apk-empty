@@ -17,7 +17,7 @@ function fakeDb() {
       const transaction = {
         async get(reference) {
           const data = records.get(reference.path);
-          return { exists: Boolean(data), id: path.split("/").at(-1), data: () => data };
+          return { exists: Boolean(data), id: reference.path.split("/").at(-1), data: () => data };
         },
         set(reference, data, options) {
           writes.push([reference.path, options ? { ...(records.get(reference.path) || {}), ...data } : data]);
@@ -68,13 +68,16 @@ function fakeDb() {
                 if (field === "__name__") return a.id.localeCompare(b.id);
                 const left = a.data()[field]?.getTime?.() ?? 0;
                 const right = b.data()[field]?.getTime?.() ?? 0;
-                return direction === "desc" ? right - left : left - right;
+                const byTimestamp = direction === "desc" ? right - left : left - right;
+                return byTimestamp || a.id.localeCompare(b.id);
               })
               .filter(item => {
                 if (!afterId) return true;
                 if (field === "__name__") return item.id > afterId;
                 const value = item.data()[field];
-                return direction === "desc" ? value < afterValue : value > afterValue;
+                const comparison = (value?.getTime?.() ?? 0) - (afterValue?.getTime?.() ?? 0);
+                if (comparison === 0) return item.id > afterId;
+                return direction === "desc" ? comparison < 0 : comparison > 0;
               })
               .slice(0, max);
             return { docs };
