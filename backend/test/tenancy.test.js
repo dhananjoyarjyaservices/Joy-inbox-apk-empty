@@ -135,6 +135,7 @@ test("organization access requires an active membership with a recognized role",
 test("multiple WhatsApp numbers keep separate credentials and tenant mappings", async () => {
   const db = fakeTenantDb();
   process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 5).toString("base64");
+  db.docs.set("organizations/org_multi", { status: "active" });
   const organization = { id: "org_multi", ref: db.collection("organizations").doc("org_multi") };
   await saveWhatsAppConnection(db, organization, {
     phoneNumberId: "111111111111111",
