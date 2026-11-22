@@ -125,25 +125,36 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     event.preventDefault();
     if (!canManage || busy) return;
     setBusy(true); setError("");
+    const operationOrganizationId = organizationId;
     try {
-      await addOrganizationMember(organizationId, email.trim(), role);
+      await addOrganizationMember(operationOrganizationId, email.trim(), role);
+      if (activeOrganizationId.current !== operationOrganizationId) return;
       setEmail(""); await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : "Member could not be added."); }
-    finally { setBusy(false); }
+    } catch (e) {
+      if (activeOrganizationId.current === operationOrganizationId) setError(e instanceof Error ? e.message : "Member could not be added.");
+    } finally { if (activeOrganizationId.current === operationOrganizationId) setBusy(false); }
   }
   async function changeRole(member: OrganizationMember, nextRole: "admin" | "agent") {
     if (!canManage || member.role === "owner" || busy) return;
     setBusy(true); setError("");
-    try { await updateOrganizationMemberRole(organizationId, member.uid, nextRole); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : "Role could not be changed."); }
-    finally { setBusy(false); }
+    const operationOrganizationId = organizationId;
+    try {
+      await updateOrganizationMemberRole(operationOrganizationId, member.uid, nextRole);
+      if (activeOrganizationId.current === operationOrganizationId) await refresh();
+    } catch (e) {
+      if (activeOrganizationId.current === operationOrganizationId) setError(e instanceof Error ? e.message : "Role could not be changed.");
+    } finally { if (activeOrganizationId.current === operationOrganizationId) setBusy(false); }
   }
   async function remove(member: OrganizationMember) {
     if (!canManage || member.role === "owner" || busy || !window.confirm(`Remove ${member.email || member.uid} from this workspace?`)) return;
     setBusy(true); setError("");
-    try { await removeOrganizationMember(organizationId, member.uid); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : "Member could not be removed."); }
-    finally { setBusy(false); }
+    const operationOrganizationId = organizationId;
+    try {
+      await removeOrganizationMember(operationOrganizationId, member.uid);
+      if (activeOrganizationId.current === operationOrganizationId) await refresh();
+    } catch (e) {
+      if (activeOrganizationId.current === operationOrganizationId) setError(e instanceof Error ? e.message : "Member could not be removed.");
+    } finally { if (activeOrganizationId.current === operationOrganizationId) setBusy(false); }
   }
 
   return <section className="flex-1 overflow-y-auto bg-white p-4">
