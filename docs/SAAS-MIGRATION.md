@@ -134,3 +134,8 @@ The backend now includes `POST /organizations/send-media`. It verifies Firebase 
 ## Authenticated tenant media viewing proxy
 
 The backend now provides `GET /organizations/media?organizationId=...&chatId=...&messageId=...`. It requires Firebase authentication, active organization membership and `chats:read` permission, then verifies the message is inside that organization's chat before reading its Meta Media ID. The server retrieves the short-lived media URL from Meta and fetches the bytes server-side; the Meta access token and media URL are never returned to the browser. The response is marked private/no-store and includes MIME sniffing protections. The proxy rejects untrusted URL hosts and redirects, validates the returned file signature, and currently limits previews to 4 MB to stay within synchronous Lambda response limits. No media bytes are written to Firebase Storage, S3, local disk or Lambda temporary storage. Frontend media viewer integration, larger-file streaming support and automated integration tests remain outstanding.
+
+
+## Initial tenant inbox frontend
+
+A protected `/inbox` route is now available to authenticated workspace members. It loads the active workspace, listens only to that workspace's chat and message collections, and sends text through the authenticated tenant messaging API. The setup page navigates to the inbox after a WhatsApp number is verified. This is an initial text-chat slice only: media rendering/sending, contacts and Quick Replies screens, chat actions, pagination, push notifications and full parity with the legacy owner dashboard are not yet integrated. The legacy dashboard remains restricted to its original owner account.
