@@ -21,6 +21,13 @@ test("validates pinned message updates", () => {
   assert.throws(() => validateMessageState({ chatId: "1234567", messageId: "bad id", pinned: true }), { statusCode: 400 });
 });
 
+test("validates saved message updates separately from pinning", () => {
+  const result = validateMessageState({ chatId: "1234567", messageId: "wamid.saved", saved: true });
+  assert.equal(result.updates.saved, true);
+  assert.ok(result.updates.savedAt instanceof Date);
+  assert.throws(() => validateMessageState({ chatId: "1234567", messageId: "wamid.saved", saved: true, pinned: false }), { statusCode: 400 });
+});
+
 test("validates bounded unique message and chat deletion lists", () => {
   assert.deepEqual(validateMessageIds({ chatId: "1234567", messageIds: ["a", "b"] }).messageIds, ["a", "b"]);
   assert.deepEqual(validateChatIds({ chatIds: ["1234567"] }), ["1234567"]);
