@@ -27,7 +27,8 @@ const {
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
-const { requireOrganization, requirePermission, saveWhatsAppConnection } = require("./tenancy");
+const { requireOrganization, requirePermission, saveWhatsAppConnection, getWhatsAppCredentials } = require("./tenancy");
+const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
   claimSendRequest,
@@ -248,6 +249,85 @@ async function removeFcmToken(event) {
 
   await getDeviceDocument(getDb(), owner.uid, body.installationId).delete();
   return jsonResponse(event, 200, { success: true });
+}
+
+async function sendTenantMessage(event) {
+  const body = parseBody(event);
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "messages:send");
+
+  const to = normalizePhoneNumber(body.to);
+  const chatId = normalizePhoneNumber(body.chatId || to);
+  const messageText = String(body.text || "").trim();
+  if (!to || !chatId || to !== chatId || !messageText) {
+    return jsonResponse(event, 400, { error: "Valid matching to, chatId and text are required." });
+  }
+  if (messageText.length > 4096) {
+    return jsonResponse(event, 400, { error: "Message is too long." });
+  }
+
+  const db = getDb();
+  const credentials = await getWhatsAppCredentials(db, organization.id);
+  const replyContext = await resolveTenantReplyContext(db, organization.id, chatId, body);
+  const clientMessageId = getClientMessageId(body.clientMessageId);
+  const source = body.source === "quick_reply" ? "quick_reply" : "manual";
+  const payloadHash = hashSendPayload({
+    organizationId: organization.id,
+    to,
+    text: messageText,
+    source,
+    contextMessageId: replyContext?.contextMessageId || null
+  });
+  const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
+  if (claim.state === "completed") {
+    return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  }
+  if (claim.state === "pending") {
+    return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
+  }
+
+  let result;
+  try {
+    result = await sendWhatsAppText(to, messageText, replyContext?.contextMessageId, credentials);
+  } catch (error) {
+    await markTenantSendRequestFailed(claim.ref, error);
+    throw error;
+  }
+
+  const chatRef = getTenantChatRef(db, organization.id, chatId);
+  const messageRef = getTenantMessageRef(db, organization.id, chatId, result.messageId);
+  const timestamp = new Date();
+  const batch = db.batch();
+  batch.set(messageRef, {
+    messageId: result.messageId,
+    clientMessageId,
+    chatId,
+    organizationId: organization.id,
+    direction: "outgoing",
+    type: "text",
+    text: messageText,
+    timestamp,
+    status: "sending",
+    source,
+    ...getTenantReplyMessageFields(replyContext),
+    sender: decoded.uid
+  });
+  batch.set(chatRef, {
+    customerPhone: chatId,
+    lastMessage: messageText,
+    lastMessageAt: timestamp,
+    lastMessageDirection: "outgoing",
+    updatedAt: timestamp
+  }, { merge: true });
+  batch.set(claim.ref, {
+    status: "completed",
+    messageId: result.messageId,
+    updatedAt: timestamp
+  }, { merge: true });
+  await batch.commit();
+
+  return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
 
 async function sendMessage(event) {
@@ -935,6 +1015,18 @@ exports.handler = async (event) => {
       result.statusCode,
       result.body
     );
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/send")) {
+    try {
+      return await sendTenantMessage(event);
+    } catch (error) {
+      console.error("Tenant send message error:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Message could not be sent.",
+        retryable: error.retryable ?? !error.definitive
+      });
+    }
   }
 
   if (method === "POST" && path.endsWith("/send")) {
