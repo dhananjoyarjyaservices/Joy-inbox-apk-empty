@@ -77,11 +77,14 @@ async function updateOrganizationMemberRole(organization, actor, input) {
     throw httpError("Only the organization owner can assign admin, and owner role cannot be changed.", 403);
   }
   const ref = organization.ref.collection("members").doc(uid);
-  const snapshot = await ref.get();
-  if (!snapshot.exists || snapshot.data().status !== "active") throw httpError("Active member was not found.", 404);
-  if (snapshot.data().role === "owner") throw httpError("The owner role cannot be changed.", 403);
-  await ref.set({ role, updatedAt: new Date() }, { merge: true });
-  await organization.ref.firestore.collection("users").doc(uid).collection("organizations").doc(organization.id).set({ role }, { merge: true });
+  const indexRef = organization.ref.firestore.collection("users").doc(uid).collection("organizations").doc(organization.id);
+  await organization.ref.firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.data().status !== "active") throw httpError("Active member was not found.", 404);
+    if (snapshot.data().role === "owner") throw httpError("The owner role cannot be changed.", 403);
+    transaction.set(ref, { role, updatedAt: new Date() }, { merge: true });
+    transaction.set(indexRef, { role }, { merge: true });
+  });
   return { uid, role };
 }
 
@@ -91,11 +94,15 @@ async function removeOrganizationMember(organization, actor, input) {
   if (!validUid(uid)) throw httpError("A valid member ID is required.", 400);
   if (uid === organization.createdBy || uid === organization.uid) throw httpError("The organization owner cannot be removed.", 403);
   const ref = organization.ref.collection("members").doc(uid);
-  const snapshot = await ref.get();
-  if (!snapshot.exists || snapshot.data().status !== "active") throw httpError("Active member was not found.", 404);
-  if (snapshot.data().role === "owner") throw httpError("The owner cannot be removed.", 403);
-  await ref.set({ status: "removed", removedAt: new Date(), updatedAt: new Date() }, { merge: true });
-  await organization.ref.firestore.collection("users").doc(uid).collection("organizations").doc(organization.id).set({ status: "removed" }, { merge: true });
+  const indexRef = organization.ref.firestore.collection("users").doc(uid).collection("organizations").doc(organization.id);
+  await organization.ref.firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.data().status !== "active") throw httpError("Active member was not found.", 404);
+    if (snapshot.data().role === "owner") throw httpError("The owner cannot be removed.", 403);
+    const now = new Date();
+    transaction.set(ref, { status: "removed", removedAt: now, updatedAt: now }, { merge: true });
+    transaction.set(indexRef, { status: "removed" }, { merge: true });
+  });
   return { uid, status: "removed" };
 }
 
