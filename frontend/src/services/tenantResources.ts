@@ -9,7 +9,7 @@ async function call(path: string, method: string, body?: unknown, organizationId
   if (method === "GET" && organizationId) url.searchParams.set("organizationId", organizationId);
   const response = await fetch(url.toString(), {
     method,
-    headers: { Authorization: \`Bearer \${token}\`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {})
   });
   const result = await response.json().catch(() => ({}));
