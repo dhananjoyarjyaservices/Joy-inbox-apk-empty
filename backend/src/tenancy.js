@@ -18,7 +18,7 @@ async function requireOrganization(db, decoded, organizationId) {
   if (!org.exists || !member.exists || member.data().status !== "active" || !ROLES.has(member.data().role)) {
     throw httpError("You are not an active member of this organization.", 403);
   }
-  return { id: organizationId, ref: org.ref, memberRef, role: member.data().role, uid: decoded.uid };
+  return { ...org.data(), id: organizationId, ref: org.ref, memberRef, role: member.data().role, uid: decoded.uid };
 }
 
 function requirePermission(organization, permission) {
