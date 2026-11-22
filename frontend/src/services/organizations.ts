@@ -1,0 +1,36 @@
+import { auth } from "../firebase/config";
+const API_URL = import.meta.env.VITE_API_BASE_URL;
+
+async function request(path: string, method = "GET", body?: unknown) {
+  if (!API_URL) throw new Error("AWS API URL is not configured.");
+  const user = auth.currentUser;
+  if (!user) throw new Error("Please sign in again.");
+  const token = await user.getIdToken();
+  const response = await fetch(`${API_URL.replace(/\\/$/, "")}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Organization request failed.");
+  return result;
+}
+export interface Organization {
+  id: string;
+  name: string;
+  role: "owner" | "admin" | "agent";
+  status: string;
+  createdAt?: unknown;
+}
+export async function listOrganizations(): Promise<Organization[]> {
+  const result = await request("/organizations");
+  return Array.isArray(result.organizations) ? result.organizations : [];
+}
+export async function createOrganization(name: string): Promise<Organization> {
+  const result = await request("/organizations", "POST", { name });
+  if (!result.organization?.id) throw new Error("Organization could not be created.");
+  return result.organization;
+}
+export async function connectWhatsApp(organizationId: string, phoneNumberId: string, accessToken: string) {
+  return request("/whatsapp/connect", "POST", { organizationId, phoneNumberId, accessToken });
+}
