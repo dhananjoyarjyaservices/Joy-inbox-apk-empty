@@ -54,9 +54,10 @@ function fakeDb() {
       },
       orderBy(field, direction = "asc") {
         let afterId = "";
+        let afterValue = null;
         let max = Infinity;
         const query = {
-          startAfter(snapshot) { afterId = snapshot.id; return query; },
+          startAfter(snapshot) { afterId = snapshot.id; afterValue = snapshot.data()?.[field]; return query; },
           limit(value) { max = value; return query; },
           async get() {
             const prefix = path + "/";
@@ -69,7 +70,12 @@ function fakeDb() {
                 const right = b.data()[field]?.getTime?.() ?? 0;
                 return direction === "desc" ? right - left : left - right;
               })
-              .filter(item => !afterId || (field === "__name__" ? item.id > afterId : true))
+              .filter(item => {
+                if (!afterId) return true;
+                if (field === "__name__") return item.id > afterId;
+                const value = item.data()[field];
+                return direction === "desc" ? value < afterValue : value > afterValue;
+              })
               .slice(0, max);
             return { docs };
           }
