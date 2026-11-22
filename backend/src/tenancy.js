@@ -97,6 +97,33 @@ async function saveWhatsAppConnection(db, organization, input) {
   return { phoneNumberId, displayPhoneNumber, verifiedName, connected: true };
 }
 
+
+async function disconnectWhatsAppConnection(db, organization, phoneNumberId) {
+  if (!organization?.id || !organization.ref) throw httpError("Organization context is required.", 400);
+  if (!validId(phoneNumberId)) throw httpError("A valid WhatsApp Phone Number ID is required.", 400);
+  const settingsRef = organization.ref.collection("settings").doc("whatsapp");
+  const numberRef = settingsRef.collection("numbers").doc(phoneNumberId);
+  const mappingRef = db.collection("whatsappPhoneNumbers").doc(phoneNumberId);
+  await db.runTransaction(async (transaction) => {
+    const [numberSnapshot, legacySnapshot, mappingSnapshot] = await Promise.all([
+      transaction.get(numberRef), transaction.get(settingsRef), transaction.get(mappingRef)
+    ]);
+    const numberData = numberSnapshot.exists ? numberSnapshot.data() : null;
+    const legacyData = legacySnapshot.exists ? legacySnapshot.data() : null;
+    const ownsMapping = mappingSnapshot.exists && mappingSnapshot.data().organizationId === organization.id;
+    if ((!numberData || numberData.connected !== true) &&
+        !(legacyData?.phoneNumberId === phoneNumberId && legacyData.connected === true)) {
+      throw httpError("This WhatsApp number is not connected to this workspace.", 404);
+    }
+    if (numberSnapshot.exists) transaction.set(numberRef, { connected: false, disconnectedAt: new Date(), updatedAt: new Date() }, { merge: true });
+    if (legacyData?.phoneNumberId === phoneNumberId) {
+      transaction.set(settingsRef, { connected: false, disconnectedAt: new Date(), updatedAt: new Date() }, { merge: true });
+    }
+    if (ownsMapping) transaction.set(mappingRef, { status: "disconnected", updatedAt: new Date() }, { merge: true });
+  });
+  return { phoneNumberId, connected: false };
+}
+
 async function getWhatsAppCredentials(db, organizationId, phoneNumberId) {
   if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
   const settingsRef = db.collection("organizations").doc(organizationId).collection("settings").doc("whatsapp");
@@ -146,4 +173,4 @@ async function listWhatsAppConnections(db, organizationId) {
   return items;
 }
 
-module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections };
+module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections };
