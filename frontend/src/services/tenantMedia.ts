@@ -32,7 +32,7 @@ function fileToBase64(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-export async function sendTenantMedia(org: string, to: string, file: File, caption = "") {
+export async function sendTenantMedia(org: string, to: string, file: File, caption = "", phoneNumberId?: string) {
   if (!ALLOWED.has(file.type)) throw new Error("This file type is not supported by the current WhatsApp media integration.");
   if (!file.size || file.size > MAX_BYTES) throw new Error("Choose a file up to 3 MB.");
   if (caption.length > 1024) throw new Error("Caption is too long.");
@@ -42,7 +42,7 @@ export async function sendTenantMedia(org: string, to: string, file: File, capti
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      organizationId: org, to, chatId: to, fileBase64: await fileToBase64(file),
+      organizationId: org, to, chatId: to, ...(phoneNumberId ? { phoneNumberId } : {}), fileBase64: await fileToBase64(file),
       mimeType: file.type, type: mediaType(file.type), filename: file.name,
       caption, clientMessageId: crypto.randomUUID()
     })
