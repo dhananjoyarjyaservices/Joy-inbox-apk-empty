@@ -37,7 +37,7 @@ const { createOrganization, listOrganizations } = require("./organizations");
 const { listOrganizationMembers, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
-const { requireOrganization, requirePermission, saveWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
+const { requireOrganization, requirePermission, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
@@ -137,6 +137,10 @@ async function handleWhatsAppConnect(event) {
   }
   const organization = await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "whatsapp:manage");
+  if (getMethod(event) === "DELETE") {
+    const disconnected = await disconnectWhatsAppConnection(getDb(), organization, String(body.phoneNumberId || "").trim());
+    return jsonResponse(event, 200, { connection: disconnected });
+  }
   const phoneNumberId = String(body.phoneNumberId || "").trim();
   const accessToken = String(body.accessToken || "").trim();
   if (!phoneNumberId || !accessToken) {
@@ -1393,7 +1397,7 @@ exports.handler = async (event) => {
     }
   }
 
-  if (method === "POST" && path.endsWith("/whatsapp/connect")) {
+  if ((method === "POST" || method === "DELETE") && path.endsWith("/whatsapp/connect")) {
     try {
       return await handleWhatsAppConnect(event);
     } catch (error) {
