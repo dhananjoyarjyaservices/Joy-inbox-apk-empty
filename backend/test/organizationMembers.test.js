@@ -190,3 +190,47 @@ test("removal updates the tenant member and user organization index together", a
   assert.equal(records.get("organizations/org_a/members/agent_uid").status, "removed");
   assert.equal(records.get("users/agent_uid/organizations/org_a").status, "removed");
 });
+
+test("removed member can be reactivated with both organization records restored", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_reactivate", name: "Workspace", ref: db.collection("organizations").doc("org_reactivate") };
+  await organization.ref.collection("members").doc("returning_uid").set({
+    uid: "returning_uid", email: "old@example.com", role: "agent", status: "removed"
+  });
+  await db.collection("users").doc("returning_uid").collection("organizations").doc("org_reactivate").set({
+    organizationId: "org_reactivate", role: "agent", status: "removed"
+  });
+  const auth = { async getUserByEmail(email) {
+    assert.equal(email, "returning@example.com");
+    return { uid: "returning_uid", email, displayName: "Returning User" };
+  } };
+  const result = await addOrganizationMember(db, auth, organization, { role: "owner" }, {
+    email: "Returning@example.com", role: "admin"
+  });
+  assert.equal(result.status, "active");
+  assert.equal(result.role, "admin");
+  assert.equal(records.get("organizations/org_reactivate/members/returning_uid").status, "active");
+  assert.equal(records.get("organizations/org_reactivate/members/returning_uid").role, "admin");
+  assert.equal(records.get("users/returning_uid/organizations/org_reactivate").status, "active");
+  assert.equal(records.get("users/returning_uid/organizations/org_reactivate").role, "admin");
+});
+
+test("failed duplicate-member transaction does not write either membership record", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_duplicate", ref: db.collection("organizations").doc("org_duplicate") };
+  await organization.ref.collection("members").doc("active_uid").set({
+    uid: "active_uid", role: "agent", status: "active"
+  });
+  await db.collection("users").doc("active_uid").collection("organizations").doc("org_duplicate").set({
+    organizationId: "org_duplicate", role: "agent", status: "active"
+  });
+  const beforeMember = { ...records.get("organizations/org_duplicate/members/active_uid") };
+  const beforeIndex = { ...records.get("users/active_uid/organizations/org_duplicate") };
+  const auth = { async getUserByEmail(email) { return { uid: "active_uid", email }; } };
+  await assert.rejects(
+    () => addOrganizationMember(db, auth, organization, { role: "owner" }, { email: "active@example.com" }),
+    { statusCode: 409 }
+  );
+  assert.deepEqual(records.get("organizations/org_duplicate/members/active_uid"), beforeMember);
+  assert.deepEqual(records.get("users/active_uid/organizations/org_duplicate"), beforeIndex);
+});
