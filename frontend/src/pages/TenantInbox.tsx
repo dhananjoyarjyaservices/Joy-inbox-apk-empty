@@ -7,7 +7,7 @@ import { getActiveOrganizationId } from "../services/activeOrganization";
 import { listOrganizations, sendTenantText, type Organization } from "../services/organizations";
 import { listenToTenantChats, listenToTenantMessages } from "../services/tenantChats";
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
-import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
+import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
 
 type TenantChat = {
   id: string;
@@ -52,7 +52,7 @@ export default function TenantInbox() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [view, setView] = useState<"chats" | "contacts" | "replies">("chats");
+  const [view, setView] = useState<"chats" | "contacts" | "replies" | "settings">("chats");
   const [showArchived, setShowArchived] = useState(false);
   const [contacts, setContacts] = useState<TenantContact[]>([]);
   const [replies, setReplies] = useState<TenantQuickReply[]>([]);
@@ -63,6 +63,10 @@ export default function TenantInbox() {
   const [replyMessage, setReplyMessage] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
+  const [greetingEnabled, setGreetingEnabled] = useState(false);
+  const [greetingText, setGreetingText] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState<{ whatsapp?: { connected?: boolean; error?: { message?: string } }; firestore?: { connected?: boolean } } | null>(null);
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -98,6 +102,23 @@ export default function TenantInbox() {
       .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Contacts or Quick Replies could not load."); });
     return () => { active = false; };
   }, [organization]);
+
+  useEffect(() => {
+    if (!organization) return;
+    let active = true;
+    Promise.all([getTenantGreeting(organization.id), getTenantStatus(organization.id)])
+      .then(([greeting, status]) => { if (active) { setGreetingEnabled(greeting.enabled); setGreetingText(greeting.text); setConnectionStatus(status); } })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Workspace settings could not load."); });
+    return () => { active = false; };
+  }, [organization]);
+
+  async function saveGreeting() {
+    if (!organization) return;
+    setSettingsSaving(true); setError("");
+    try { await saveTenantGreeting(organization.id, greetingEnabled, greetingText); }
+    catch (e) { setError(e instanceof Error ? e.message : "Greeting could not be saved."); }
+    finally { setSettingsSaving(false); }
+  }
 
   async function refreshResources() {
     if (!organization) return;
@@ -203,8 +224,8 @@ export default function TenantInbox() {
       <div className="flex items-center gap-3"><MessageCircle/><div><h1 className="font-bold">JOY INBOX</h1><p className="text-xs text-white/75">{organization?.name || user?.email}</p></div></div>
       <div className="flex gap-3"><button onClick={() => navigate("/setup")} title="Workspace settings"><Settings size={19}/></button><button onClick={() => void logout()} title="Sign out"><LogOut size={19}/></button></div>
     </header>
-    <nav className="flex gap-2 border-b bg-white px-3 py-2">{(["chats", "contacts", "replies"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-full px-4 py-2 text-sm capitalize ${view === item ? "bg-[#075e54] text-white" : "bg-gray-100 text-gray-700"}`}>{item === "replies" ? "Quick Replies" : item}</button>)}</nav>
-    {view === "contacts" ? <section className="flex-1 overflow-y-auto bg-white p-4"><h2 className="mb-3 font-semibold">Business contacts</h2><form onSubmit={addContact} className="mb-4 grid gap-2 sm:grid-cols-3"><input required value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Customer name" className="rounded-lg border p-2 text-sm"/><input required value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+919876543210" className="rounded-lg border p-2 text-sm"/><button className="rounded-lg bg-[#075e54] p-2 text-sm text-white">Add contact</button></form>{contacts.map(contact => <div key={contact.id} className="flex items-center justify-between border-b py-3"><div><p className="font-medium">{contact.name}</p><p className="text-sm text-gray-500">{contact.phone}</p></div><button onClick={async () => { if (organization && confirm("Delete this contact?")) { await deleteTenantContact(organization.id, contact.id); await refreshResources(); } }} className="text-sm text-red-600">Delete</button></div>)}{!contacts.length && <p className="text-sm text-gray-500">No saved contacts yet.</p>}</section> : view === "replies" ? <section className="flex-1 overflow-y-auto bg-white p-4"><h2 className="mb-3 font-semibold">Saved Quick Replies</h2><form onSubmit={addReply} className="mb-4 grid gap-2"><input required maxLength={60} value={replyTitle} onChange={e => setReplyTitle(e.target.value)} placeholder="Reply title" className="rounded-lg border p-2 text-sm"/><input maxLength={30} value={replyShortcut} onChange={e => setReplyShortcut(e.target.value)} placeholder="Shortcut e.g. greeting" className="rounded-lg border p-2 text-sm"/><textarea required maxLength={4096} value={replyMessage} onChange={e => setReplyMessage(e.target.value)} placeholder="Saved message" className="rounded-lg border p-2 text-sm"/><button className="rounded-lg bg-[#075e54] p-2 text-sm text-white">Save Quick Reply</button></form>{replies.map(reply => <div key={reply.id} className="flex items-start justify-between gap-3 border-b py-3"><div><p className="font-medium">{reply.title} <span className="text-xs text-gray-400">/{reply.shortcut}</span></p><p className="whitespace-pre-wrap text-sm text-gray-600">{reply.message}</p></div><button onClick={async () => { if (organization && confirm("Delete this Quick Reply?")) { await deleteTenantQuickReply(organization.id, reply.id); await refreshResources(); } }} className="text-sm text-red-600">Delete</button></div>)}{!replies.length && <p className="text-sm text-gray-500">No Quick Replies saved yet.</p>}</section> : <div className="flex min-h-0 flex-1">
+    <nav className="flex gap-2 border-b bg-white px-3 py-2">{(["chats", "contacts", "replies", "settings"] as const).map((item) => <button key={item} onClick={() => setView(item)} className={`rounded-full px-4 py-2 text-sm capitalize ${view === item ? "bg-[#075e54] text-white" : "bg-gray-100 text-gray-700"}`}>{item === "replies" ? "Quick Replies" : item === "settings" ? "Settings" : item}</button>)}</nav>
+    {view === "settings" ? <section className="flex-1 space-y-5 overflow-y-auto bg-white p-4"><div><h2 className="font-semibold">Connection status</h2><p className="mt-2 text-sm">WhatsApp: <strong className={connectionStatus?.whatsapp?.connected ? "text-green-700" : "text-red-600"}>{connectionStatus?.whatsapp?.connected ? "Connected" : connectionStatus?.whatsapp?.error?.message || "Checking..."}</strong></p><p className="text-sm">Firestore: <strong>{connectionStatus?.firestore?.connected ? "Connected" : "Not confirmed"}</strong></p></div><div className="max-w-2xl border-t pt-4"><h2 className="font-semibold">Greeting message</h2><p className="my-2 text-sm text-gray-500">Send a greeting to a customer on their first inbound message.</p><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={greetingEnabled} onChange={e => setGreetingEnabled(e.target.checked)}/> Enable greeting message</label><textarea value={greetingText} onChange={e => setGreetingText(e.target.value)} maxLength={1024} rows={4} placeholder="Write your greeting..." className="mt-3 w-full rounded-lg border p-3 text-sm"/><button disabled={settingsSaving || (greetingEnabled && !greetingText.trim())} onClick={() => void saveGreeting()} className="mt-2 rounded-lg bg-[#075e54] px-4 py-2 text-sm text-white disabled:opacity-50">{settingsSaving ? "Saving..." : "Save greeting"}</button></div></section> : view === "contacts" ? <section className="flex-1 overflow-y-auto bg-white p-4"><h2 className="mb-3 font-semibold">Business contacts</h2><form onSubmit={addContact} className="mb-4 grid gap-2 sm:grid-cols-3"><input required value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Customer name" className="rounded-lg border p-2 text-sm"/><input required value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+919876543210" className="rounded-lg border p-2 text-sm"/><button className="rounded-lg bg-[#075e54] p-2 text-sm text-white">Add contact</button></form>{contacts.map(contact => <div key={contact.id} className="flex items-center justify-between border-b py-3"><div><p className="font-medium">{contact.name}</p><p className="text-sm text-gray-500">{contact.phone}</p></div><button onClick={async () => { if (organization && confirm("Delete this contact?")) { await deleteTenantContact(organization.id, contact.id); await refreshResources(); } }} className="text-sm text-red-600">Delete</button></div>)}{!contacts.length && <p className="text-sm text-gray-500">No saved contacts yet.</p>}</section> : view === "replies" ? <section className="flex-1 overflow-y-auto bg-white p-4"><h2 className="mb-3 font-semibold">Saved Quick Replies</h2><form onSubmit={addReply} className="mb-4 grid gap-2"><input required maxLength={60} value={replyTitle} onChange={e => setReplyTitle(e.target.value)} placeholder="Reply title" className="rounded-lg border p-2 text-sm"/><input maxLength={30} value={replyShortcut} onChange={e => setReplyShortcut(e.target.value)} placeholder="Shortcut e.g. greeting" className="rounded-lg border p-2 text-sm"/><textarea required maxLength={4096} value={replyMessage} onChange={e => setReplyMessage(e.target.value)} placeholder="Saved message" className="rounded-lg border p-2 text-sm"/><button className="rounded-lg bg-[#075e54] p-2 text-sm text-white">Save Quick Reply</button></form>{replies.map(reply => <div key={reply.id} className="flex items-start justify-between gap-3 border-b py-3"><div><p className="font-medium">{reply.title} <span className="text-xs text-gray-400">/{reply.shortcut}</span></p><p className="whitespace-pre-wrap text-sm text-gray-600">{reply.message}</p></div><button onClick={async () => { if (organization && confirm("Delete this Quick Reply?")) { await deleteTenantQuickReply(organization.id, reply.id); await refreshResources(); } }} className="text-sm text-red-600">Delete</button></div>)}{!replies.length && <p className="text-sm text-gray-500">No Quick Replies saved yet.</p>}</section> : <div className="flex min-h-0 flex-1">
       <aside className={`w-full max-w-sm overflow-y-auto border-r border-gray-200 bg-white ${selected ? "hidden md:block" : "block"}`}>
         <div className="flex items-center justify-between border-b p-4"><h2 className="font-semibold">{showArchived ? "Archived chats" : "Chats"}</h2><button onClick={() => setShowArchived(value => !value)} className="mr-2 text-xs text-[#075e54]">{showArchived ? "Inbox" : "Archived"}</button><button onClick={() => setError("")} title="Clear error"><RefreshCw size={16}/></button></div>
         {visibleChats.length ? visibleChats.map((chat) => <button key={chat.id} onClick={() => setSelected(chat.id)} className={`w-full border-b border-gray-100 p-4 text-left hover:bg-gray-50 ${selected === chat.id ? "bg-[#effaf3]" : ""}`}>
