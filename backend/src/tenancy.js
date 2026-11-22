@@ -2,7 +2,7 @@ const crypto = require("crypto");
 
 const ROLES = new Set(["owner", "admin", "agent"]);
 const ROLE_PERMISSIONS = {
-  owner: new Set(["members:manage", "settings:manage", "whatsapp:manage", "chats:read", "messages:send", "contacts:manage", "quickReplies:manage"]),
+  owner: new Set(["members:manage", "settings:manage", "whatsapp:manage", "chats:read", "chats:manage", "messages:send", "contacts:manage", "quickReplies:manage"]),
   admin: new Set(["members:manage", "settings:manage", "whatsapp:manage", "chats:read", "messages:send", "contacts:manage", "quickReplies:manage"]),
   agent: new Set(["chats:read", "messages:send", "contacts:manage", "quickReplies:manage"])
 };
