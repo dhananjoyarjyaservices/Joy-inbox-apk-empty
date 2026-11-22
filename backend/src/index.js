@@ -34,7 +34,7 @@ const {
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
-const { listOrganizationMembers, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
+const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
 const { requireOrganization, requirePermission, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
@@ -224,6 +224,17 @@ async function handleOrganizations(event) {
   }
   const organization = await createOrganization(getDb(), decoded, body);
   return jsonResponse(event, 201, { organization });
+}
+
+async function handleOrganizationMemberAudit(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "members:manage");
+  const page = await listOrganizationMemberAudit(getDb(), organization, {
+    limit: event.queryStringParameters?.limit
+  });
+  return jsonResponse(event, 200, page);
 }
 
 async function handleOrganizationMembers(event) {
@@ -1794,6 +1805,16 @@ exports.handler = async (event) => {
         error: error.statusCode
           ? error.message
           : "Media could not be retrieved."
+      });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/member-audit")) {
+    try { return await handleOrganizationMemberAudit(event); }
+    catch (error) {
+      console.error("Organization member audit load failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Member activity could not be loaded."
       });
     }
   }
