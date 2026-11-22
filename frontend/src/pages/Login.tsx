@@ -15,6 +15,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
+  const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState("");
 
   async function handleEmailLogin(event: FormEvent<HTMLFormElement>) {
@@ -115,6 +116,8 @@ export default function Login() {
             {loading ? "Please wait..." : isRegister ? "Create account" : "Sign in"}
           </button>
         </form>
+
+        <button type="button" onClick={() => { setIsRegister((value) => !value); setError(""); }} className="mt-3 w-full py-2 text-sm font-medium text-[#075e54]">{isRegister ? "Already have an account? Sign in" : "New to Joy Inbox? Create account"}</button>
 
         <button type="button" onClick={() => { setIsRegister((value) => !value); setError(""); }} className="mt-3 w-full py-2 text-sm font-medium text-[#075e54]">{isRegister ? "Already have an account? Sign in" : "New to Joy Inbox? Create account"}</button>
 
