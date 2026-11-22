@@ -23,7 +23,8 @@ const {
   getSignedMediaUrl,
   saveMessageMedia,
   uploadWhatsAppMedia,
-  validateMedia
+  validateMedia,
+  validateMediaContent
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
@@ -446,6 +447,79 @@ async function sendTenantMessage(event) {
   }, { merge: true });
   await batch.commit();
 
+  return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
+}
+
+async function sendTenantMediaMessage(event) {
+  const body = parseBody(event);
+  const decoded = await authenticateUser(event);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return jsonResponse(event, 400, { error: "A media message object is required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "messages:send");
+  const to = normalizePhoneNumber(body.to);
+  const chatId = normalizePhoneNumber(body.chatId || body.to);
+  if (typeof body.to !== "string" || typeof body.chatId !== "string" ||
+      !/^\+?\d{6,20}$/.test(body.to) || !/^\+?\d{6,20}$/.test(body.chatId) ||
+      !to || to !== chatId) {
+    return jsonResponse(event, 400, { error: "Valid matching to and chatId values are required." });
+  }
+  const encoded = String(body.fileBase64 || "");
+  const maxEncodedLength = Math.ceil(MAX_UPLOAD_BYTES / 3) * 4;
+  if (!encoded || encoded.length > maxEncodedLength || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    return jsonResponse(event, 400, { error: "Media payload is invalid or exceeds 3 MB." });
+  }
+  const buffer = Buffer.from(encoded, "base64");
+  if (buffer.toString("base64") !== encoded) return jsonResponse(event, 400, { error: "Media payload is not valid base64." });
+  let mimeType;
+  try {
+    mimeType = validateMedia(body.mimeType, buffer.length, MAX_UPLOAD_BYTES);
+    validateMediaContent(mimeType, buffer);
+  } catch (error) { return jsonResponse(event, 400, { error: error.message }); }
+  const type = mimeType.startsWith("image/") ? "image" : mimeType.startsWith("video/") ? "video" :
+    mimeType.startsWith("audio/") ? "audio" : "document";
+  if (body.type !== type) return jsonResponse(event, 400, { error: "File type does not match the selected attachment type." });
+  const caption = String(body.caption || "").trim();
+  const filename = String(body.filename || "attachment").replace(/[\\/\r\n]/g, "_").slice(0, 180);
+  if (caption.length > 1024 || (type === "audio" && caption)) {
+    return jsonResponse(event, 400, { error: "Caption is invalid for this media type." });
+  }
+  const db = getDb();
+  const replyContext = await resolveTenantReplyContext(db, organization.id, chatId, body);
+  const clientMessageId = getClientMessageId(body.clientMessageId);
+  const source = body.source === "quick_reply" ? "quick_reply" : "manual";
+  const contentHash = crypto.createHash("sha256").update(buffer).digest("hex");
+  const payloadHash = hashSendPayload({ organizationId: organization.id, to, type, caption, filename, mimeType, source, contentHash, contextMessageId: replyContext?.contextMessageId || null });
+  const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
+  if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
+  const credentials = await getWhatsAppCredentials(db, organization.id);
+  let uploaded, result, sendStarted = false;
+  try {
+    uploaded = await uploadWhatsAppMedia(buffer, mimeType, filename, credentials);
+    sendStarted = true;
+    result = await sendWhatsAppMedia(to, type, uploaded.mediaId, caption, filename, replyContext?.contextMessageId, credentials);
+  } catch (error) {
+    if (!sendStarted) { error.definitive = true; error.retryable = false; }
+    await markTenantSendRequestFailed(claim.ref, error);
+    throw error;
+  }
+  const chatRef = getTenantChatRef(db, organization.id, chatId);
+  const messageRef = getTenantMessageRef(db, organization.id, chatId, result.messageId);
+  const timestamp = new Date();
+  const preview = caption || (type[0].toUpperCase() + type.slice(1));
+  const batch = db.batch();
+  batch.set(messageRef, {
+    messageId: result.messageId, clientMessageId, chatId, organizationId: organization.id,
+    direction: "outgoing", type, text: caption, timestamp, status: "sending", source, sender: decoded.uid,
+    ...getTenantReplyMessageFields(replyContext),
+    mediaId: uploaded.mediaId, mediaMimeType: mimeType, mediaSize: buffer.length, mediaFilename: filename,
+    mediaStorage: "meta"
+  });
+  batch.set(chatRef, { customerPhone: chatId, lastMessage: preview, lastMessageAt: timestamp, lastMessageDirection: "outgoing", updatedAt: timestamp }, { merge: true });
+  batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
+  await batch.commit();
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
 
@@ -1152,6 +1226,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Tenant chat action failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Conversation action could not be completed." });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/send-media")) {
+    try { return await sendTenantMediaMessage(event); }
+    catch (error) {
+      console.error("Tenant media send failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Media message could not be sent.", retryable: error.retryable ?? !error.definitive });
     }
   }
 
