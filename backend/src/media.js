@@ -22,6 +22,64 @@ const SUPPORTED_MEDIA_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 ]);
 
+
+const MAX_PROXY_BYTES = 4 * 1024 * 1024;
+const META_MEDIA_HOSTS = new Set(["lookaside.fbsbx.com", "graph.facebook.com"]);
+
+async function fetchWhatsAppMediaForProxy(mediaId, credentials) {
+  const accessToken = credentials?.accessToken;
+  if (!accessToken || !/^[A-Za-z0-9._:-]{1,256}$/.test(String(mediaId || ""))) {
+    throw new Error("Media credentials or ID are invalid.");
+  }
+  const metadataResponse = await fetch(
+    \`https://graph.facebook.com/\${GRAPH_API_VERSION}/\${encodeURIComponent(mediaId)}\`,
+    { headers: { Authorization: \`Bearer \${accessToken}\` }, redirect: "error" }
+  );
+  const metadata = await metadataResponse.json();
+  if (!metadataResponse.ok || typeof metadata.url !== "string") {
+    const error = new Error(metadata?.error?.message || "WhatsApp media metadata could not be retrieved.");
+    error.statusCode = 502;
+    throw error;
+  }
+  const mediaUrl = new URL(metadata.url);
+  if (mediaUrl.protocol !== "https:" || !META_MEDIA_HOSTS.has(mediaUrl.hostname) || mediaUrl.username || mediaUrl.password) {
+    const error = new Error("WhatsApp returned an untrusted media URL.");
+    error.statusCode = 502;
+    throw error;
+  }
+  const declaredSize = Number(metadata.file_size);
+  if (Number.isFinite(declaredSize) && declaredSize > MAX_PROXY_BYTES) {
+    const error = new Error("Media exceeds the 4 MB preview limit.");
+    error.statusCode = 413;
+    throw error;
+  }
+  const response = await fetch(mediaUrl.toString(), {
+    headers: { Authorization: \`Bearer \${accessToken}\` },
+    redirect: "error"
+  });
+  if (!response.ok) {
+    const error = new Error("WhatsApp media download failed.");
+    error.statusCode = 502;
+    throw error;
+  }
+  const length = Number(response.headers.get("content-length"));
+  if (Number.isFinite(length) && length > MAX_PROXY_BYTES) {
+    const error = new Error("Media exceeds the 4 MB preview limit.");
+    error.statusCode = 413;
+    throw error;
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length || buffer.length > MAX_PROXY_BYTES) {
+    const error = new Error("Media exceeds the 4 MB preview limit or is empty.");
+    error.statusCode = 413;
+    throw error;
+  }
+  const mimeType = validateMedia(metadata.mime_type || response.headers.get("content-type"), buffer.length, MAX_PROXY_BYTES);
+  validateMediaContent(mimeType, buffer);
+  const filename = String(metadata.filename || "").split(/[\\\\/]/).pop().replace(/[\r\n"]/g, "_").slice(0, 180);
+  return { buffer, mimeType, filename };
+}
+
 function getStorageBucket() {
   const bucketName =
     process.env.FIREBASE_STORAGE_BUCKET ||
@@ -256,5 +314,6 @@ module.exports = {
   saveMessageMedia,
   uploadWhatsAppMedia,
   validateMedia,
-  validateMediaContent
+  validateMediaContent,
+  fetchWhatsAppMediaForProxy
 };
