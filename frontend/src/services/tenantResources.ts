@@ -62,6 +62,9 @@ export async function fetchTenantQuickReplyImage(org: string, quickReplyId: stri
   for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
   return new Blob([bytes], { type: result.mimeType });
 }
+export async function removeTenantQuickReplyImage(org: string, quickReplyId: string) {
+  return call("/organizations/quick-replies/image", "DELETE", { organizationId: org, quickReplyId });
+}
 export async function sendTenantQuickReplyImage(org: string, chatId: string, quickReplyId: string) {
   return call("/organizations/send-quick-reply", "POST", { organizationId: org, chatId, quickReplyId });
 }
