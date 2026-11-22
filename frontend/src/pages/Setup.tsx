@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Building2, LogOut, MessageCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
-import { connectWhatsApp, disconnectWhatsApp, createOrganization, listOrganizations, listWhatsAppConnections, type Organization, type WhatsAppConnection } from "../services/organizations";
+import { connectWhatsApp, disconnectWhatsApp, checkWhatsAppConnectionHealth, createOrganization, listOrganizations, listWhatsAppConnections, type Organization, type WhatsAppConnection } from "../services/organizations";
 import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
 
 export default function Setup() {
@@ -16,6 +16,8 @@ export default function Setup() {
   const [accessToken, setAccessToken] = useState("");
   const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(false);
+  const [healthChecking, setHealthChecking] = useState(false);
+  const [healthResults, setHealthResults] = useState<Record<string, { status: "healthy" | "attention"; checkedAt: string; error?: string }>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -52,6 +54,20 @@ export default function Setup() {
     } catch (e) { setError(e instanceof Error ? e.message : "Could not create workspace."); }
     finally { setBusy(false); }
   }
+  async function handleHealthCheck() {
+    if (!organizationId || healthChecking || busy) return;
+    setHealthChecking(true); setError(""); setNotice("");
+    try {
+      const results = await checkWhatsAppConnectionHealth(organizationId);
+      setHealthResults(Object.fromEntries(results.map((item) => [item.phoneNumberId, {
+        status: item.status, checkedAt: item.checkedAt, ...(item.error ? { error: item.error } : {})
+      }])));
+      const healthy = results.filter((item) => item.status === "healthy").length;
+      setNotice(`Health check complete: ${healthy} of ${results.length} connected number(s) healthy.`);
+    } catch (e) { setError(e instanceof Error ? e.message : "WhatsApp health check failed."); }
+    finally { setHealthChecking(false); }
+  }
+
   async function handleDisconnect(connection: WhatsAppConnection) {
     if (!organizationId || busy) return;
     const label = connection.displayPhoneNumber || connection.phoneNumberId;
@@ -87,8 +103,8 @@ export default function Setup() {
         <form onSubmit={handleCreate} className="mt-5 flex gap-2"><input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Business name" className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-3 text-sm"/><button disabled={busy} className="rounded-xl bg-[#075e54] px-4 text-sm font-semibold text-white disabled:opacity-60">Create</button></form>
       </section>
       <section className="mb-5 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-semibold">Connected WhatsApp numbers</h2><span className="rounded-full bg-[#effaf3] px-3 py-1 text-xs font-medium text-[#075e54]">{connections.filter(connection => connection.connected).length} connected</span></div>
-        {connectionsLoading ? <p className="text-sm text-gray-500">Loading connected numbers...</p> : connections.length ? <div className="space-y-2">{connections.map(connection => <div key={connection.phoneNumberId} className="rounded-xl border border-gray-200 p-3"><div className="flex items-center justify-between gap-3"><p className="font-medium">{connection.displayPhoneNumber || "WhatsApp number"}</p><div className="flex items-center gap-2"><span className={`text-xs ${connection.connected ? "text-green-700" : "text-gray-500"}`}>{connection.connected ? "Connected" : "Disconnected"}</span>{connection.connected && <button type="button" disabled={busy} onClick={() => void handleDisconnect(connection)} className="text-xs font-medium text-red-600 disabled:opacity-50">Disconnect</button>}</div></div><p className="mt-1 text-sm text-gray-600">{connection.verifiedName || "Business name not provided"}</p><p className="mt-1 break-all text-xs text-gray-400">Phone Number ID: {connection.phoneNumberId}</p></div>)}</div> : <p className="text-sm text-gray-500">No WhatsApp numbers connected to this workspace yet.</p>}
+        <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Connected WhatsApp numbers</h2><div className="flex items-center gap-2"><span className="rounded-full bg-[#effaf3] px-3 py-1 text-xs font-medium text-[#075e54]">{connections.filter(connection => connection.connected).length} connected</span><button type="button" disabled={!connections.some(connection => connection.connected) || healthChecking || busy} onClick={() => void handleHealthCheck()} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-[#075e54] disabled:opacity-50">{healthChecking ? "Checking..." : "Check status"}</button></div></div>
+        {connectionsLoading ? <p className="text-sm text-gray-500">Loading connected numbers...</p> : connections.length ? <div className="space-y-2">{connections.map(connection => <div key={connection.phoneNumberId} className="rounded-xl border border-gray-200 p-3"><div className="flex items-center justify-between gap-3"><p className="font-medium">{connection.displayPhoneNumber || "WhatsApp number"}</p><div className="flex items-center gap-2"><span className={`text-xs ${connection.connected ? "text-green-700" : "text-gray-500"}`}>{connection.connected ? "Connected" : "Disconnected"}</span>{connection.connected && <button type="button" disabled={busy} onClick={() => void handleDisconnect(connection)} className="text-xs font-medium text-red-600 disabled:opacity-50">Disconnect</button>}</div></div><p className="mt-1 text-sm text-gray-600">{connection.verifiedName || "Business name not provided"}</p><p className="mt-1 break-all text-xs text-gray-400">Phone Number ID: {connection.phoneNumberId}</p>{connection.connected && healthResults[connection.phoneNumberId] && <div className="mt-2 rounded-lg bg-gray-50 p-2"><p className={`text-xs font-medium ${healthResults[connection.phoneNumberId].status === "healthy" ? "text-green-700" : "text-amber-700"}`}>{healthResults[connection.phoneNumberId].status === "healthy" ? "Healthy · Meta verified" : "Attention required"}</p>{healthResults[connection.phoneNumberId].error && <p className="mt-1 text-xs text-amber-700">{healthResults[connection.phoneNumberId].error}</p>}<p className="mt-1 text-[11px] text-gray-400">Checked: {new Date(healthResults[connection.phoneNumberId].checkedAt).toLocaleString()}</p></div>}</div>)}</div> : <p className="text-sm text-gray-500">No WhatsApp numbers connected to this workspace yet.</p>}
       </section>
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="mb-1 text-lg font-semibold">Connect WhatsApp Cloud API</h2><p className="mb-4 text-sm text-gray-500">Select a workspace, then enter its Meta Phone Number ID and permanent access token. The token is stored encrypted on the server.</p>
