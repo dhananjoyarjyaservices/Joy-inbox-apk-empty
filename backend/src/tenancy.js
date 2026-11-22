@@ -15,7 +15,7 @@ async function requireOrganization(db, decoded, organizationId) {
   if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
   const memberRef = db.collection("organizations").doc(organizationId).collection("members").doc(decoded.uid);
   const [org, member] = await Promise.all([db.collection("organizations").doc(organizationId).get(), memberRef.get()]);
-  if (!org.exists || !member.exists || member.data().status !== "active" || !ROLES.has(member.data().role)) {
+  if (!org.exists || org.data().status !== "active" || !member.exists || member.data().status !== "active" || !ROLES.has(member.data().role)) {
     throw httpError("You are not an active member of this organization.", 403);
   }
   return { ...org.data(), id: organizationId, ref: org.ref, memberRef, role: member.data().role, uid: decoded.uid };
