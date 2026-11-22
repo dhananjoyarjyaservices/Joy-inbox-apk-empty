@@ -37,7 +37,7 @@ const { createOrganization, listOrganizations } = require("./organizations");
 const { listOrganizationMembers, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
-const { requireOrganization, requirePermission, saveWhatsAppConnection, getWhatsAppCredentials } = require("./tenancy");
+const { requireOrganization, requirePermission, saveWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
@@ -118,6 +118,15 @@ async function authenticateUser(event) {
     error.statusCode = 401;
     throw error;
   }
+}
+
+async function handleWhatsAppConnections(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "whatsapp:manage");
+  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  return jsonResponse(event, 200, { connections });
 }
 
 async function handleWhatsAppConnect(event) {
@@ -1368,6 +1377,16 @@ exports.handler = async (event) => {
 
   if (method === "OPTIONS") {
     return emptyResponse(event, 204);
+  }
+
+  if (method === "GET" && path.endsWith("/whatsapp/connections")) {
+    try { return await handleWhatsAppConnections(event); }
+    catch (error) {
+      console.error("WhatsApp connections could not load:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "WhatsApp connections could not be loaded."
+      });
+    }
   }
 
   if (method === "POST" && path.endsWith("/whatsapp/connect")) {
