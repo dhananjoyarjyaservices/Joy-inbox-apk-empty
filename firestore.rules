@@ -42,6 +42,18 @@ service cloud.firestore {
         }
       }
 
+      // Tenant-owned contacts and saved replies are readable by active members.
+      // Mutations stay server-only until validated organization API routes are available.
+      match /contacts/{contactId} {
+        allow read: if isActiveOrganizationMember(organizationId);
+        allow write: if false;
+      }
+
+      match /quickReplies/{replyId} {
+        allow read: if isActiveOrganizationMember(organizationId);
+        allow write: if false;
+      }
+
       match /members/{memberUid} {
         allow read: if request.auth != null
           && request.auth.uid == memberUid
