@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { Building2, LogOut, MessageCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
@@ -7,6 +8,7 @@ import { getActiveOrganizationId, setActiveOrganizationId } from "../services/ac
 
 export default function Setup() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [name, setName] = useState("");
   const [organizationId, setOrganizationId] = useState(() => getActiveOrganizationId());
@@ -41,7 +43,7 @@ export default function Setup() {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
       await connectWhatsApp(organizationId, phoneNumberId.trim(), accessToken.trim());
-      setAccessToken(""); setNotice("WhatsApp number verified and connected. Your access token was not returned to the browser.");
+      setAccessToken(""); setNotice("WhatsApp number verified and connected. Opening your inbox..."); navigate("/inbox");
     } catch (e) { setError(e instanceof Error ? e.message : "WhatsApp connection failed."); }
     finally { setBusy(false); }
   }
