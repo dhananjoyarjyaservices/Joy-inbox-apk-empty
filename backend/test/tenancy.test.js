@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { encryptSecret, decryptSecret, requirePermission, ROLE_PERMISSIONS, saveWhatsAppConnection, getWhatsAppCredentials, resolvePhoneNumberOrganization } = require("../src/tenancy");
+const { encryptSecret, decryptSecret, requireOrganization, requirePermission, ROLE_PERMISSIONS, saveWhatsAppConnection, getWhatsAppCredentials, resolvePhoneNumberOrganization } = require("../src/tenancy");
 
 test("tenant WhatsApp credentials encrypt and decrypt with authenticated encryption", () => {
   const key = Buffer.alloc(32, 7).toString("base64");
@@ -87,4 +87,34 @@ test("WhatsApp number cannot be claimed by a second organization", async () => {
     id: "org_b", ref: db.collection("organizations").doc("org_b")
   }, { phoneNumberId: "123456789012345", accessToken: "EAA_second_token" }), { statusCode: 409 });
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
+});
+
+
+test("organization access requires an active membership with a recognized role", async () => {
+  const db = fakeTenantDb();
+  db.docs.set("organizations/org_access", { status: "active" });
+  db.docs.set("organizations/org_access/members/user_active", { status: "active", role: "agent" });
+  db.docs.set("organizations/org_access/members/user_disabled", { status: "disabled", role: "admin" });
+  db.docs.set("organizations/org_access/members/user_unknown", { status: "active", role: "superuser" });
+
+  const access = await requireOrganization(db, { uid: "user_active" }, "org_access");
+  assert.equal(access.id, "org_access");
+  assert.equal(access.role, "agent");
+
+  await assert.rejects(
+    () => requireOrganization(db, { uid: "user_disabled" }, "org_access"),
+    { statusCode: 403 }
+  );
+  await assert.rejects(
+    () => requireOrganization(db, { uid: "user_unknown" }, "org_access"),
+    { statusCode: 403 }
+  );
+  await assert.rejects(
+    () => requireOrganization(db, { uid: "user_missing" }, "org_access"),
+    { statusCode: 403 }
+  );
+  await assert.rejects(
+    () => requireOrganization(db, { uid: "user_active" }, "../other"),
+    { statusCode: 400 }
+  );
 });
