@@ -40,3 +40,13 @@ export async function saveTenantQuickReply(org: string, data: Omit<TenantQuickRe
 export async function deleteTenantQuickReply(org: string, resourceId: string) {
   return call("/organizations/quick-replies", "DELETE", { organizationId: org, resourceId });
 }
+
+export async function updateTenantChatState(org: string, data: { chatId: string; pinned?: boolean; archived?: boolean; markRead?: boolean }) {
+  return call("/organizations/chat-state", "POST", { organizationId: org, ...data });
+}
+export async function updateTenantMessageState(org: string, data: { chatId: string; messageId: string; pinned: boolean }) {
+  return call("/organizations/message-state", "POST", { organizationId: org, ...data });
+}
+export async function deleteTenantChat(org: string, chatId: string) {
+  return call("/organizations/delete-chats", "POST", { organizationId: org, chatIds: [chatId] });
+}
