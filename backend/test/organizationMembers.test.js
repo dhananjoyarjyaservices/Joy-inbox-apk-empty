@@ -122,7 +122,7 @@ test("owner membership cannot be demoted or removed", async () => {
 test("member removal revokes active organization index", async () => {
   const { db, records } = fakeDb();
   const organization = { id: "org_a", ref: db.collection("organizations").doc("org_a"), createdBy: "owner_uid" };
-  await organization.ref.collection("members").doc("agent_uid").set({ role: "agent", status: "active" });
+  await organization.ref.collection("members").doc("agent_uid").set({ email: "agent@example.com", role: "agent", status: "active" });
   const result = await removeOrganizationMember(organization, { role: "owner" }, { uid: "agent_uid" });
   assert.equal(result.status, "removed");
   assert.equal(records.get("organizations/org_a/members/agent_uid").status, "removed");
@@ -340,8 +340,10 @@ test("member role changes are recorded in a tenant-scoped audit log", async () =
   assert.equal(auditEntries[0][1].action, "member.role_changed");
   assert.equal(auditEntries[0][1].actorUid, "owner_uid");
   assert.equal(auditEntries[0][1].targetUid, "agent_uid");
+  assert.equal(auditEntries[0][1].targetEmail, "agent@example.com");
   assert.equal(auditEntries[0][1].details.role, "admin");
   const page = await listOrganizationMemberAudit(db, organization, { limit: 10 });
   assert.equal(page.events.length, 1);
   assert.equal(page.events[0].action, "member.role_changed");
+  assert.equal(page.events[0].targetEmail, "agent@example.com");
 });
