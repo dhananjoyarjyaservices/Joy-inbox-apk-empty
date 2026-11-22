@@ -3,6 +3,7 @@ const { getDb } = require("./firebase");
 const { verifyMetaSignature, getRawBody } = require("./security");
 const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
+const { sendTenantIncomingTextNotification } = require("./push");
 
 function getVerifyToken() {
   return (
@@ -197,7 +198,20 @@ async function processWebhookPayload(payload) {
         const name = contact?.profile?.name || message.from;
         const created = await saveTenantIncomingMessage(db, organization, message, name);
         if (created) {
-          await maybeSendTenantGreeting(db, organization, credentials, normalizePhoneNumber(message.from), message);
+          const phone = normalizePhoneNumber(message.from);
+          await maybeSendTenantGreeting(db, organization, credentials, phone, message);
+          try {
+            await sendTenantIncomingTextNotification(
+              organization.id,
+              phone,
+              name,
+              message.type === "text" ? String(message.text?.body || "") : `New ${message.type || "WhatsApp"} message`,
+              String(message.id || "")
+            );
+          } catch (error) {
+            // Notification delivery must never cause Meta to retry an already-saved message.
+            console.error("Tenant push notification delivery failed:", error);
+          }
         }
       }
       for (const status of value.statuses || []) {
