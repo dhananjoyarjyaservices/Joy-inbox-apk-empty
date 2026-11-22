@@ -151,15 +151,24 @@ async function maybeSendTenantGreeting(db, organization, credentials, phone, inb
   }
 }
 
+const MESSAGE_STATUS_RANK = { failed: 0, sent: 1, delivered: 2, read: 3 };
+
+function shouldApplyMessageStatus(currentStatus, nextStatus) {
+  if (!Object.prototype.hasOwnProperty.call(MESSAGE_STATUS_RANK, nextStatus)) return false;
+  return MESSAGE_STATUS_RANK[nextStatus] > (MESSAGE_STATUS_RANK[currentStatus] ?? -1);
+}
+
 async function updateTenantMessageStatus(organization, status) {
   const messageId = String(status.id || "");
   const recipient = normalizePhoneNumber(status.recipient_id);
   const nextStatus = status.status;
   if (!/^[A-Za-z0-9._:-]{1,256}$/.test(messageId) || !recipient ||
-      !["sent", "delivered", "read", "failed"].includes(nextStatus)) return;
+      !Object.prototype.hasOwnProperty.call(MESSAGE_STATUS_RANK, nextStatus)) return;
   const ref = organization.ref.collection("chats").doc(recipient).collection("messages").doc(messageId);
-  await ref.update({ status: nextStatus, statusUpdatedAt: new Date() }).catch((error) => {
-    if (error.code !== 5 && error.code !== "not-found") throw error;
+  await ref.firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || !shouldApplyMessageStatus(snapshot.data()?.status, nextStatus)) return;
+    transaction.update(ref, { status: nextStatus, statusUpdatedAt: new Date() });
   });
 }
 
@@ -264,5 +273,6 @@ module.exports = {
   receiveWebhook,
   saveTenantIncomingMessage,
   updateTenantMessageStatus,
+  shouldApplyMessageStatus,
   processWebhookPayload
 };
