@@ -17,6 +17,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
   const [auditEvents, setAuditEvents] = useState<OrganizationMemberAuditEvent[]>([]);
   const [showAudit, setShowAudit] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [auditCursor, setAuditCursor] = useState<string | null>(null);
   const canManage = actorRole === "owner" || actorRole === "admin";
 
   const refresh = useCallback(async () => {
@@ -44,11 +45,28 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     setShowAudit(true);
     if (auditEvents.length || auditLoading) return;
     setAuditLoading(true);
-    try { setAuditEvents(await listOrganizationMemberAudit(organizationId, 25)); }
+    try {
+      const page = await listOrganizationMemberAudit(organizationId, { limit: 25 });
+      setAuditEvents(page.events);
+      setAuditCursor(page.nextCursor);
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Member activity could not be loaded."); }
     finally { setAuditLoading(false); }
   }
 
+  async function loadMoreAudit() {
+    if (!auditCursor || auditLoading) return;
+    setAuditLoading(true);
+    try {
+      const page = await listOrganizationMemberAudit(organizationId, { limit: 25, cursor: auditCursor });
+      setAuditEvents(current => {
+        const seen = new Set(current.map(event => event.id));
+        return [...current, ...page.events.filter(event => !seen.has(event.id))];
+      });
+      setAuditCursor(page.nextCursor);
+    } catch (e) { setError(e instanceof Error ? e.message : "More activity could not be loaded."); }
+    finally { setAuditLoading(false); }
+  }
   function auditDescription(event: OrganizationMemberAuditEvent) {
     if (event.action === "member.added") return "Added " + (event.targetEmail || event.targetUid) + " as " + String(event.details.role || "member");
     if (event.action === "member.role_changed") return "Changed " + (event.targetEmail || event.targetUid) + " role to " + String(event.details.role || "updated role");
@@ -96,7 +114,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
 
   return <section className="flex-1 overflow-y-auto bg-white p-4">
     <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Workspace members</h2><p className="text-sm text-gray-500">Manage who can access this business inbox.</p></div><div className="flex gap-2">{canManage && <button onClick={() => void toggleAudit()} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" aria-expanded={showAudit}><History size={15}/>{showAudit ? "Hide activity" : "Activity history"}</button>}<button onClick={() => void refresh()} className="rounded-lg border p-2" aria-label="Refresh members"><RefreshCw size={17}/></button></div></div>
-    {showAudit && <div className="mb-5 rounded-xl border p-3"><h3 className="mb-2 text-sm font-semibold">Recent member activity</h3>{auditLoading ? <p className="py-3 text-sm text-gray-500">Loading activity...</p> : auditEvents.length ? <div className="divide-y">{auditEvents.map(event => <div key={event.id} className="py-2"><p className="text-sm">{auditDescription(event)}</p><p className="text-xs text-gray-500">By {event.actorUid || "Unknown"} · {event.actorRole || "member"} · {event.createdAt && typeof event.createdAt === "object" && "toDate" in event.createdAt && typeof event.createdAt.toDate === "function" ? event.createdAt.toDate().toLocaleString() : event.createdAt ? new Date(String(event.createdAt)).toLocaleString() : "Time unavailable"}</p></div>)}</div> : <p className="py-3 text-sm text-gray-500">No member activity recorded yet.</p>}</div>}
+    {showAudit && <div className="mb-5 rounded-xl border p-3"><h3 className="mb-2 text-sm font-semibold">Recent member activity</h3>{auditLoading ? <p className="py-3 text-sm text-gray-500">Loading activity...</p> : auditEvents.length ? <div className="divide-y">{auditEvents.map(event => <div key={event.id} className="py-2"><p className="text-sm">{auditDescription(event)}</p><p className="text-xs text-gray-500">By {event.actorUid || "Unknown"} · {event.actorRole || "member"} · {event.createdAt && typeof event.createdAt === "object" && "toDate" in event.createdAt && typeof event.createdAt.toDate === "function" ? event.createdAt.toDate().toLocaleString() : event.createdAt ? new Date(String(event.createdAt)).toLocaleString() : "Time unavailable"}</p></div>)}{auditCursor && <div className="pt-3 text-center"><button type="button" disabled={auditLoading} onClick={() => void loadMoreAudit()} className="rounded-lg border px-4 py-2 text-xs disabled:opacity-50">{auditLoading ? "Loading..." : "Load more activity"}</button></div>}</div> : <p className="py-3 text-sm text-gray-500">No member activity recorded yet.</p>}</div>}
     {canManage && <form onSubmit={add} className="mb-5 grid gap-2 rounded-xl border bg-gray-50 p-3 sm:grid-cols-[1fr_140px_auto]">
       <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Existing Joy Inbox account email" className="min-w-0 rounded-lg border bg-white px-3 py-2 text-sm"/>
       <select value={role} onChange={e => setRole(e.target.value as "admin" | "agent")} className="rounded-lg border bg-white px-3 py-2 text-sm">
