@@ -26,6 +26,22 @@ service cloud.firestore {
       allow read: if isActiveOrganizationMember(organizationId);
       allow write: if false;
 
+      // Tenant conversations are readable only by active members.
+      // All writes remain server-only through the Admin SDK.
+      match /chats/{chatId} {
+        allow read: if isActiveOrganizationMember(organizationId);
+        allow write: if false;
+
+        match /messages/{messageId} {
+          allow read: if isActiveOrganizationMember(organizationId);
+          allow write: if false;
+        }
+
+        match /sendRequests/{requestId} {
+          allow read, write: if false;
+        }
+      }
+
       match /members/{memberUid} {
         allow read: if request.auth != null
           && request.auth.uid == memberUid
