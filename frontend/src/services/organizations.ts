@@ -41,3 +41,15 @@ export async function sendTenantText(organizationId: string, to: string, text: s
     clientMessageId: crypto.randomUUID()
   });
 }
+
+export interface WhatsAppConnection {
+  phoneNumberId: string;
+  displayPhoneNumber: string;
+  verifiedName: string;
+  connected: boolean;
+  updatedAt?: unknown;
+}
+export async function listWhatsAppConnections(organizationId: string): Promise<WhatsAppConnection[]> {
+  const result = await request(`/whatsapp/connections?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.connections) ? result.connections : [];
+}
