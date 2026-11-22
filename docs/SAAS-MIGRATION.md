@@ -124,3 +124,8 @@ The backend now provides organization-scoped endpoints for greeting configuratio
 - `GET /organizations/status?organizationId=...`
 
 These routes authenticate the Firebase user and verify active organization membership. Greeting settings require `settings:manage` and are stored below the selected organization's `settings/greeting` document. Connection diagnostics require `chats:read` and check the selected organization's encrypted WhatsApp credentials and organization chat collection. The previous owner-only `/greeting-settings` and `/status` routes remain for the legacy dashboard. Tenant frontend integration and automated end-to-end validation remain outstanding.
+
+
+## Tenant media sending (metadata-only storage)
+
+The backend now includes `POST /organizations/send-media`. It verifies Firebase authentication, active organization membership and `messages:send` permission; validates the bounded base64 upload and media content signature; uploads the bytes directly to the organization's connected WhatsApp Cloud API account; and sends the resulting Meta Media ID. The message record stores only the Meta Media ID, MIME type, byte size and filename. It does not call Firebase Storage, write media bytes to disk, or use S3. The request body is held in Lambda memory while processing. This initial tenant media endpoint caps uploads at 3 MB and still needs frontend integration, automated tests and an authenticated inbound/outbound media viewing proxy before media viewing is complete.
