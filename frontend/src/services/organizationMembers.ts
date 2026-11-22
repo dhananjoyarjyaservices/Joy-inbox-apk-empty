@@ -52,3 +52,24 @@ export async function updateOrganizationMemberRole(organizationId: string, uid: 
 export async function removeOrganizationMember(organizationId: string, uid: string) {
   return request("/organizations/members", "DELETE", { organizationId, uid });
 }
+
+
+export interface OrganizationMemberAuditEvent {
+  id: string;
+  action: string;
+  actorUid: string;
+  actorRole: string;
+  targetUid: string;
+  targetEmail: string;
+  details: Record<string, unknown>;
+  createdAt?: unknown;
+}
+
+export async function listOrganizationMemberAudit(
+  organizationId: string,
+  limit = 25
+): Promise<OrganizationMemberAuditEvent[]> {
+  const params = new URLSearchParams({ organizationId, limit: String(limit) });
+  const result = await request(`/organizations/member-audit?${params.toString()}`);
+  return Array.isArray(result.events) ? result.events : [];
+}
