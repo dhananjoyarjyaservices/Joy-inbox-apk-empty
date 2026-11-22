@@ -69,14 +69,14 @@ function fakeDb() {
                 const left = a.data()[field]?.getTime?.() ?? 0;
                 const right = b.data()[field]?.getTime?.() ?? 0;
                 const byTimestamp = direction === "desc" ? right - left : left - right;
-                return byTimestamp || a.id.localeCompare(b.id);
+                return byTimestamp || (direction === "desc" ? b.id.localeCompare(a.id) : a.id.localeCompare(b.id));
               })
               .filter(item => {
                 if (!afterId) return true;
                 if (field === "__name__") return item.id > afterId;
                 const value = item.data()[field];
                 const comparison = (value?.getTime?.() ?? 0) - (afterValue?.getTime?.() ?? 0);
-                if (comparison === 0) return item.id > afterId;
+                if (comparison === 0) return direction === "desc" ? item.id < afterId : item.id > afterId;
                 return direction === "desc" ? comparison < 0 : comparison > 0;
               })
               .slice(0, max);
