@@ -6,6 +6,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Setup from "./pages/Setup";
+import TenantInbox from "./pages/TenantInbox";
 
 export default function App() {
   useEffect(() => {
@@ -29,7 +30,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route element={<ProtectedRoute allowNonOwner />}><Route path="/setup" element={<Setup />} /></Route>
+          <Route element={<ProtectedRoute allowNonOwner />}><Route path="/setup" element={<Setup />} /><Route path="/inbox" element={<TenantInbox />} /></Route>
 
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Dashboard />} />
