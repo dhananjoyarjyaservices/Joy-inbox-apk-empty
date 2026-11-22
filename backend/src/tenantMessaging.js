@@ -48,6 +48,23 @@ async function claimTenantSendRequest(db, organizationId, chatId, clientMessageI
   return { ...result, ref };
 }
 
+function getRetryableTenantTextMessage(message) {
+  if (!message || message.direction !== "outgoing" || message.type !== "text" ||
+      message.status !== "failed" || typeof message.text !== "string" || !message.text.trim()) {
+    const error = new Error("Only failed outgoing text messages can be retried.");
+    error.statusCode = 409;
+    error.retryable = false;
+    throw error;
+  }
+  if (typeof message.phoneNumberId !== "string" || !message.phoneNumberId.trim()) {
+    const error = new Error("The original WhatsApp number is missing. Send the message manually instead.");
+    error.statusCode = 409;
+    error.retryable = false;
+    throw error;
+  }
+  return { text: message.text.trim(), phoneNumberId: message.phoneNumberId.trim() };
+}
+
 async function resolveTenantReplyContext(db, organizationId, chatId, body) {
   const hasReplyId = body.replyToMessageId !== undefined;
   const hasLegacyContextId = body.contextMessageId !== undefined;
@@ -103,6 +120,7 @@ module.exports = {
   getTenantMessageRef,
   getTenantSendRequestRef,
   claimTenantSendRequest,
+  getRetryableTenantTextMessage,
   resolveTenantReplyContext,
   getTenantReplyMessageFields,
   markTenantSendRequestFailed
