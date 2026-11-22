@@ -30,7 +30,7 @@ function quickReplyInput(input) {
   const title = typeof input.title === "string" ? input.title.trim() : "";
   const shortcut = typeof input.shortcut === "string" ? input.shortcut.trim().replace(/^\/+/, "").toLowerCase() : "";
   const message = typeof input.message === "string" ? input.message.trim() : "";
-  if (!title || title.length > 60 || message.length > 4096) throw httpError("Title (max 60) and message (max 4096) are required.", 400);
+  if (!title || title.length > 60 || message.length > 4096) throw httpError("A title is required (maximum 60 characters); message must be 4096 characters or fewer.", 400);
   if (shortcut.length > 30 || (shortcut && !/^[a-z0-9_-]+$/.test(shortcut))) throw httpError("Shortcut must use letters, numbers, underscores or hyphens (maximum 30).", 400);
   return { title, shortcut, message };
 }
