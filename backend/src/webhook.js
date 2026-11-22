@@ -202,7 +202,7 @@ async function processWebhookPayload(payload) {
       let credentials;
       try {
         organization = await resolvePhoneNumberOrganization(db, String(phoneNumberId));
-        credentials = await getWhatsAppCredentials(db, organization.id);
+        credentials = await getWhatsAppCredentials(db, organization.id, String(phoneNumberId));
       } catch (error) {
         console.warn("Ignoring webhook for an unlinked or inactive WhatsApp number:", error.message);
         continue;
