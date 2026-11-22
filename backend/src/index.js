@@ -232,7 +232,8 @@ async function handleOrganizationMemberAudit(event) {
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "members:manage");
   const page = await listOrganizationMemberAudit(getDb(), organization, {
-    limit: event.queryStringParameters?.limit
+    limit: event.queryStringParameters?.limit,
+    cursor: event.queryStringParameters?.cursor
   });
   return jsonResponse(event, 200, page);
 }
