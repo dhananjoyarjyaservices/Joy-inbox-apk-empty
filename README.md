@@ -23,7 +23,7 @@ Joy Inbox is being migrated from a single-owner WhatsApp Cloud API inbox to a mu
 
 ## SaaS migration status
 
-The existing application source has been migrated from the original repository. A first backend tenancy foundation is present in `backend/src/tenancy.js` with organization membership lookup, role permissions, WhatsApp phone-number-to-organization resolution, and AES-256-GCM helpers for server-side tenant secrets. See [docs/SAAS-MIGRATION.md](docs/SAAS-MIGRATION.md) for the target data model, security requirements, media policy and migration sequence.
+The existing application source has been migrated from the original repository. A first backend tenancy foundation is present in `backend/src/tenancy.js` with organization membership lookup, role permissions, WhatsApp phone-number-to-organization resolution, and AES-256-GCM helpers for server-side tenant secrets. See [docs/SAAS-MIGRATION.md](docs/SAAS-MIGRATION.md) for the target data model, security requirements, media policy and migration sequence. Cloudflare Pages + AWS Lambda deployment preparation is documented in [docs/DEPLOYMENT-CLOUDFLARE-AWS.md](docs/DEPLOYMENT-CLOUDFLARE-AWS.md).
 
 **Important: this branch is not production-ready.** Existing API handlers still enforce a legacy single-owner UID, use global WhatsApp credentials, store chats in top-level collections, and persist media in Firebase Storage. The new tenancy helpers are not yet wired into every API route, webhook, frontend service or Firestore rule. Do not deploy this branch to production or connect real customer tenants until those items and their tests are complete.
 
