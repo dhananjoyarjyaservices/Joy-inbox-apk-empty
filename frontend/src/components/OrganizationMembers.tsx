@@ -26,6 +26,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
 
   const refresh = useCallback(async () => {
     const requestId = ++memberRequestId.current;
+    setLoadingMore(false);
     setError("");
     try {
       const page = await listOrganizationMembers(organizationId, { limit: 25 });
@@ -36,7 +37,6 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
       if (requestId === memberRequestId.current) setError(e instanceof Error ? e.message : "Members could not be loaded.");
     }
   }, [organizationId]);
-  useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     activeOrganizationId.current = organizationId;
     memberRequestId.current += 1;
@@ -50,6 +50,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     setShowAudit(false);
     setAuditLoading(false);
   }, [organizationId]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const filteredMembers = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
