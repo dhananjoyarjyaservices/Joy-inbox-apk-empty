@@ -37,6 +37,7 @@ const { createOrganization, listOrganizations } = require("./organizations");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
+const { updateTenantChatAssignment } = require("./tenantChatAssignment");
 const { requireOrganization, requirePermission, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
@@ -374,6 +375,10 @@ async function handleTenantChatAction(event, action) {
   const { organizationId, ...actionInput } = body;
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "chats:manage");
+  if (action === "chat-assignment") {
+    const result = await updateTenantChatAssignment(getDb(), organization, actor, actionInput);
+    return jsonResponse(event, 200, { success: true, ...result });
+  }
   if (action === "chat-state") {
     await updateTenantChatState(getDb(), organization.id, actionInput);
     return jsonResponse(event, 200, { success: true });
@@ -1609,7 +1614,7 @@ exports.handler = async (event) => {
     catch (error) { console.error("Tenant Quick Replies request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Replies request could not be completed." }); }
   }
 
-  if (method === "POST" && ["/organizations/chat-state", "/organizations/message-state", "/organizations/delete-messages", "/organizations/delete-chats"].some((suffix) => path.endsWith(suffix))) {
+  if (method === "POST" && ["/organizations/chat-state", "/organizations/chat-assignment", "/organizations/message-state", "/organizations/delete-messages", "/organizations/delete-chats"].some((suffix) => path.endsWith(suffix))) {
     const action = path.slice(path.lastIndexOf("/") + 1);
     try { return await handleTenantChatAction(event, action); }
     catch (error) {
