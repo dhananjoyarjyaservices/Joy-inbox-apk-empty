@@ -76,14 +76,18 @@ async function saveWhatsAppConnection(db, organization, input) {
     if (existing.exists && existing.data().organizationId !== organization.id) {
       throw httpError("This WhatsApp phone number is already connected to another organization.", 409);
     }
-    transaction.set(settingsRef, {
+    const connectionData = {
       phoneNumberId,
       accessToken: encrypted,
       displayPhoneNumber,
       verifiedName,
       connected: true,
       updatedAt: new Date()
-    }, { merge: true });
+    };
+    // Keep the legacy primary connection while maintaining an independent
+    // encrypted credential record for every connected phone number.
+    transaction.set(settingsRef.collection("numbers").doc(phoneNumberId), connectionData, { merge: true });
+    transaction.set(settingsRef, connectionData, { merge: true });
     transaction.set(phoneRef, {
       organizationId: organization.id,
       status: "active",
@@ -93,10 +97,12 @@ async function saveWhatsAppConnection(db, organization, input) {
   return { phoneNumberId, displayPhoneNumber, verifiedName, connected: true };
 }
 
-async function getWhatsAppCredentials(db, organizationId) {
+async function getWhatsAppCredentials(db, organizationId, phoneNumberId) {
   if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
-  const snapshot = await db.collection("organizations").doc(organizationId)
-    .collection("settings").doc("whatsapp").get();
+  const settingsRef = db.collection("organizations").doc(organizationId).collection("settings").doc("whatsapp");
+  const snapshot = phoneNumberId
+    ? await settingsRef.collection("numbers").doc(phoneNumberId).get()
+    : await settingsRef.get();
   if (!snapshot.exists || snapshot.data().connected !== true) {
     throw httpError("WhatsApp is not connected for this organization.", 404);
   }
@@ -109,4 +115,35 @@ async function getWhatsAppCredentials(db, organizationId) {
   };
 }
 
-module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, getWhatsAppCredentials };
+async function listWhatsAppConnections(db, organizationId) {
+  if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
+  const snapshot = await db.collection("organizations").doc(organizationId)
+    .collection("settings").doc("whatsapp").collection("numbers").get();
+  const items = snapshot.docs.map((item) => {
+    const data = item.data();
+    return {
+      phoneNumberId: item.id,
+      displayPhoneNumber: data.displayPhoneNumber || "",
+      verifiedName: data.verifiedName || "",
+      connected: data.connected === true,
+      updatedAt: data.updatedAt || null
+    };
+  });
+  if (!items.length) {
+    const legacy = await db.collection("organizations").doc(organizationId)
+      .collection("settings").doc("whatsapp").get();
+    if (legacy.exists && legacy.data().connected === true) {
+      const data = legacy.data();
+      items.push({
+        phoneNumberId: data.phoneNumberId,
+        displayPhoneNumber: data.displayPhoneNumber || "",
+        verifiedName: data.verifiedName || "",
+        connected: true,
+        updatedAt: data.updatedAt || null
+      });
+    }
+  }
+  return items;
+}
+
+module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections };
