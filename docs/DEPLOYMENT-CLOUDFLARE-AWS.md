@@ -31,6 +31,24 @@ Required frontend variables:
 
 The repository includes `frontend/public/_redirects` to send client-side React Router paths to `index.html`. Vite is configured to serve from the Pages site root.
 
+
+## Important: current Pages project is connected to the original repository
+
+The existing production Pages project at `https://final-joy-inbox.pages.dev` is connected to `dhananjoyarjya/Final-joy-inbox`, not this target repository. Commits to `dhananjoyarjyaservices/Joy-inbox-apk-empty` therefore will not trigger builds for that existing project.
+
+**Do not change or disconnect the existing production Pages project during preparation.** Keep it serving the current application.
+
+Recommended safe preview arrangement:
+
+1. In Cloudflare Dashboard > Workers & Pages, create a separate Pages project (for example, `joy-inbox-saas-preview`).
+2. Connect GitHub repository `dhananjoyarjyaservices/Joy-inbox-apk-empty`.
+3. Set the root directory to `frontend`, build command to `npm run build`, and output directory to `dist`.
+4. Configure `feature/saas-foundation` as a preview branch (or allow all non-production branches for previews). Keep the preview project separate from the current production project.
+5. Add only staging Firebase and staging Lambda public configuration as `VITE_*` build variables. Never copy server secrets into Pages.
+6. Open PR #1 and check whether Cloudflare posts a preview URL/check to that PR. Do not promote the preview to production until the backend, data migration and tenant-security gates pass.
+
+Cloudflare documents that Git-integrated Pages projects can create branch and pull-request preview deployments, and that the repository/project connection is managed under Settings > Builds > Manage. See the official [Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/) and [GitHub integration](https://developers.cloudflare.com/pages/configuration/git-integration/github-integration/) guides.
+
 ## AWS Lambda environment
 
 Lambda must use Node.js 22 and the deployment package must include the backend dependencies. Configure the following values using AWS Secrets Manager or protected Lambda environment variables:
