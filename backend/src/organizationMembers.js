@@ -1,5 +1,3 @@
-const { ROLES } = require("./tenancy");
-
 function httpError(message, statusCode) {
   const error = new Error(message);
   error.statusCode = statusCode;
