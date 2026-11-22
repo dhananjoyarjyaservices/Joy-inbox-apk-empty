@@ -27,6 +27,7 @@ const {
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
+const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { requireOrganization, requirePermission, saveWhatsAppConnection, getWhatsAppCredentials } = require("./tenancy");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
@@ -159,6 +160,34 @@ async function handleOrganizations(event) {
   }
   const organization = await createOrganization(getDb(), decoded, body);
   return jsonResponse(event, 201, { organization });
+}
+
+async function handleTenantResource(event, resource) {
+  const decoded = await authenticateUser(event);
+  const method = getMethod(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, resource === "contacts" ? "contacts:manage" : "quickReplies:manage");
+  if (method === "GET") {
+    const items = await listTenantResource(getDb(), organization.id, resource);
+    return jsonResponse(event, 200, { items });
+  }
+  if (method === "POST") {
+    const item = await saveTenantResource(getDb(), organization.id, resource, body.data);
+    return jsonResponse(event, 201, { item });
+  }
+  if (method === "PUT") {
+    const item = await saveTenantResource(getDb(), organization.id, resource, body.data, body.resourceId);
+    return jsonResponse(event, 200, { item });
+  }
+  if (method === "DELETE") {
+    await deleteTenantResource(getDb(), organization.id, resource, body.resourceId);
+    return jsonResponse(event, 200, { success: true });
+  }
+  return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
 async function authenticateOwner(event) {
@@ -1015,6 +1044,16 @@ exports.handler = async (event) => {
       result.statusCode,
       result.body
     );
+  }
+
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/contacts")) {
+    try { return await handleTenantResource(event, "contacts"); }
+    catch (error) { console.error("Tenant contacts request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Contacts request could not be completed." }); }
+  }
+
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/quick-replies")) {
+    try { return await handleTenantResource(event, "quickReplies"); }
+    catch (error) { console.error("Tenant Quick Replies request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Replies request could not be completed." }); }
   }
 
   if (method === "POST" && path.endsWith("/organizations/send")) {
