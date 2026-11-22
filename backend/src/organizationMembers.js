@@ -14,19 +14,36 @@ function requireManager(actor) {
   }
 }
 
-async function listOrganizationMembers(db, organization) {
-  const snapshot = await organization.ref.collection("members").get();
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      uid: doc.id,
-      email: String(data.email || ""),
-      displayName: String(data.displayName || ""),
-      role: data.role,
-      status: data.status,
-      joinedAt: data.joinedAt || null
-    };
-  });
+async function listOrganizationMembers(db, organization, options = {}) {
+  const requestedLimit = Number(options.limit);
+  const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 25;
+  const cursor = options.cursor || "";
+  if (cursor && !validUid(cursor)) throw httpError("A valid member page cursor is required.", 400);
+
+  const membersRef = organization.ref.collection("members");
+  let query = membersRef.orderBy("__name__");
+  if (cursor) {
+    const cursorSnapshot = await membersRef.doc(cursor).get();
+    if (!cursorSnapshot.exists) throw httpError("The member page cursor is no longer valid. Refresh the list.", 400);
+    query = query.startAfter(cursorSnapshot);
+  }
+  const snapshot = await query.limit(limit + 1).get();
+  const hasMore = snapshot.docs.length > limit;
+  const pageDocs = snapshot.docs.slice(0, limit);
+  return {
+    members: pageDocs.map((doc) => {
+      const data = doc.data();
+      return {
+        uid: doc.id,
+        email: String(data.email || ""),
+        displayName: String(data.displayName || ""),
+        role: data.role,
+        status: data.status,
+        joinedAt: data.joinedAt || null
+      };
+    }),
+    nextCursor: hasMore ? pageDocs[pageDocs.length - 1].id : null
+  };
 }
 
 async function addOrganizationMember(db, auth, organization, actor, input) {
