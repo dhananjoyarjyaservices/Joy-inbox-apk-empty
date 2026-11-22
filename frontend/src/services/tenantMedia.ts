@@ -40,7 +40,7 @@ export async function sendTenantMedia(org: string, to: string, file: File, capti
   const token = await credentials();
   const response = await fetch(API_URL!.replace(/\/$/, "") + "/organizations/send-media", {
     method: "POST",
-    headers: { Authorization: \`Bearer \${token}\`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       organizationId: org, to, chatId: to, fileBase64: await fileToBase64(file),
       mimeType: file.type, type: mediaType(file.type), filename: file.name,
@@ -57,7 +57,7 @@ export async function fetchTenantMedia(org: string, chatId: string, messageId: s
   url.searchParams.set("organizationId", org);
   url.searchParams.set("chatId", chatId);
   url.searchParams.set("messageId", messageId);
-  const response = await fetch(url.toString(), { headers: { Authorization: \`Bearer \${token}\` } });
+  const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) {
     const result = await response.json().catch(() => ({}));
     throw new Error(result.error || "Media preview could not be loaded.");
