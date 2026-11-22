@@ -19,20 +19,30 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState("");
   const auditRequestId = useRef(0);
+  const memberRequestId = useRef(0);
+  const activeOrganizationId = useRef(organizationId);
   const [auditCursor, setAuditCursor] = useState<string | null>(null);
   const canManage = actorRole === "owner" || actorRole === "admin";
 
   const refresh = useCallback(async () => {
+    const requestId = ++memberRequestId.current;
     setError("");
     try {
       const page = await listOrganizationMembers(organizationId, { limit: 25 });
+      if (requestId !== memberRequestId.current) return;
       setMembers(page.members);
       setNextCursor(page.nextCursor);
+    } catch (e) {
+      if (requestId === memberRequestId.current) setError(e instanceof Error ? e.message : "Members could not be loaded.");
     }
-    catch (e) { setError(e instanceof Error ? e.message : "Members could not be loaded."); }
   }, [organizationId]);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    activeOrganizationId.current = organizationId;
+    memberRequestId.current += 1;
+    setMembers([]);
+    setNextCursor(null);
+    setLoadingMore(false);
     auditRequestId.current += 1;
     setAuditEvents([]);
     setAuditCursor(null);
@@ -40,6 +50,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
     setShowAudit(false);
     setAuditLoading(false);
   }, [organizationId]);
+
   const filteredMembers = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
     return members.filter(member => {
@@ -95,16 +106,19 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
   }
   async function loadMore() {
     if (!nextCursor || loadingMore) return;
+    const requestId = ++memberRequestId.current;
     setLoadingMore(true); setError("");
     try {
       const page = await listOrganizationMembers(organizationId, { limit: 25, cursor: nextCursor });
+      if (requestId !== memberRequestId.current) return;
       setMembers(current => {
         const seen = new Set(current.map(member => member.uid));
         return [...current, ...page.members.filter(member => !seen.has(member.uid))];
       });
       setNextCursor(page.nextCursor);
-    } catch (e) { setError(e instanceof Error ? e.message : "More members could not be loaded."); }
-    finally { setLoadingMore(false); }
+    } catch (e) {
+      if (requestId === memberRequestId.current) setError(e instanceof Error ? e.message : "More members could not be loaded.");
+    } finally { if (requestId === memberRequestId.current) setLoadingMore(false); }
   }
 
   async function add(event: FormEvent) {
