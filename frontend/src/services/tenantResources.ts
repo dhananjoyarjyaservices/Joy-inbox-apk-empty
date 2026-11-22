@@ -1,12 +1,13 @@
 import { auth } from "../firebase/config";
 const API_URL = import.meta.env.VITE_API_BASE_URL;
-async function call(path: string, method: string, body?: unknown, organizationId?: string) {
+async function call(path: string, method: string, body?: unknown, organizationId?: string, query?: Record<string, string>) {
   if (!API_URL) throw new Error("AWS API URL is not configured.");
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in again.");
   const token = await user.getIdToken();
   const url = new URL(API_URL.replace(/\/$/, "") + path);
   if (method === "GET" && organizationId) url.searchParams.set("organizationId", organizationId);
+  if (method === "GET" && query) Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, value));
   const response = await fetch(url.toString(), {
     method,
     headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
@@ -50,6 +51,16 @@ export async function uploadTenantQuickReplyImage(org: string, quickReplyId: str
   return call("/organizations/quick-replies/image", "POST", {
     organizationId: org, quickReplyId, mimeType: file.type, fileBase64
   });
+}
+export async function fetchTenantQuickReplyImage(org: string, quickReplyId: string): Promise<Blob> {
+  const result = await call("/organizations/quick-replies/image", "GET", undefined, org, { quickReplyId });
+  if (typeof result.fileBase64 !== "string" || !["image/jpeg", "image/png"].includes(result.mimeType)) {
+    throw new Error("Saved Quick Reply image preview is invalid.");
+  }
+  const binary = atob(result.fileBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: result.mimeType });
 }
 export async function sendTenantQuickReplyImage(org: string, chatId: string, quickReplyId: string) {
   return call("/organizations/send-quick-reply", "POST", { organizationId: org, chatId, quickReplyId });
