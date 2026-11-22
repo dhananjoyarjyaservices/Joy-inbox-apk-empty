@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Building2, LogOut, MessageCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
-import { connectWhatsApp, createOrganization, listOrganizations, type Organization } from "../services/organizations";
+import { connectWhatsApp, createOrganization, listOrganizations, listWhatsAppConnections, type Organization, type WhatsAppConnection } from "../services/organizations";
 import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
 
 export default function Setup() {
@@ -14,6 +14,8 @@ export default function Setup() {
   const [organizationId, setOrganizationId] = useState(() => getActiveOrganizationId());
   const [phoneNumberId, setPhoneNumberId] = useState("");
   const [accessToken, setAccessToken] = useState("");
+  const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -30,6 +32,17 @@ export default function Setup() {
   }
   useEffect(() => { void refresh(); }, []);
 
+  useEffect(() => {
+    if (!organizationId) { setConnections([]); return; }
+    let active = true;
+    setConnectionsLoading(true);
+    listWhatsAppConnections(organizationId)
+      .then(items => { if (active) setConnections(items); })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : "WhatsApp numbers could not load."); })
+      .finally(() => { if (active) setConnectionsLoading(false); });
+    return () => { active = false; };
+  }, [organizationId]);
+
   async function handleCreate(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
@@ -43,7 +56,8 @@ export default function Setup() {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
       await connectWhatsApp(organizationId, phoneNumberId.trim(), accessToken.trim());
-      setAccessToken(""); setNotice("WhatsApp number verified and connected. Opening your inbox..."); navigate("/inbox");
+      setAccessToken(""); setNotice("WhatsApp number verified and connected.");
+      setConnections(await listWhatsAppConnections(organizationId));
     } catch (e) { setError(e instanceof Error ? e.message : "WhatsApp connection failed."); }
     finally { setBusy(false); }
   }
@@ -58,6 +72,10 @@ export default function Setup() {
         <div className="mb-4 flex items-center gap-2"><Building2 className="text-[#075e54]"/><h2 className="text-lg font-semibold">Your business workspaces</h2><button onClick={() => void refresh()} className="ml-auto text-gray-500"><RefreshCw size={17}/></button></div>
         {loading ? <p className="text-sm text-gray-500">Loading workspaces...</p> : organizations.length ? <div className="space-y-2">{organizations.map((org) => <button key={org.id} onClick={() => { setOrganizationId(org.id); setActiveOrganizationId(org.id); }} className={`w-full rounded-xl border p-3 text-left ${organizationId === org.id ? "border-[#075e54] bg-[#effaf3]" : "border-gray-200"}`}><span className="block font-medium">{org.name}</span><span className="text-xs text-gray-500">{org.role} · {org.status}</span></button>)}</div> : <p className="text-sm text-gray-500">No workspace yet. Create your business workspace below.</p>}
         <form onSubmit={handleCreate} className="mt-5 flex gap-2"><input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Business name" className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-3 text-sm"/><button disabled={busy} className="rounded-xl bg-[#075e54] px-4 text-sm font-semibold text-white disabled:opacity-60">Create</button></form>
+      </section>
+      <section className="mb-5 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-semibold">Connected WhatsApp numbers</h2><span className="rounded-full bg-[#effaf3] px-3 py-1 text-xs font-medium text-[#075e54]">{connections.length} connected</span></div>
+        {connectionsLoading ? <p className="text-sm text-gray-500">Loading connected numbers...</p> : connections.length ? <div className="space-y-2">{connections.map(connection => <div key={connection.phoneNumberId} className="rounded-xl border border-gray-200 p-3"><div className="flex items-center justify-between gap-3"><p className="font-medium">{connection.displayPhoneNumber || "WhatsApp number"}</p><span className="text-xs text-green-700">Connected</span></div><p className="mt-1 text-sm text-gray-600">{connection.verifiedName || "Business name not provided"}</p><p className="mt-1 break-all text-xs text-gray-400">Phone Number ID: {connection.phoneNumberId}</p></div>)}</div> : <p className="text-sm text-gray-500">No WhatsApp numbers connected to this workspace yet.</p>}
       </section>
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="mb-1 text-lg font-semibold">Connect WhatsApp Cloud API</h2><p className="mb-4 text-sm text-gray-500">Select a workspace, then enter its Meta Phone Number ID and permanent access token. The token is stored encrypted on the server.</p>
