@@ -27,6 +27,7 @@ const {
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
+const { requireOrganization, requirePermission, saveWhatsAppConnection } = require("./tenancy");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
   claimSendRequest,
@@ -105,6 +106,42 @@ async function authenticateUser(event) {
     error.statusCode = 401;
     throw error;
   }
+}
+
+async function handleWhatsAppConnect(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "whatsapp:manage");
+  const phoneNumberId = String(body.phoneNumberId || "").trim();
+  const accessToken = String(body.accessToken || "").trim();
+  if (!phoneNumberId || !accessToken) {
+    return jsonResponse(event, 400, { error: "WhatsApp Phone Number ID and access token are required." });
+  }
+
+  // Verify the supplied token against Meta before saving any secret.
+  const version = process.env.GRAPH_API_VERSION || "v26.0";
+  const response = await fetch(
+    `https://graph.facebook.com/${version}/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number,verified_name`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const meta = await response.json().catch(() => ({}));
+  if (!response.ok || String(meta.id || "") !== phoneNumberId) {
+    return jsonResponse(event, 400, {
+      error: String(meta?.error?.message || "Meta could not verify this WhatsApp number and access token.").slice(0, 240)
+    });
+  }
+
+  const connection = await saveWhatsAppConnection(getDb(), organization, {
+    phoneNumberId,
+    accessToken,
+    displayPhoneNumber: meta.display_phone_number,
+    verifiedName: meta.verified_name
+  });
+  return jsonResponse(event, 200, { connection });
 }
 
 async function handleOrganizations(event) {
@@ -856,6 +893,17 @@ exports.handler = async (event) => {
 
   if (method === "OPTIONS") {
     return emptyResponse(event, 204);
+  }
+
+  if (method === "POST" && path.endsWith("/whatsapp/connect")) {
+    try {
+      return await handleWhatsAppConnect(event);
+    } catch (error) {
+      console.error("WhatsApp connection setup failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "WhatsApp connection could not be saved."
+      });
+    }
   }
 
   if ((method === "GET" || method === "POST") && path.endsWith("/organizations")) {
