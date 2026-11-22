@@ -48,6 +48,7 @@ export default function TenantInbox() {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [chats, setChats] = useState<TenantChat[]>([]);
   const [selected, setSelected] = useState("");
+  const [notificationMessageId, setNotificationMessageId] = useState(() => new URLSearchParams(window.location.search).get("messageId") || "");
   const [messages, setMessages] = useState<TenantMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -86,7 +87,10 @@ export default function TenantInbox() {
     if (!organization) return;
     return listenToTenantChats(organization.id, (items) => {
       setChats(items as TenantChat[]);
-      setSelected((current) => current && items.some((item) => item.id === current) ? current : items[0]?.id || "");
+      const requestedChatId = new URLSearchParams(window.location.search).get("chatId");
+      setSelected((current) => requestedChatId && items.some((item) => item.id === requestedChatId)
+        ? requestedChatId
+        : current && items.some((item) => item.id === current) ? current : items[0]?.id || "");
     }, (e) => setError(e.message));
   }, [organization]);
 
@@ -94,6 +98,15 @@ export default function TenantInbox() {
     if (!organization || !selected) { setMessages([]); return; }
     return listenToTenantMessages(organization.id, selected, (items) => setMessages(items as TenantMessage[]), (e) => setError(e.message));
   }, [organization, selected]);
+
+  useEffect(() => {
+    if (!notificationMessageId || !messages.length) return;
+    const target = document.getElementById("message-" + notificationMessageId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    setNotificationMessageId("");
+    navigate("/inbox", { replace: true });
+  }, [messages, notificationMessageId, navigate]);
 
   useEffect(() => {
     if (!organization) return;
@@ -239,7 +252,7 @@ export default function TenantInbox() {
         {currentChat ? <>
           <div className="flex items-center gap-3 border-b bg-white p-3"><button className="md:hidden" onClick={() => setSelected("")}>←</button><div className="grid h-9 w-9 place-items-center rounded-full bg-[#d9fdd3] font-semibold text-[#075e54]">{(currentChat.customerName || currentChat.customerPhone || selected).slice(0,1).toUpperCase()}</div><div><p className="font-semibold">{currentChat.customerName || currentChat.customerPhone || selected}</p><p className="text-xs text-gray-500">{currentChat.customerPhone || selected}</p></div></div>
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.map((message) => <div key={message.id} className={`flex ${message.direction === "outgoing" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm ${message.direction === "outgoing" ? "bg-[#d9fdd3]" : "bg-white"}`}>{mediaUrls[message.id] ? <div className="mb-2">{message.type === "image" ? <img src={mediaUrls[message.id]} alt={message.mediaFilename || "WhatsApp image"} className="max-h-64 max-w-full rounded-lg object-contain"/> : message.type === "video" ? <video src={mediaUrls[message.id]} controls className="max-h-64 max-w-full rounded-lg"/> : message.type === "audio" ? <audio src={mediaUrls[message.id]} controls className="max-w-full"/> : <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-[#075e54] underline"><FileText size={18}/>{message.mediaFilename || "Open attachment"}</a>}</div> : message.mediaId ? <p className="mb-2 text-xs text-gray-500">Loading attachment or preview unavailable</p> : null}<p className="whitespace-pre-wrap break-words text-sm">{message.text || (message.mediaId ? "" : `[${message.type || "Message"}]`)}</p><button onClick={() => void toggleMessagePin(message)} className="mt-1 text-[10px] text-gray-500">{(message as TenantMessage & { pinned?: boolean }).pinned ? "Unpin message" : "Pin message"}</button><p className="mt-1 text-right text-[10px] text-gray-400">{timeLabel(message.timestamp)} {message.status || ""}</p></div></div>)}
+            {messages.map((message) => <div key={message.id} id={"message-" + message.id} className={`flex ${message.direction === "outgoing" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm ${message.direction === "outgoing" ? "bg-[#d9fdd3]" : "bg-white"}`}>{mediaUrls[message.id] ? <div className="mb-2">{message.type === "image" ? <img src={mediaUrls[message.id]} alt={message.mediaFilename || "WhatsApp image"} className="max-h-64 max-w-full rounded-lg object-contain"/> : message.type === "video" ? <video src={mediaUrls[message.id]} controls className="max-h-64 max-w-full rounded-lg"/> : message.type === "audio" ? <audio src={mediaUrls[message.id]} controls className="max-w-full"/> : <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-[#075e54] underline"><FileText size={18}/>{message.mediaFilename || "Open attachment"}</a>}</div> : message.mediaId ? <p className="mb-2 text-xs text-gray-500">Loading attachment or preview unavailable</p> : null}<p className="whitespace-pre-wrap break-words text-sm">{message.text || (message.mediaId ? "" : `[${message.type || "Message"}]`)}</p><button onClick={() => void toggleMessagePin(message)} className="mt-1 text-[10px] text-gray-500">{(message as TenantMessage & { pinned?: boolean }).pinned ? "Unpin message" : "Pin message"}</button><p className="mt-1 text-right text-[10px] text-gray-400">{timeLabel(message.timestamp)} {message.status || ""}</p></div></div>)}
           </div>
           <form onSubmit={event => { if (attachment) { event.preventDefault(); void sendAttachment(); } else void submit(event); }} className="relative flex gap-2 border-t bg-white p-3"><label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full bg-gray-100 text-gray-600" title="Attach image, video, audio or document"><Paperclip size={18}/><input type="file" className="hidden" accept="image/jpeg,image/png,video/mp4,video/3gpp,audio/aac,audio/amr,audio/mpeg,audio/mp4,audio/ogg,application/pdf,text/plain,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={e => setAttachment(e.target.files?.[0] || null)}/></label><div className="relative min-w-0 flex-1"><input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={attachment ? 1024 : 4096} placeholder={attachment ? attachment.name + " · optional caption" : "Type a message"} className="w-full rounded-full border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#075e54]"/>{matchingReplies.length > 0 && <div className="absolute bottom-full left-0 z-20 mb-2 max-h-56 w-full overflow-y-auto rounded-xl border bg-white p-2 shadow-lg">{matchingReplies.map(reply => <button type="button" key={reply.id} onClick={() => setDraft(reply.message)} className="block w-full rounded-lg p-2 text-left hover:bg-gray-50"><span className="block text-sm font-medium">{reply.title} <span className="text-xs text-gray-400">/{reply.shortcut}</span></span><span className="block truncate text-xs text-gray-500">{reply.message}</span></button>)}</div>}</div><button disabled={sending || (!draft.trim() && !attachment)} className="grid h-11 w-11 place-items-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18}/></button></form>
         </> : <div className="grid flex-1 place-items-center text-center text-sm text-gray-500"><div><MessageCircle className="mx-auto mb-2 opacity-40" size={36}/><p>Select a conversation to start</p></div></div>}
