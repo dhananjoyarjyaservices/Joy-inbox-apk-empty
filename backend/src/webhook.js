@@ -598,5 +598,8 @@ async function receiveWebhook(event) {
 
 module.exports = {
   verifyWebhook,
-  receiveWebhook
+  receiveWebhook,
+  saveTenantIncomingMessage,
+  updateTenantMessageStatus,
+  processWebhookPayload
 };
