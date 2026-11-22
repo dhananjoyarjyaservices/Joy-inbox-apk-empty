@@ -41,10 +41,16 @@ async function addOrganizationMember(db, auth, organization, actor, input) {
   try {
     user = await auth.getUserByEmail(email);
   } catch (error) {
-    if (error.code === "auth/user-not-found") throw httpError("This person must create a Joy Inbox account before being added.", 404);
-    throw error;
+    if (error?.code === "auth/user-not-found") throw httpError("This person must create a Joy Inbox account before being added.", 404);
+    if (error?.code === "auth/user-disabled") throw httpError("This Firebase account is disabled and cannot be added.", 403);
+    if (error?.code === "auth/invalid-email") throw httpError("Firebase could not verify this email address.", 400);
+    if (["auth/too-many-requests", "auth/internal-error", "auth/network-request-failed"].includes(error?.code)) {
+      throw httpError("Firebase account lookup is temporarily unavailable. Please try again.", 503);
+    }
+    throw httpError("Firebase account lookup failed. Please try again later.", 502);
   }
-  if (!validUid(user.uid)) throw httpError("The selected account has an invalid user ID.", 400);
+  if (!user || !validUid(user.uid)) throw httpError("Firebase returned an invalid user account.", 502);
+  if (user.email && typeof user.email !== "string") throw httpError("Firebase returned invalid account details.", 502);
   const ref = organization.ref.collection("members").doc(user.uid);
   const indexRef = db.collection("users").doc(user.uid).collection("organizations").doc(organization.id);
   const now = new Date();
