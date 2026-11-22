@@ -29,6 +29,7 @@ const {
   fetchWhatsAppMediaForProxy,
   QUICK_REPLY_IMAGE_MAX_BYTES,
   saveQuickReplyImage,
+  getQuickReplyImage,
   deleteQuickReplyImage
 } = require("./media");
 const { OWNER_UID } = require("./owner");
@@ -620,6 +621,41 @@ async function sendTenantMediaMessage(event) {
   batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
   await batch.commit();
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
+}
+
+
+async function sendTenantQuickReplyImage(event) {
+  const body = parseBody(event);
+  const decoded = await authenticateUser(event);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse(event, 400, { error: "Quick Reply send details are required." });
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "messages:send");
+  if (typeof body.quickReplyId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(body.quickReplyId)) return jsonResponse(event, 400, { error: "A valid Quick Reply ID is required." });
+  const chatId = normalizePhoneNumber(body.chatId);
+  if (typeof body.chatId !== "string" || !/^\+?\d{6,20}$/.test(body.chatId) || !chatId) return jsonResponse(event, 400, { error: "A valid chat ID is required." });
+  const replyRef = organization.ref.collection("quickReplies").doc(body.quickReplyId);
+  const replySnapshot = await replyRef.get();
+  if (!replySnapshot.exists || !replySnapshot.data()?.hasImage) return jsonResponse(event, 404, { error: "This Quick Reply has no saved image." });
+  const saved = await getQuickReplyImage(organization.id, body.quickReplyId);
+  if (!saved) return jsonResponse(event, 404, { error: "Saved Quick Reply image was not found." });
+  const encoded = saved.buffer.toString("base64");
+  const forwarded = {
+    ...event,
+    body: JSON.stringify({
+      organizationId: organization.id,
+      to: chatId,
+      chatId,
+      fileBase64: encoded,
+      mimeType: saved.mimeType,
+      type: "image",
+      caption: String(replySnapshot.data().message || "").slice(0, 1024),
+      filename: "quick-reply-image",
+      source: "quick_reply",
+      clientMessageId: body.clientMessageId
+    }),
+    isBase64Encoded: false
+  };
+  return sendTenantMediaMessage(forwarded);
 }
 
 async function sendMessage(event) {
@@ -1372,6 +1408,12 @@ exports.handler = async (event) => {
       console.error("Tenant chat action failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Conversation action could not be completed." });
     }
+  }
+
+
+  if (method === "POST" && path.endsWith("/organizations/send-quick-reply")) {
+    try { return await sendTenantQuickReplyImage(event); }
+    catch (error) { console.error("Quick Reply image send failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Reply image could not be sent.", retryable: error.retryable ?? !error.definitive }); }
   }
 
   if (method === "POST" && path.endsWith("/organizations/send-media")) {
