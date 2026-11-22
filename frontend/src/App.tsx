@@ -29,7 +29,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/setup" element={<Setup />} />
+          <Route element={<ProtectedRoute allowNonOwner />}><Route path="/setup" element={<Setup />} /></Route>
 
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Dashboard />} />
