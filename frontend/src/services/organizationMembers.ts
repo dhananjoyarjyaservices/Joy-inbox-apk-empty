@@ -26,9 +26,22 @@ export interface OrganizationMember {
   joinedAt?: unknown;
 }
 
-export async function listOrganizationMembers(organizationId: string): Promise<OrganizationMember[]> {
-  const result = await request(`/organizations/members?organizationId=${encodeURIComponent(organizationId)}`);
-  return Array.isArray(result.members) ? result.members : [];
+export interface OrganizationMemberPage {
+  members: OrganizationMember[];
+  nextCursor: string | null;
+}
+
+export async function listOrganizationMembers(
+  organizationId: string,
+  options: { limit?: number; cursor?: string } = {}
+): Promise<OrganizationMemberPage> {
+  const params = new URLSearchParams({ organizationId, limit: String(options.limit ?? 25) });
+  if (options.cursor) params.set("cursor", options.cursor);
+  const result = await request(`/organizations/members?${params.toString()}`);
+  return {
+    members: Array.isArray(result.members) ? result.members : [],
+    nextCursor: typeof result.nextCursor === "string" ? result.nextCursor : null
+  };
 }
 export async function addOrganizationMember(organizationId: string, email: string, role: "admin" | "agent") {
   return request("/organizations/members", "POST", { organizationId, email, role });
