@@ -35,15 +35,18 @@ function validateMessageState(input) {
   if (!input || typeof input !== "object" || Array.isArray(input) ||
       Object.keys(input).length !== 3 ||
       typeof input.chatId !== "string" || !CHAT_ID_PATTERN.test(input.chatId) ||
-      typeof input.messageId !== "string" || !MESSAGE_ID_PATTERN.test(input.messageId) ||
-      typeof input.pinned !== "boolean") {
-    throw httpError("Valid chatId, messageId and pinned fields are required.", 400);
+      typeof input.messageId !== "string" || !MESSAGE_ID_PATTERN.test(input.messageId)) {
+    throw httpError("Valid chatId, messageId and a message state are required.", 400);
   }
-  return {
-    chatId: input.chatId,
-    messageId: input.messageId,
-    updates: { pinned: input.pinned, pinnedAt: input.pinned ? new Date() : null, updatedAt: new Date() }
-  };
+  const stateKey = Object.hasOwn(input, "pinned") ? "pinned" : "saved";
+  if (typeof input[stateKey] !== "boolean" || Object.hasOwn(input, stateKey === "pinned" ? "saved" : "pinned")) {
+    throw httpError("Provide exactly one boolean message state: pinned or saved.", 400);
+  }
+  const value = input[stateKey];
+  const updates = stateKey === "pinned"
+    ? { pinned: value, pinnedAt: value ? new Date() : null, updatedAt: new Date() }
+    : { saved: value, savedAt: value ? new Date() : null, updatedAt: new Date() };
+  return { chatId: input.chatId, messageId: input.messageId, updates };
 }
 
 function validateMessageIds(input) {
