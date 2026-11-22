@@ -150,14 +150,16 @@ async function updateOrganizationMemberRole(organization, actor, input) {
   }
   const ref = organization.ref.collection("members").doc(uid);
   const indexRef = organization.ref.firestore.collection("users").doc(uid).collection("organizations").doc(organization.id);
+  let targetEmail = "";
   await organization.ref.firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists || snapshot.data().status !== "active") throw httpError("Active member was not found.", 404);
     if (snapshot.data().role === "owner") throw httpError("The owner role cannot be changed.", 403);
+    targetEmail = String(snapshot.data().email || "");
     transaction.set(ref, { role, updatedAt: new Date() }, { merge: true });
     transaction.set(indexRef, { role }, { merge: true });
   });
-  await writeMemberAudit(organization, actor, "member.role_changed", { uid }, { role });
+  await writeMemberAudit(organization, actor, "member.role_changed", { uid, email: targetEmail }, { role });
   return { uid, role };
 }
 
@@ -168,15 +170,17 @@ async function removeOrganizationMember(organization, actor, input) {
   if (uid === organization.createdBy || uid === organization.uid) throw httpError("The organization owner cannot be removed.", 403);
   const ref = organization.ref.collection("members").doc(uid);
   const indexRef = organization.ref.firestore.collection("users").doc(uid).collection("organizations").doc(organization.id);
+  let targetEmail = "";
   await organization.ref.firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists || snapshot.data().status !== "active") throw httpError("Active member was not found.", 404);
     if (snapshot.data().role === "owner") throw httpError("The owner cannot be removed.", 403);
+    targetEmail = String(snapshot.data().email || "");
     const now = new Date();
     transaction.set(ref, { status: "removed", removedAt: now, updatedAt: now }, { merge: true });
     transaction.set(indexRef, { status: "removed" }, { merge: true });
   });
-  await writeMemberAudit(organization, actor, "member.removed", { uid }, {});
+  await writeMemberAudit(organization, actor, "member.removed", { uid, email: targetEmail }, {});
   return { uid, status: "removed" };
 }
 
