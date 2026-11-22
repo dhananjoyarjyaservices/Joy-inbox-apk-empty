@@ -59,3 +59,9 @@ The endpoint never returns the access token. Configure a base64-encoded 32-byte 
 ## Tenant credential transport foundation
 
 The WhatsApp API client now accepts an explicit credential object for text sends, media sends, connection checks and outbound media upload. The credential object is intended to be loaded by trusted backend code from the organization's encrypted settings after membership and permission checks. Legacy environment fallback remains for the existing owner-only routes during migration. This is only a transport-layer compatibility step: the current HTTP handlers do not yet load and pass tenant credentials, and must not be treated as multi-tenant messaging.
+
+## Tenant-scoped text messaging foundation
+
+The backend now exposes `POST /organizations/send` as a separate tenant-aware text-send route. It verifies the Firebase ID token, checks active organization membership and the `messages:send` permission, loads the organization's decrypted WhatsApp credentials server-side, and writes chats, messages, and idempotency records below `organizations/{organizationId}/chats/{chatId}`. Reply lookup is constrained to the same organization's message subcollection. The legacy `POST /send` route remains unchanged for the existing owner-only application.
+
+This is a backend foundation, not a completed SaaS chat rollout: the current frontend has not yet been switched to this endpoint or to organization-scoped Firestore listeners. Tenant media sending, webhook ingestion/status updates, tenant chat-state/delete routes, and media proxy/no-retention behavior remain outstanding. Do not treat the new endpoint as production-ready until automated tests and integration validation pass.
