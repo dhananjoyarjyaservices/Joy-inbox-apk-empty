@@ -11,7 +11,8 @@ service cloud.firestore {
     function isActiveOrganizationMember(organizationId) {
       return request.auth != null
         && exists(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid))
-        && get(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid)).data.status == "active";
+        && get(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid)).data.status == "active"
+        && get(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid)).data.role in ["owner", "admin", "agent"];
     }
 
     // Users can only read their own organization switcher index.
