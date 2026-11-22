@@ -158,3 +158,15 @@ The tenant inbox now has a media attachment picker and previews for supported im
 The Settings view now displays WhatsApp/Firestore connection diagnostics and lets owner/admin members configure the first-inbound greeting message. Agent users do not see the settings tab. Archived conversations can be shown separately from the inbox list.
 
 Remaining validation: execute backend tests and frontend TypeScript/Vite build; test the binary Lambda proxy through the actual API Gateway/Lambda integration; verify CORS_ORIGINS includes the deployed frontend origin; verify Meta's media host and MIME/signature behavior with real supported samples; test large-file behavior and role-based UI/API permissions. This remains non-production code until those checks pass.
+
+## Organization member management API
+
+Authenticated organization member endpoints are available at `/organizations/members`:
+
+- `GET` with `organizationId`: list organization members (owner/admin only).
+- `POST` with `organizationId`, `email`, and optional `role`: add an existing Firebase Authentication user as an agent or admin.
+- `PUT` with `organizationId`, `uid`, and `role`: change an active member between admin and agent.
+- `DELETE` with `organizationId` and `uid`: revoke the member's active membership.
+
+All routes require Firebase ID-token verification, active organization membership, and `members:manage`. Only an owner can grant the admin role. The owner role cannot be assigned, demoted, or removed through these routes. An invited person must first register for Joy Inbox with the supplied email; email delivery/invitation links are not implemented yet. Removal marks the member and their organization switcher index as removed; it does not delete the Firebase Authentication account or historical chat messages. Frontend member-management screens and real Firebase integration tests remain pending.
+
