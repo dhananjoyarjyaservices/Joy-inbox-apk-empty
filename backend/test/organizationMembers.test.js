@@ -211,8 +211,10 @@ test("removed member can be reactivated with both organization records restored"
   assert.equal(result.role, "admin");
   assert.equal(records.get("organizations/org_reactivate/members/returning_uid").status, "active");
   assert.equal(records.get("organizations/org_reactivate/members/returning_uid").role, "admin");
+  assert.equal(records.get("organizations/org_reactivate/members/returning_uid").removedAt, null);
   assert.equal(records.get("users/returning_uid/organizations/org_reactivate").status, "active");
   assert.equal(records.get("users/returning_uid/organizations/org_reactivate").role, "admin");
+  assert.equal(records.get("users/returning_uid/organizations/org_reactivate").removedAt, null);
 });
 
 test("failed duplicate-member transaction does not write either membership record", async () => {
