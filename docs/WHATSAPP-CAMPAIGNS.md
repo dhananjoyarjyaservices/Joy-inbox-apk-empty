@@ -60,7 +60,7 @@ Returns the latest 50 campaign summaries.
 
 ## Before production sending
 
-Add an authoritative organization-wide opt-out/suppression list, recipient-level delivery idempotency, queue scheduling and rate limits, pause/cancel controls, delivery webhook reconciliation, and a campaign worker. Never send marketing messages to recipients without valid WhatsApp opt-in. Use approved templates for business-initiated messages outside the customer-service window.
+The organization-scoped opt-out/suppression list is implemented for inbound STOP-style replies and draft filtering. Before production sending, the worker must re-check suppression immediately before each send, enforce recipient-level delivery idempotency, queue scheduling and rate limits, pause/cancel controls, delivery webhook reconciliation, and uncertain-delivery handling. Never send marketing messages to recipients without valid WhatsApp opt-in. Use approved templates for business-initiated messages outside the customer-service window.
 
 
 ## WhatsApp opt-out suppression
