@@ -42,7 +42,13 @@ function createInvitationUrl(baseUrl, organizationId, token) {
   if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) {
     throw invitationError("FRONTEND_BASE_URL must use HTTPS.", 503);
   }
-  const inviteUrl = new URL("/setup", url);
+  // Preserve a configured app base path (for example GitHub Pages project
+  // deployments) instead of forcing the route to the domain root.
+  const basePath = url.pathname.replace(/\\/+$/, "");
+  url.pathname = `${basePath}/setup`;
+  url.search = "";
+  url.hash = "";
+  const inviteUrl = url;
   // Keep the one-time token in the URL fragment: fragments are not sent in
   // HTTP requests or Referer headers, reducing exposure in proxy/server logs.
   const fragment = new URLSearchParams();
