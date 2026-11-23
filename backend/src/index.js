@@ -761,12 +761,26 @@ async function listTenantTeamNotificationDeliveries(event) {
     error.statusCode = 403;
     throw error;
   }
+  const query = event.queryStringParameters || {};
+  const parseDate = (value, endOfDay = false) => {
+    if (!value) return null;
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return undefined;
+    const date = new Date(value + (endOfDay ? "T23:59:59.999" : "T00:00:00.000"));
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  };
+  const from = parseDate(query.from);
+  const to = parseDate(query.to, true);
+  if (from === undefined || to === undefined || (from && to && from > to)) {
+    return jsonResponse(event, 400, { error: "Use valid date filters with From on or before To." });
+  }
   const membersSnapshot = await organization.ref.collection("members").limit(50).get();
   const memberRows = await Promise.all(membersSnapshot.docs.map(async memberDoc => {
     const member = memberDoc.data() || {};
     if (member.status && member.status !== "active") return null;
-    const snapshot = await memberDoc.ref.collection("notificationDeliveries")
-      .orderBy("createdAt", "desc").limit(100).get();
+    let deliveriesQuery = memberDoc.ref.collection("notificationDeliveries").orderBy("createdAt", "desc");
+    if (from) deliveriesQuery = deliveriesQuery.where("createdAt", ">=", from);
+    if (to) deliveriesQuery = deliveriesQuery.where("createdAt", "<=", to);
+    const snapshot = await deliveriesQuery.limit(500).get();
     const deliveries = snapshot.docs.map(doc => doc.data() || {});
     const total = deliveries.length;
     const delivered = deliveries.filter(item => item.status === "delivered").length;
@@ -787,8 +801,10 @@ async function listTenantTeamNotificationDeliveries(event) {
   return jsonResponse(event, 200, {
     agents,
     sampledMembers: membersSnapshot.size,
-    capped: membersSnapshot.size >= 50,
-    perMemberLimit: 100
+    capped: membersSnapshot.size >= 50 || memberRows.some(item => item && item.total >= 500),
+    perMemberLimit: 500,
+    from: query.from || null,
+    to: query.to || null
   });
 }
 
