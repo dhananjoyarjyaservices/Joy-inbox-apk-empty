@@ -17,6 +17,7 @@ This checklist separates code already present from work that requires real servi
 - [x] Stripe Checkout/Billing Portal/webhook foundation and workspace billing screen.
 - [x] Dry-run-first legacy data migration utility with media sanitization and post-write verification.
 - [x] EventBridge schedule templates for campaign, automation and SLA workers.
+- [x] Unit tests for Meta webhook HMAC verification, inbound media metadata-only persistence and duplicate webhook-message handling.
 
 ## Required before staging acceptance
 
@@ -25,7 +26,7 @@ This checklist separates code already present from work that requires real servi
 - [ ] Configure tenant encryption keyring and the same `CAMPAIGN_SUPPRESSION_HASH_KEY` in webhook/API and campaign worker environments.
 - [ ] Configure Stripe test-mode secret, webhook signing secret, real recurring Price IDs and HTTPS return URLs.
 - [ ] Deploy isolated staging Lambdas and EventBridge schedules; keep worker Lambdas private.
-- [ ] Run webhook signature, retry, duplicate delivery and tenant-isolation integration tests with Meta test assets.
+- [ ] Run webhook signature, retry, duplicate delivery and tenant-isolation integration tests with Meta test assets; committed unit tests do not replace this staging exercise.
 - [ ] Complete Stripe test checkout, portal, subscription update/cancel and failed-invoice webhook tests.
 - [ ] Exercise campaign STOP/START, suppression re-check, throttling, pause/cancel and uncertain-delivery reconciliation end-to-end.
 - [ ] Run load tests, concurrency tests and security review for all legacy routes.
