@@ -23,7 +23,8 @@ export default function Campaigns() {
   const [consentEvidence, setConsentEvidence] = useState("");
   const [consentStatus, setConsentStatus] = useState<"opted_in" | "opted_out">("opted_in");
   const [preview, setPreview] = useState<Record<string, { eligibleCount: number; excludedCount: number; message: string }> >({});
-  const [busy, setBusy] = useState(false);\n  const [scheduleAt, setScheduleAt] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
