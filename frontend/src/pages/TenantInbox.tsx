@@ -702,6 +702,11 @@ export default function TenantInbox() {
   async function loadCampaignRecipientReport(campaignId: string, cursor?: string) {
     if (!organization || campaignReportLoading) return;
     setCampaignReportLoading(true);
+    if (!cursor) {
+      setCampaignReportId(campaignId);
+      setCampaignReportRecipients([]);
+      setCampaignReportCursor(null);
+    }
     setError("");
     try {
       const result = await getOrganizationCampaignRecipients(organization.id, campaignId, cursor);
