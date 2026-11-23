@@ -40,6 +40,7 @@ const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, d
 const { updateTenantChatAssignment } = require("./tenantChatAssignment");
 const { requireOrganization, requirePermission, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
+const { isValidBase64, isAllowedTemplateMedia } = require("./templateValidation");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
   claimSendRequest,
@@ -716,9 +717,8 @@ async function sendTenantTemplate(event) {
   const buttonVariables = body.buttonVariables === undefined ? [] : body.buttonVariables;
   const headerMedia = body.headerMedia && typeof body.headerMedia === "object" ? body.headerMedia : null;
   const validVariables = values => Array.isArray(values) && values.length <= 100 && values.every(value => typeof value === "string" && value.trim() && value.length <= 1024);
-  const validBase64 = value => typeof value === "string" && value.length > 0 && value.length <= 5_600_000 && /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value) && Buffer.from(value, "base64").toString("base64") === value;
   if (!/^[a-z0-9_]{1,512}$/.test(templateName) || !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(language) ||
-      !validVariables(variables) || !validVariables(headerVariables) || !validVariables(buttonVariables) || (headerMedia && (!validBase64(headerMedia.base64) || typeof headerMedia.mimeType !== "string" || typeof headerMedia.filename !== "string"))) {
+      !validVariables(variables) || !validVariables(headerVariables) || !validVariables(buttonVariables) || (headerMedia && (!isValidBase64(headerMedia.base64) || typeof headerMedia.mimeType !== "string" || typeof headerMedia.filename !== "string"))) {
     return jsonResponse(event, 400, { error: "Template name, language or template variables are invalid." });
   }
   const db = getDb();
@@ -749,9 +749,8 @@ async function sendTenantTemplate(event) {
   if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length || (Boolean(mediaHeaderFormat) !== Boolean(headerMedia))) {
     return jsonResponse(event, 400, { error: `This template needs ${bodyCount} body, ${headerCount} header and ${urlButtons.length} URL button variable(s).` });
   }
-  const expectedMediaMimeTypes = mediaHeaderFormat === "IMAGE" ? ["image/jpeg", "image/png"] : mediaHeaderFormat === "VIDEO" ? ["video/mp4"] : mediaHeaderFormat === "DOCUMENT" ? ["application/pdf"] : [];
   const headerMediaMimeType = headerMedia ? String(headerMedia.mimeType).split(";")[0].trim().toLowerCase() : "";
-  if (headerMedia && !expectedMediaMimeTypes.includes(headerMediaMimeType)) {
+  if (headerMedia && !isAllowedTemplateMedia(headerMediaMimeType, mediaHeaderFormat)) {
     return jsonResponse(event, 400, { error: `This template requires a ${mediaHeaderFormat.toLowerCase()} header file.` });
   }
   const clientMessageId = getClientMessageId(body.clientMessageId);
