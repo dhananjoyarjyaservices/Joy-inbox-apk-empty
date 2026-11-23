@@ -23,7 +23,7 @@ function normalizeAutomationRule(input) {
   const steps = rawSteps.map((step) => typeof step === "string" ? step.trim() : "");
   if (steps.some((step) => !step || step.length > 1024)) throw httpError("Each reply step is required and must be 1,024 characters or fewer.", 400);
   if (!name || name.length > 80) throw httpError("Rule name is required (maximum 80 characters).", 400);
-  if (!keyword || keyword.length > 80 || /[\\u0000-\\u001f]/.test(keyword)) throw httpError("Keyword is required (maximum 80 characters).", 400);
+  if (!keyword || keyword.length > 80 || [...keyword].some((character) => character.charCodeAt(0) < 32)) throw httpError("Keyword is required (maximum 80 characters).", 400);
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw httpError("Enabled must be true or false.", 400);
   return { name, keyword, matchType, response: steps[0], steps, enabled: input.enabled !== false, priority };
 }
