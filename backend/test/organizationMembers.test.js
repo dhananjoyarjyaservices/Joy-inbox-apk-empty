@@ -386,3 +386,27 @@ test("member audit history returns bounded cursor pages in newest-first order", 
     { statusCode: 400 }
   );
 });
+
+
+test("admins cannot demote or remove another admin", async () => {
+  const { db, records } = fakeDb();
+  const organization = { id: "org_admin_boundary", ref: db.collection("organizations").doc("org_admin_boundary") };
+  await organization.ref.collection("members").doc("peer_admin").set({
+    uid: "peer_admin", email: "peer@example.com", role: "admin", status: "active"
+  });
+  await db.collection("users").doc("peer_admin").collection("organizations").doc("org_admin_boundary").set({
+    organizationId: "org_admin_boundary", role: "admin", status: "active"
+  });
+  const admin = { uid: "admin_uid", email: "admin@example.com", role: "admin" };
+  await assert.rejects(
+    () => updateOrganizationMemberRole(organization, admin, { uid: "peer_admin", role: "agent" }),
+    { statusCode: 403 }
+  );
+  await assert.rejects(
+    () => removeOrganizationMember(organization, admin, { uid: "peer_admin" }),
+    { statusCode: 403 }
+  );
+  assert.equal(records.get("organizations/org_admin_boundary/members/peer_admin").role, "admin");
+  assert.equal(records.get("organizations/org_admin_boundary/members/peer_admin").status, "active");
+  assert.equal(records.get("users/peer_admin/organizations/org_admin_boundary").status, "active");
+});
