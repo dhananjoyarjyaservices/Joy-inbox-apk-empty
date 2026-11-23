@@ -895,6 +895,14 @@ async function cancelOrganisationCampaign(db, user, orgId, campaignId) {
     tx.update(ref, { status: "cancelled", cancelledAt: now, cancelledBy: user.uid, updatedAt: now });
     result = { id: campaignId, status: "cancelled" };
   });
+  const queued = await ref.collection("recipients").where("status", "==", "queued").limit(5000).get();
+  for (let offset = 0; offset < queued.docs.length; offset += 400) {
+    const batch = db.batch();
+    queued.docs.slice(offset, offset + 400).forEach((doc) => {
+      batch.update(doc.ref, { status: "cancelled", cancelledAt: new Date(), cancellationReason: "campaign_cancelled" });
+    });
+    await batch.commit();
+  }
   return result;
 }
 
