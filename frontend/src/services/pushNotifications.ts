@@ -175,9 +175,15 @@ export async function listNotificationDeliveries(organizationId: string): Promis
   return Array.isArray(result.deliveries) ? result.deliveries : [];
 }
 
-export async function listTeamNotificationDeliveryAnalytics(organizationId: string): Promise<TeamNotificationDeliveryAnalytics[]> {
+export async function listTeamNotificationDeliveryAnalytics(
+  organizationId: string,
+  range: { from?: string; to?: string } = {},
+): Promise<TeamNotificationDeliveryAnalytics[]> {
+  const params = new URLSearchParams({ organizationId });
+  if (range.from) params.set("from", range.from);
+  if (range.to) params.set("to", range.to);
   const result = await authenticatedGet<{ agents?: TeamNotificationDeliveryAnalytics[] }>(
-    `/organizations/notifications/team-deliveries?organizationId=${encodeURIComponent(organizationId)}`
+    `/organizations/notifications/team-deliveries?${params.toString()}`
   );
   return Array.isArray(result.agents) ? result.agents : [];
 }
