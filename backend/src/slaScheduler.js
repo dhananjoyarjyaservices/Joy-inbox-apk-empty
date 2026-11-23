@@ -1,0 +1,116 @@
+const { getFirebaseAdmin, getDb } = require("./firebase");
+const { sendTenantSlaOverdueNotification } = require("./push");
+
+function timestampMillis(value) {
+  if (value && typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  return NaN;
+}
+
+async function checkOrganization(db, admin, organizationId) {
+  const cutoff = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
+  const chatsQuery = db.collection("organizations").doc(organizationId)
+    .collection("chats")
+    .where("responsePendingSince", "<=", cutoff);
+  let cursor = null;
+  let notified = 0;
+
+  // Process up to 1,000 chats per organization per scheduled invocation.
+  for (let page = 0; page < 10; page += 1) {
+    let query = chatsQuery.orderBy("responsePendingSince").limit(100);
+    if (cursor) query = query.startAfter(cursor);
+    const snapshot = await query.get();
+    if (snapshot.empty) break;
+
+    for (const document of snapshot.docs) {
+      const chat = document.data();
+      const assignedTo = typeof chat.assignedTo === "string" ? chat.assignedTo : "";
+      const pendingMillis = timestampMillis(chat.responsePendingSince);
+      if (!assignedTo || !Number.isFinite(pendingMillis) ||
+          pendingMillis > Date.now() - 5 * 60 * 1000 ||
+          chat.archived === true || chat.status === "resolved") continue;
+
+      const chatRef = document.ref;
+      const claimed = await db.runTransaction(async (transaction) => {
+        const latest = await transaction.get(chatRef);
+        if (!latest.exists) return false;
+        const current = latest.data();
+        if (timestampMillis(current.responsePendingSince) !== pendingMillis ||
+            current.assignedTo !== assignedTo || current.archived === true ||
+            current.status === "resolved" ||
+            current.slaOverdueNotifiedFor === pendingMillis) return false;
+        transaction.update(chatRef, {
+          slaOverdueNotifiedFor: pendingMillis,
+          slaOverdueNotifiedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return true;
+      });
+      if (!claimed) continue;
+
+      try {
+        const member = await db.collection("organizations").doc(organizationId)
+          .collection("members").doc(assignedTo).get();
+        if (!member.exists || member.get("status") !== "active" ||
+            !["owner", "admin", "agent"].includes(member.get("role"))) continue;
+
+        const delivered = await sendTenantSlaOverdueNotification(
+          organizationId,
+          assignedTo,
+          document.id,
+          String(chat.customerName || chat.customerPhone || document.id)
+        );
+        if (delivered > 0) {
+          notified += 1;
+        } else {
+          await clearClaim(db, admin, chatRef, pendingMillis);
+        }
+      } catch (error) {
+        await clearClaim(db, admin, chatRef, pendingMillis);
+        throw error;
+      }
+    }
+
+    if (snapshot.size < 100) break;
+    cursor = snapshot.docs[snapshot.docs.length - 1];
+  }
+  return notified;
+}
+
+async function clearClaim(db, admin, chatRef, pendingMillis) {
+  await db.runTransaction(async (transaction) => {
+    const latest = await transaction.get(chatRef);
+    if (latest.exists && latest.get("slaOverdueNotifiedFor") === pendingMillis) {
+      transaction.update(chatRef, {
+        slaOverdueNotifiedFor: admin.firestore.FieldValue.delete(),
+        slaOverdueNotifiedAt: admin.firestore.FieldValue.delete()
+      });
+    }
+  });
+}
+
+async function runScheduledSlaChecks() {
+  const admin = getFirebaseAdmin();
+  const db = getDb();
+  let organizationsChecked = 0;
+  let notificationsSent = 0;
+  let cursor = null;
+
+  // Page organizations too, so large SaaS deployments are not limited to one page.
+  while (true) {
+    let query = db.collection("organizations").orderBy(admin.firestore.FieldPath.documentId()).limit(100);
+    if (cursor) query = query.startAfter(cursor);
+    const snapshot = await query.get();
+    if (snapshot.empty) break;
+
+    for (const organization of snapshot.docs) {
+      notificationsSent += await checkOrganization(db, admin, organization.id);
+      organizationsChecked += 1;
+    }
+    if (snapshot.size < 100) break;
+    cursor = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return { success: true, organizationsChecked, notificationsSent };
+}
+
+module.exports = { runScheduledSlaChecks };
