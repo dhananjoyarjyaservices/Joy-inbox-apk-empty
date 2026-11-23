@@ -21,7 +21,7 @@ test("recognizes explicit START/UNSTOP opt-in requests", () => {
 });
 
 test("recognizes common WhatsApp opt-out keywords without matching ordinary text", () => {
-  for (const value of ["STOP", "stop all", "Unsubscribe!", "cancel", "END", "quit", "opt out", "Please stop sending me messages", "dont message me"]) {
+  for (const value of ["STOP", "stop all", "Unsubscribe!", "cancel", "END", "quit", "opt out", "Please stop sending me messages", "dont message me", "don\'t message me"]) {
     assert.equal(isWhatsAppOptOutMessage(value), true, value);
   }
   for (const value of ["please stop by tomorrow", "stopwatch", "I need help", ""]) {
