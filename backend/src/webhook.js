@@ -442,6 +442,44 @@ async function maybeRunOrganisationAutomation(orgId, phone, message, contactName
   }
 }
 
+function shouldAdvanceDeliveryStatus(current, next) {
+  const rank = { queued: 0, sending: 1, sent: 2, delivered: 3, read: 4, failed: 5, cancelled: 6 };
+  if (!Object.prototype.hasOwnProperty.call(rank, next)) return false;
+  if (current === "read" || current === "cancelled" || current === "failed") return false;
+  if (next === "failed") return current !== "delivered" && current !== "read";
+  return rank[next] > (rank[current] ?? -1);
+}
+
+async function updateCampaignRecipientStatus(db, orgId, phone, messageId, nextStatus, timestamp) {
+  const matches = await db.collectionGroup("recipients")
+    .where("messageId", "==", messageId).limit(10).get();
+  for (const recipientDoc of matches.docs) {
+    const campaignRef = recipientDoc.ref.parent.parent;
+    if (!campaignRef || campaignRef.parent.id !== orgId) continue;
+    await db.runTransaction(async (tx) => {
+      const [recipientSnap, campaignSnap] = await Promise.all([
+        tx.get(recipientDoc.ref), tx.get(campaignRef)
+      ]);
+      if (!recipientSnap.exists || !campaignSnap.exists) return;
+      const recipient = recipientSnap.data();
+      if (normalizePhoneNumber(recipient.phone) !== phone) return;
+      if (!shouldAdvanceDeliveryStatus(recipient.status, nextStatus)) return;
+      tx.update(recipientDoc.ref, {
+        status: nextStatus,
+        statusUpdatedAt: timestamp,
+        updatedAt: timestamp,
+        ...(nextStatus === "failed" ? { failedAt: timestamp } : {}),
+        ...(nextStatus === "delivered" ? { deliveredAt: timestamp } : {}),
+        ...(nextStatus === "read" ? { readAt: timestamp } : {})
+      });
+      tx.set(campaignRef, {
+        lastDeliveryStatusAt: timestamp,
+        updatedAt: timestamp
+      }, { merge: true });
+    });
+  }
+}
+
 async function processOrganisationWebhookChange(orgId, value) {
   const db = getDb();
   const orgRef = db.collection("organisations").doc(orgId);
@@ -536,6 +574,7 @@ async function processOrganisationWebhookChange(orgId, value) {
       if ((rank[nextStatus] ?? -1) <= (rank[current] ?? -1)) return;
       tx.update(messageRef, { status: nextStatus, statusUpdatedAt: new Date() });
     });
+    await updateCampaignRecipientStatus(db, orgId, phone, messageId, nextStatus, new Date());
   }
 }
 
