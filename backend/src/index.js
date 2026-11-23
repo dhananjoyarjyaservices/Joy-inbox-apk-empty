@@ -729,6 +729,31 @@ async function registerTenantFcmToken(event) {
   return jsonResponse(event, 200, { success: true });
 }
 
+async function handleOrganizationNotificationPreferences(event) {
+  const decoded = await authenticateUser(event);
+  const method = getMethod(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  if (!["GET", "PUT"].includes(method)) return jsonResponse(event, 405, { error: "Method not allowed." });
+  const organization = await requireOrganization(getDb(), decoded, method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId);
+  requirePermission(organization, "chats:read");
+  const db = getDb();
+  const ref = organization.ref.collection("members").doc(decoded.uid).collection("settings").doc("notifications");
+  if (method === "GET") {
+    const preferences = await getTenantNotificationPreferences(db, organization.id, decoded.uid);
+    return jsonResponse(event, 200, { preferences });
+  }
+  for (const key of ["assignment", "status", "sla"]) {
+    if (typeof body[key] !== "boolean") return jsonResponse(event, 400, { error: `Preference '${key}' must be true or false.` });
+  }
+  const preferences = normalizeNotificationPreferences(body);
+  await ref.set({ ...preferences, updatedAt: new Date() }, { merge: true });
+  return jsonResponse(event, 200, { preferences });
+}
+
 async function handleOrganizationNotifications(event) {
   const decoded = await authenticateUser(event);
   const method = getMethod(event);
@@ -742,6 +767,7 @@ async function handleOrganizationNotifications(event) {
   requirePermission(organization, "chats:read");
   const db = getDb();
   const readRef = organization.ref.collection("members").doc(decoded.uid).collection("notificationReads");
+  const preferences = await getTenantNotificationPreferences(db, organization.id, decoded.uid);
   if (method === "POST") {
     const now = new Date();
     if (body.markAllRead === true) {
@@ -787,8 +813,8 @@ async function handleOrganizationNotifications(event) {
   for (const doc of auditSnapshot.docs) {
     const item = doc.data() || {};
     const assignedTo = String(item.details?.assignedTo || item.targetUid || "");
-    const relevant = item.action === "chat.assigned" ? assignedTo === decoded.uid
-      : item.action === "chat.status_changed" && String(item.actorUid || "") !== decoded.uid;
+    const relevant = item.action === "chat.assigned" ? preferences.assignment && assignedTo === decoded.uid
+      : item.action === "chat.status_changed" && preferences.status && String(item.actorUid || "") !== decoded.uid;
     if (!relevant) continue;
     const createdAt = item.createdAt?.toDate ? item.createdAt.toDate().toISOString() : new Date(item.createdAt || 0).toISOString();
     const chatId = String(item.details?.chatId || "");
@@ -801,6 +827,7 @@ async function handleOrganizationNotifications(event) {
     });
   }
   for (const doc of slaSnapshot.docs) {
+    if (!preferences.sla) continue;
     const item = doc.data() || {};
     const createdAt = item.createdAt?.toDate ? item.createdAt.toDate().toISOString() : new Date(item.createdAt || 0).toISOString();
     notifications.push({
@@ -2324,6 +2351,11 @@ exports.handler = async (event) => {
     } finally {
       logLatency("lambda_send_ms", startedAt);
     }
+  }
+
+  if (["GET", "PUT"].includes(method) && path.endsWith("/organizations/notifications/preferences")) {
+    try { return await handleOrganizationNotificationPreferences(event); }
+    catch (error) { return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Notification preferences could not be loaded." }); }
   }
 
   if (["GET", "POST"].includes(method) && path.endsWith("/organizations/notifications")) {
