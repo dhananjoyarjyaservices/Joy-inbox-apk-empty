@@ -11,6 +11,8 @@ All endpoints below require a Firebase ID token in the `Authorization: Bearer <i
 | POST | `/organisations` | Create an organisation. Body: `{ "name": "Business name" }`. Creator becomes owner. |
 | GET | `/organisations` | List active organisations for the signed-in user. |
 | POST | `/organisations/:orgId/invitations` | Owner/admin creates an invitation. Body: `{ "email": "agent@example.com", "role": "agent" }`. Roles: admin, manager, agent. |
+| GET | `/organisations/:orgId/invitations` | Owner/admin lists the latest 100 invitations; pending records past their expiry are returned as expired. |
+| DELETE | `/organisations/:orgId/invitations/:invitationId` | Owner/admin revokes a pending invitation. Expired invitations cannot be accepted and can be replaced with a new invitation. |
 | POST | `/organisations/:orgId/invitations/accept` | Accept an invitation using `{ "invitationId": "..." }`. Email must be verified and match the invitation. |
 | GET | `/organisations/:orgId/members` | List active members for active organisation members. |
 | PUT | `/organisations/:orgId/members/:uid` | Owner/admin changes a member role. Body: `{ "role": "manager" }`. |
@@ -155,7 +157,7 @@ The Business setup page now provides role management and member removal controls
 - Removing a member sets their membership status to `removed`; the member immediately fails active-membership checks and loses access to organisation-scoped APIs and Firestore reads.
 - The backend enforces these permissions independently of the UI. Managers and agents cannot change roles or remove members.
 
-Role changes and removals are committed by the backend using the Firebase Admin SDK. Invitation email delivery and pending-invitation cancellation are not implemented yet.
+Role changes and removals are committed by the backend using the Firebase Admin SDK. Invitation email delivery is not configured. Owners/admins can list the latest 100 invitation records, see expired/revoked/accepted states, revoke pending invitations, and create a replacement invitation for an expired or revoked invite. A replacement gets a new ID and must still be shared through a trusted channel.
 
 
 ## Team activity audit log
