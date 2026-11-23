@@ -8,7 +8,7 @@ function httpError(message, statusCode) {
 
 function contactInput(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Contact details are required.", 400);
-  const allowed = ["name", "phone", "email", "notes", "source"];
+  const allowed = ["name", "phone", "email", "notes", "source", "tags"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Unsupported contact field.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const rawPhone = typeof input.phone === "string" ? input.phone.trim().replace(/[\s().-]/g, "") : "";
@@ -16,11 +16,15 @@ function contactInput(input) {
   const email = typeof input.email === "string" ? input.email.trim() : "";
   const notes = typeof input.notes === "string" ? input.notes.trim() : "";
   const source = input.source === "whatsapp" ? "whatsapp" : "local";
+  if (input.tags !== undefined && (!Array.isArray(input.tags) || input.tags.length > 20 || input.tags.some((tag) => typeof tag !== "string" || tag.trim().length > 30))) {
+    throw httpError("Contact tags must be up to 20 labels, each 30 characters or fewer.", 400);
+  }
+  const tags = [...new Map((input.tags || []).map((tag) => tag.trim()).filter(Boolean).map((tag) => [tag.toLowerCase(), tag])).values()];
   if (!name || name.length > 100) throw httpError("Contact name is required (maximum 100 characters).", 400);
   if (!/^\+[1-9]\d{6,14}$/.test(phone)) throw httpError("Enter a valid international phone number.", 400);
   if (email.length > 254 || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw httpError("Enter a valid email address.", 400);
   if (notes.length > 1000) throw httpError("Contact notes are too long.", 400);
-  return { name, phone, phoneId: phone.slice(1), email, notes, source };
+  return { name, phone, phoneId: phone.slice(1), email, notes, source, tags };
 }
 
 function quickReplyInput(input) {
