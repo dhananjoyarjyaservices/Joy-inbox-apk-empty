@@ -45,10 +45,10 @@ export default function Setup() {
     setBusy(true); setError(""); setNotice("");
     void acceptOrganizationInvitation(inviteOrganizationId, inviteToken)
       .then(async () => {
+        await refresh();
         setActiveOrganizationId(inviteOrganizationId);
         setOrganizationId(inviteOrganizationId);
         setNotice("Invitation accepted. Your workspace access is ready.");
-        await refresh();
         navigate("/inbox", { replace: true });
       })
       .catch(e => setError(e instanceof Error ? e.message : "Invitation could not be accepted. Sign in with the invited verified email address."))
