@@ -77,6 +77,10 @@ async function createCheckoutSession({ organization, decoded, planKey, env = pro
   }
   const subscriptionRef = organization.ref.collection("billing").doc("subscription");
   const existing = await subscriptionRef.get();
+  const existingStatus = existing.exists ? String(existing.get("status") || "") : "";
+  if (["active", "trialing", "past_due", "unpaid"].includes(existingStatus)) {
+    throw billingError("This workspace already has a subscription. Use the Stripe Billing Portal to change or update it.", 409);
+  }
   const customerId = existing.exists ? String(existing.get("stripeCustomerId") || "") : "";
   const params = {
     mode: "subscription",
