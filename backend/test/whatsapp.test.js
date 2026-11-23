@@ -97,7 +97,7 @@ test("Meta 4xx send response is a definitive rejection", async () => {
         accessToken: "EAA-test-token",
         phoneNumberId: "123456789012345"
       }),
-      (error) => error.definitive === true && error.retryable === true
+      (error) => error.definitive === true && error.retryable === false
     );
   } finally {
     global.fetch = originalFetch;
@@ -138,7 +138,7 @@ test("Meta rate-limit response is a definitive rejection", async () => {
         accessToken: "EAA-test-token",
         phoneNumberId: "123456789012345"
       }),
-      (error) => error.definitive === true && error.retryable === false
+      (error) => error.definitive === true && error.retryable === true
     );
   } finally {
     global.fetch = originalFetch;
