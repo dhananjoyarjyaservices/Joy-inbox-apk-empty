@@ -10,7 +10,9 @@ import {
   listMembers,
   listOrganisations,
   updateOrganisationMemberRole,
-  removeOrganisationMember,\n  getOrganisationAuditLogs,\n  type OrganisationAuditLog,
+  removeOrganisationMember,
+  getOrganisationAuditLogs,
+  type OrganisationAuditLog,
   type Organisation,
   type OrganisationMember,
   getOrganisationWhatsAppConnection,
@@ -23,7 +25,8 @@ export default function Setup() {
   const navigate = useNavigate();
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [members, setMembers] = useState<OrganisationMember[]>([]);\n  const [auditLogs, setAuditLogs] = useState<OrganisationAuditLog[]>([]);
+  const [members, setMembers] = useState<OrganisationMember[]>([]);
+  const [auditLogs, setAuditLogs] = useState<OrganisationAuditLog[]>([]);
   const [orgName, setOrgName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "manager" | "agent">("agent");
