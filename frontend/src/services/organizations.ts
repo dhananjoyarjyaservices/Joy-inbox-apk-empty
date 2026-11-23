@@ -113,3 +113,13 @@ export async function listWhatsAppConnections(organizationId: string): Promise<W
   const result = await request(`/whatsapp/connections?organizationId=${encodeURIComponent(organizationId)}`);
   return Array.isArray(result.connections) ? result.connections : [];
 }
+
+export interface OrganizationSlaSettings { enabled: boolean; targetMinutes: number; }
+export async function getOrganizationSlaSettings(organizationId: string): Promise<OrganizationSlaSettings> {
+  const result = await request(`/organizations/sla/settings?organizationId=${encodeURIComponent(organizationId)}`);
+  return result.settings || { enabled: true, targetMinutes: 5 };
+}
+export async function saveOrganizationSlaSettings(organizationId: string, settings: OrganizationSlaSettings): Promise<OrganizationSlaSettings> {
+  const result = await request("/organizations/sla/settings", "PUT", { organizationId, ...settings });
+  return result.settings;
+}
