@@ -60,6 +60,27 @@ async function requireMembership(db, orgId, uid, allowedRoles = []) {
   return membership;
 }
 
+
+async function recordOrganisationAudit(db, orgId, user, action, target = {}) {
+  const ref = db.collection("organisations").doc(orgId).collection("auditLogs").doc();
+  await ref.create({
+    action,
+    actorUid: user.uid,
+    actorEmail: String(user.email || ""),
+    targetUid: String(target.uid || ""),
+    targetEmail: String(target.email || ""),
+    details: target.details && typeof target.details === "object" ? target.details : {},
+    createdAt: new Date()
+  });
+}
+
+async function listOrganisationAuditLogs(db, user, orgId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin"]);
+  const snapshot = await db.collection("organisations").doc(orgId)
+    .collection("auditLogs").orderBy("createdAt", "desc").limit(100).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
 async function createOrganisation(db, user, body) {
   if (user.email_verified !== true) fail("Verify your email before creating an organisation.", 403);
   const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -112,14 +133,16 @@ async function createInvitation(db, user, orgId, body) {
   const invitationId = crypto.randomUUID();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  await db.collection("organisations").doc(orgId).collection("invitations").doc(invitationId).create({
-    email,
-    role,
-    status: "pending",
-    createdBy: user.uid,
-    createdAt: now,
-    expiresAt
+  const batch = db.batch();
+  const orgRef = db.collection("organisations").doc(orgId);
+  batch.create(orgRef.collection("invitations").doc(invitationId), {
+    email, role, status: "pending", createdBy: user.uid, createdAt: now, expiresAt
   });
+  batch.create(orgRef.collection("auditLogs").doc(), {
+    action: "invitation.created", actorUid: user.uid, actorEmail: String(user.email || ""),
+    targetUid: "", targetEmail: email, details: { role, invitationId }, createdAt: now
+  });
+  await batch.commit();
   return { invitationId, email, role, expiresAt: expiresAt.toISOString() };
 }
 
@@ -132,6 +155,7 @@ async function acceptInvitation(db, user, orgId, body) {
   const orgRef = db.collection("organisations").doc(orgId);
   const inviteRef = orgRef.collection("invitations").doc(invitationId);
   const memberRef = orgRef.collection("members").doc(user.uid);
+  const auditRef = orgRef.collection("auditLogs").doc();
   const now = new Date();
   let role;
   await db.runTransaction(async (tx) => {
@@ -158,6 +182,7 @@ async function acceptInvitation(db, user, orgId, body) {
       joinedAt: now
     });
     tx.update(inviteRef, { status: "accepted", acceptedBy: user.uid, acceptedAt: now });
+    tx.create(auditRef, { action: "invitation.accepted", actorUid: user.uid, actorEmail: String(user.email).toLowerCase(), targetUid: user.uid, targetEmail: String(user.email).toLowerCase(), details: { role, invitationId }, createdAt: now });
   });
   return { organisationId: orgId, role, status: "active" };
 }
@@ -775,11 +800,19 @@ async function manageOrganisationMember(db, user, orgId, memberUid, body, action
     const role = String(body.role || "");
     if (!["admin", "manager", "agent"].includes(role)) fail("Role must be admin, manager or agent.");
     if (actor.role === "admin" && role === "admin") fail("Only the organisation owner can promote a member to admin.", 403);
-    await memberRef.set({ role, roleUpdatedAt: new Date(), roleUpdatedBy: user.uid }, { merge: true });
+    const now = new Date();
+    const batch = db.batch();
+    batch.set(memberRef, { role, roleUpdatedAt: now, roleUpdatedBy: user.uid }, { merge: true });
+    batch.create(orgRef.collection("auditLogs").doc(), { action: "member.role_changed", actorUid: user.uid, actorEmail: String(user.email || ""), targetUid: memberUid, targetEmail: String(target.email || ""), details: { previousRole: target.role, newRole: role }, createdAt: now });
+    await batch.commit();
     return { uid: memberUid, role, status: "active" };
   }
   if (action === "remove") {
-    await memberRef.set({ status: "removed", removedAt: new Date(), removedBy: user.uid }, { merge: true });
+    const now = new Date();
+    const batch = db.batch();
+    batch.set(memberRef, { status: "removed", removedAt: now, removedBy: user.uid }, { merge: true });
+    batch.create(orgRef.collection("auditLogs").doc(), { action: "member.removed", actorUid: user.uid, actorEmail: String(user.email || ""), targetUid: memberUid, targetEmail: String(target.email || ""), details: { previousRole: target.role }, createdAt: now });
+    await batch.commit();
     return { uid: memberUid, status: "removed" };
   }
   fail("Unsupported team member action.");
@@ -802,8 +835,8 @@ async function handleTenantRoute(event) {
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
   const campaignsMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/campaigns(?:\/([A-Za-z0-9_-]{10,40})\/preview)?$/);
   const consentMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/contacts\/(\d{6,20})\/consent$/);
-  const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || memberActionMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch)) return null;
+  const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);\n  const auditMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/audit-logs$/);
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || memberActionMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch || auditMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -830,7 +863,7 @@ async function handleTenantRoute(event) {
       const result = await updateOrganisationContactConsent(db, user, consentMatch[1], consentMatch[2], parseBody(event));
       return jsonResponse(event, 200, { success: true, consent: result });
     }
-    if (automationMatch && method === "GET") {
+    if (auditMatch && method === "GET") {\n      const auditLogs = await listOrganisationAuditLogs(db, user, auditMatch[1]);\n      return jsonResponse(event, 200, { auditLogs });\n    }\n    if (automationMatch && method === "GET") {
       const settings = await getOrganisationAutomation(db, user, automationMatch[1]);
       return jsonResponse(event, 200, { settings });
     }
