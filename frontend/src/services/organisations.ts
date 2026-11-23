@@ -284,3 +284,26 @@ export async function previewOrganisationCampaign(orgId: string, campaignId: str
   );
   return result.preview;
 }
+
+
+export interface OrganisationAutomationSettings {
+  greetingEnabled: boolean;
+  greetingText: string;
+  awayEnabled: boolean;
+  awayText: string;
+  keywordRules: { keyword: string; reply: string; enabled: boolean }[];
+}
+
+export async function getOrganisationAutomation(orgId: string) {
+  const result = await request<{ settings: OrganisationAutomationSettings }>(
+    `/organisations/${encodeURIComponent(orgId)}/automation`,
+  );
+  return result.settings;
+}
+
+export async function saveOrganisationAutomation(orgId: string, settings: OrganisationAutomationSettings) {
+  return request<{ success: boolean; settings: OrganisationAutomationSettings }>(
+    `/organisations/${encodeURIComponent(orgId)}/automation`,
+    { method: "PUT", body: JSON.stringify(settings) },
+  );
+}
