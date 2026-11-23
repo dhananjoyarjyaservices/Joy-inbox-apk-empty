@@ -77,7 +77,19 @@ export default function OrganisationInbox() {
   const [tagDraft, setTagDraft] = useState("");
   const [savingTags, setSavingTags] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
-  const [uploadingMedia, setUploadingMedia] = useState(false);\n  const [teamMembers, setTeamMembers] = useState<OrganisationMember[]>([]);\n  const [templateName, setTemplateName] = useState("");\n  const [templateLanguage, setTemplateLanguage] = useState("en_US");\n  const [templateParameters, setTemplateParameters] = useState("");\n  const [interactiveKind, setInteractiveKind] = useState<"button" | "list">("button");\n  const [interactiveBody, setInteractiveBody] = useState("");\n  const [interactiveButton1, setInteractiveButton1] = useState("Yes");\n  const [interactiveButton2, setInteractiveButton2] = useState("No");\n  const [interactiveList1, setInteractiveList1] = useState("Option 1");\n  const [interactiveList2, setInteractiveList2] = useState("Option 2");\n  const [structuredMode, setStructuredMode] = useState<"template" | "interactive" | "">("");\n  const [sendingStructured, setSendingStructured] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<OrganisationMember[]>([]);
+  const [templateName, setTemplateName] = useState("");
+  const [templateLanguage, setTemplateLanguage] = useState("en_US");
+  const [templateParameters, setTemplateParameters] = useState("");
+  const [interactiveKind, setInteractiveKind] = useState<"button" | "list">("button");
+  const [interactiveBody, setInteractiveBody] = useState("");
+  const [interactiveButton1, setInteractiveButton1] = useState("Yes");
+  const [interactiveButton2, setInteractiveButton2] = useState("No");
+  const [interactiveList1, setInteractiveList1] = useState("Option 1");
+  const [interactiveList2, setInteractiveList2] = useState("Option 2");
+  const [structuredMode, setStructuredMode] = useState<"template" | "interactive" | "">("");
+  const [sendingStructured, setSendingStructured] = useState(false);
 
   const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
   const filteredChats = useMemo(() => { const term = chatSearch.trim().toLowerCase(); return term ? chats.filter((chat) => [chat.customerName, chat.customerPhone, chat.lastMessage, ...(chat.tags || [])].some((value) => String(value || "").toLowerCase().includes(term))) : chats; }, [chats, chatSearch]);
