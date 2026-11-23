@@ -99,7 +99,7 @@ export interface TenantInternalNote {
   text: string;
   authorUid: string;
   authorName: string;
-  createdAt: string | { toDate?: () => Date } | Date;
+  createdAt: string;
   visibility: "internal";
 }
 export async function listTenantInternalNotes(org: string, chatId: string): Promise<TenantInternalNote[]> {
