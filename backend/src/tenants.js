@@ -760,6 +760,31 @@ async function saveOrganisationAutomation(db, user, orgId, body) {
   return settings;
 }
 
+
+async function manageOrganisationMember(db, user, orgId, memberUid, body, action) {
+  const actor = await requireMembership(db, orgId, user.uid, ["owner", "admin"]);
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(memberUid)) fail("Invalid team member ID.");
+  const orgRef = db.collection("organisations").doc(orgId);
+  const memberRef = orgRef.collection("members").doc(memberUid);
+  const [orgSnapshot, memberSnapshot] = await Promise.all([orgRef.get(), memberRef.get()]);
+  if (!orgSnapshot.exists || !memberSnapshot.exists || memberSnapshot.data().status !== "active") fail("Active team member was not found.", 404);
+  const target = memberSnapshot.data();
+  if (memberUid === orgSnapshot.data().ownerUid || target.role === "owner") fail("The organisation owner cannot be changed or removed.", 403);
+  if (actor.role === "admin" && ["admin", "owner"].includes(target.role)) fail("Admins can manage managers and agents only.", 403);
+  if (action === "role") {
+    const role = String(body.role || "");
+    if (!["admin", "manager", "agent"].includes(role)) fail("Role must be admin, manager or agent.");
+    if (actor.role === "admin" && role === "admin") fail("Only the organisation owner can promote a member to admin.", 403);
+    await memberRef.set({ role, roleUpdatedAt: new Date(), roleUpdatedBy: user.uid }, { merge: true });
+    return { uid: memberUid, role, status: "active" };
+  }
+  if (action === "remove") {
+    await memberRef.set({ status: "removed", removedAt: new Date(), removedBy: user.uid }, { merge: true });
+    return { uid: memberUid, status: "removed" };
+  }
+  fail("Unsupported team member action.");
+}
+
 async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
@@ -767,6 +792,7 @@ async function handleTenantRoute(event) {
   const inviteMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations$/);
   const acceptMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/accept$/);
   const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
+  const memberActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members\/([A-Za-z0-9_-]{1,128})$/);
   const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
   const orgMessagesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages$/);
   const orgTemplateMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages\/template$/);
@@ -777,7 +803,7 @@ async function handleTenantRoute(event) {
   const campaignsMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/campaigns(?:\/([A-Za-z0-9_-]{10,40})\/preview)?$/);
   const consentMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/contacts\/(\d{6,20})\/consent$/);
   const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || memberActionMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -880,6 +906,14 @@ async function handleTenantRoute(event) {
         joinedAt: doc.data().joinedAt || null
       }));
       return jsonResponse(event, 200, { members });
+    }
+    if (memberActionMatch && method === "PUT") {
+      const result = await manageOrganisationMember(db, user, memberActionMatch[1], memberActionMatch[2], parseBody(event), "role");
+      return jsonResponse(event, 200, { success: true, member: result });
+    }
+    if (memberActionMatch && method === "DELETE") {
+      const result = await manageOrganisationMember(db, user, memberActionMatch[1], memberActionMatch[2], {}, "remove");
+      return jsonResponse(event, 200, { success: true, member: result });
     }
     return jsonResponse(event, 405, { error: "Method not allowed." });
   } catch (error) {
