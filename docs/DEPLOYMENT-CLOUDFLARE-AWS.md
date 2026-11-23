@@ -156,3 +156,7 @@ For each newly persisted inbound WhatsApp text message, the webhook checks up to
 
 Each keyword automation rule can now contain one to five ordered text reply steps. The webhook sends the steps in order and records progress, completed step count, message IDs, and final status in the automation run. If a later step fails after earlier replies were sent, the run is marked `partially_failed` and is not automatically replayed, preventing duplicate sends on webhook retries. Existing single-response rules remain compatible. Steps are sent immediately; timed delays, branching, non-text actions, and a drag-and-drop canvas are not part of this release.
 
+### Automation execution history
+
+Owners and admins can read the latest 50 workflow runs through `GET /organizations/automation-runs?organizationId=...`. The endpoint returns rule name, customer phone, run status, completed/total steps, error or skip reason, and timestamps. The builder displays this recent history; it is a rolling latest-50 view, not a long-term analytics export.
+
