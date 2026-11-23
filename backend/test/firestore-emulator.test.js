@@ -56,7 +56,7 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
     await setDoc(doc(db, "chats/legacy_chat"), { customerPhone: "+15550001111" });
     await setDoc(doc(db, "deletedChats/legacy_chat"), { deletedAt: new Date() });
     await setDoc(doc(db, "whatsappPhoneNumbers/legacy_number"), { phoneNumberId: "123456789012345" });
-    await setDoc(doc(db, "users/agent_a/privateProfile"), { email: "private@example.test" });
+    await setDoc(doc(db, "users/agent_a/privateProfiles/profile_a"), { email: "private@example.test" });
   });
 
   const ownerDb = testEnv.authenticatedContext("owner_a").firestore();
