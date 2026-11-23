@@ -81,6 +81,7 @@ export default function OrganisationInbox() {
 
   const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
   const filteredChats = useMemo(() => { const term = chatSearch.trim().toLowerCase(); return term ? chats.filter((chat) => [chat.customerName, chat.customerPhone, chat.lastMessage, ...(chat.tags || [])].some((value) => String(value || "").toLowerCase().includes(term))) : chats; }, [chats, chatSearch]);
+  const currentMemberRole = teamMembers.find((member) => member.uid === user?.uid)?.role || "agent";
 
   useEffect(() => {
     if (!orgId) return;
@@ -347,7 +348,7 @@ export default function OrganisationInbox() {
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d9fdd3] font-semibold text-[#075e54]">{(selectedChat.customerName || selectedChat.customerPhone || "?").slice(0, 1).toUpperCase()}</div>
               <div className="min-w-0 flex-1"><h2 className="truncate font-semibold text-gray-900">{selectedChat.customerName || selectedChat.customerPhone}</h2><p className="text-xs text-gray-500">{selectedChat.customerPhone}</p></div>
               <button type="button" onClick={handleAssignToMe} disabled={assigning || !user} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-2 text-xs font-medium text-gray-600 disabled:opacity-50"><UserRoundCheck size={14} /> {assigning ? "Assigning" : "Assign to me"}</button>
-              <select aria-label="Assign conversation to team member" value={selectedChat.assignedToUid || ""} disabled={assigning} onChange={(event) => handleAssignMember(event.target.value)} className="max-w-[140px] rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-700"><option value="">Unassigned</option>{teamMembers.map((member) => <option key={member.uid} value={member.uid}>{member.email || member.uid}</option>)}</select>
+              <select aria-label="Assign conversation to team member" value={selectedChat.assignedToUid || ""} disabled={assigning} onChange={(event) => handleAssignMember(event.target.value)} className="max-w-[140px] rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-700"><option value="">Unassigned</option>{teamMembers.map((member) => <option key={member.uid} value={member.uid} disabled={currentMemberRole === "agent" && member.uid !== user?.uid}>{member.email || member.uid}</option>)}</select>
               <select aria-label="Conversation status" value={selectedChat.status || "open"} disabled={changingStatus} onChange={(event) => handleStatusChange(event.target.value as "open" | "pending" | "resolved")} className="max-w-[112px] rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-700">
                 <option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option>
               </select>
