@@ -30,7 +30,7 @@ function suppressionDocumentId(phone) {
 function isWhatsAppOptOutMessage(value) {
   const text = String(value || "").normalize("NFKC").trim().toLowerCase();
   if (!text || text.length > 160) return false;
-  const token = text.replace(/[.!?,;:]+$/g, "").replace(/[\s_-]+/g, "");
+  const token = text.replace(/[.!?,;:]+$/g, "").replace(/[\s_-]+/g, "").replace(/[\'’]/g, "");
   if (OPT_OUT_KEYWORDS.has(token)) return true;
   return /^(please)?(stop|unsubscribe|remove|optout)(sending|messages|me)?$/.test(token) ||
     /^(please)?stop(sending|messaging)(you|me)?(messages)?$/.test(token) ||
