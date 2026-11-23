@@ -257,6 +257,7 @@ export default function TenantInbox() {
       return;
     }
     let active = true;
+    setInternalNotes([]);
     setInternalNotesLoading(true);
     listTenantInternalNotes(organization.id, selected)
       .then(notes => { if (active) setInternalNotes(notes); })
@@ -590,12 +591,15 @@ export default function TenantInbox() {
   async function saveInternalNote(event: FormEvent) {
     event.preventDefault();
     if (!organization || !selected || internalNoteSaving || !internalNoteDraft.trim()) return;
+    const chatId = selected;
     setInternalNoteSaving(true);
     setError("");
     try {
-      const note = await addTenantInternalNote(organization.id, selected, internalNoteDraft);
-      setInternalNotes(current => [note, ...current]);
-      setInternalNoteDraft("");
+      const note = await addTenantInternalNote(organization.id, chatId, internalNoteDraft);
+      if (selected === chatId) {
+        setInternalNotes(current => [note, ...current]);
+        setInternalNoteDraft("");
+      }
     } catch (error) {
       setError(error instanceof Error ? error.message : "Internal note could not be saved.");
     } finally {
