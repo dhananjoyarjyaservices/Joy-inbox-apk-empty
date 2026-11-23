@@ -7,6 +7,7 @@ import {
   acceptInvitation,
   createInvitation,
   listOrganisationInvitations,
+  resendOrganisationInvitationEmail,
   revokeOrganisationInvitation,
   createOrganisation,
   listMembers,
@@ -34,8 +35,8 @@ export default function Setup() {
   const [orgName, setOrgName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "manager" | "agent">("agent");
-  const [joinOrgId, setJoinOrgId] = useState("");
-  const [invitationId, setInvitationId] = useState("");
+  const [joinOrgId, setJoinOrgId] = useState(() => new URLSearchParams(window.location.search).get("orgId") || "");
+  const [invitationId, setInvitationId] = useState(() => new URLSearchParams(window.location.search).get("invitationId") || "");
   const [verified, setVerified] = useState(Boolean(user?.emailVerified));
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -211,8 +212,15 @@ export default function Setup() {
     setNotice("");
     try {
       const result = await createInvitation(selected.id, inviteEmail.trim(), inviteRole);
-      setCreatedInvite(result.invitation.invitationId);
-      setNotice("Invitation create ho gayi. Ab invitation ID aur organisation ID invited person ko securely bhejo.");
+      setCreatedInvite(result.invitation.emailSent ? "" : result.invitation.invitationId);
+      setInvitations((rows) => [{
+        id: result.invitation.invitationId, email: result.invitation.email, role: result.invitation.role,
+        status: "pending", expiresAt: result.invitation.expiresAt, createdAt: new Date().toISOString(),
+        emailDelivery: result.invitation.emailSent ? "sent" : "failed",
+      }, ...rows]);
+      setNotice(result.invitation.emailSent
+        ? "Invitation email successfully send ho gaya."
+        : "Invitation create ho gaya, lekin email send nahi hua. Provider configuration check karo; manual ID neeche available hai.");
       setInviteEmail("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Invitation create nahi hui.");
@@ -235,6 +243,18 @@ export default function Setup() {
     } finally { setBusy(false); }
   }
 
+  async function handleResendInvitation(invitation: OrganisationInvitation) {
+    if (!selected || invitation.status !== "pending") return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await resendOrganisationInvitationEmail(selected.id, invitation.id);
+      setInvitations((rows) => rows.map((row) => row.id === invitation.id ? { ...row, emailDelivery: result.invitation.emailSent ? "sent" : "failed" } : row));
+      setNotice(result.invitation.emailSent ? "Invitation email dobara send ho gaya." : "Email send nahi hua. Resend provider settings check karo.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Invitation email resend nahi hua.");
+    } finally { setBusy(false); }
+  }
+
   async function handleReinvite(invitation: OrganisationInvitation) {
     if (!selected || !["expired", "revoked"].includes(invitation.status)) return;
     setBusy(true); setError(""); setNotice("");
@@ -248,8 +268,10 @@ export default function Setup() {
         expiresAt: result.invitation.expiresAt,
         createdAt: new Date().toISOString(),
       }), ...rows]);
-      setCreatedInvite(result.invitation.invitationId);
-      setNotice("Naya invitation create ho gaya. Naya invitation ID securely share karo.");
+      setCreatedInvite(result.invitation.emailSent ? "" : result.invitation.invitationId);
+      setNotice(result.invitation.emailSent
+        ? "Naya invitation email successfully send ho gaya."
+        : "Naya invitation create hua, lekin email send nahi hua. Manual ID neeche available hai.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Naya invitation create nahi hua.");
     } finally { setBusy(false); }
@@ -376,15 +398,16 @@ export default function Setup() {
                       return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
                     };
                     return <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                      <div className="min-w-0"><p className="truncate text-sm font-medium text-gray-800">{invitation.email}</p><p className="mt-1 text-xs capitalize text-gray-500">{invitation.role} · <span className={invitation.status === "pending" ? "font-semibold text-amber-700" : "text-gray-500"}>{invitation.status}</span></p><p className="mt-1 text-xs text-gray-400">Expires: {dateLabel(invitation.expiresAt)}</p><p className="break-all text-[10px] text-gray-400">ID: {invitation.id}</p></div>
+                      <div className="min-w-0"><p className="truncate text-sm font-medium text-gray-800">{invitation.email}</p><p className="mt-1 text-xs capitalize text-gray-500">{invitation.role} · Email: {invitation.emailDelivery === "sent" ? "sent" : "not sent"} · <span className={invitation.status === "pending" ? "font-semibold text-amber-700" : "text-gray-500"}>{invitation.status}</span></p><p className="mt-1 text-xs text-gray-400">Expires: {dateLabel(invitation.expiresAt)}</p><p className="break-all text-[10px] text-gray-400">ID: {invitation.id}</p></div>
                       <div className="flex gap-2">
+                        {invitation.status === "pending" && invitation.emailDelivery !== "sent" && <button type="button" disabled={busy} onClick={() => handleResendInvitation(invitation)} className="rounded-lg border border-[#075e54] px-3 py-1.5 text-xs font-medium text-[#075e54] disabled:opacity-50">Send email</button>}
                         {invitation.status === "pending" && <button type="button" disabled={busy} onClick={() => handleRevokeInvitation(invitation)} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-50">Revoke</button>}
                         {["expired", "revoked"].includes(invitation.status) && <button type="button" disabled={busy} onClick={() => handleReinvite(invitation)} className="rounded-lg border border-[#075e54] px-3 py-1.5 text-xs font-semibold text-[#075e54] disabled:opacity-50">Create new invite</button>}
                       </div>
                     </div>;
                   })}
                 </div>}
-                <p className="mt-3 text-xs text-amber-700">Invitation email abhi automatically send nahi hota. Revoke ya expiry ke baad naya invite banega; uska naya ID invited email owner ko securely bhejna hoga.</p>
+                <p className="mt-3 text-xs text-amber-700">Invitation email Resend provider se bheja jata hai jab server configuration complete ho. Agar email fail ho, Send email button se retry karo ya neeche manual invite ID share karo.</p>
               </div>
             )}
 
