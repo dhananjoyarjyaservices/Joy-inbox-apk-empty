@@ -58,7 +58,6 @@ async function recordCampaignOptOut(db, organizationId, phone, inboundMessageId)
       return;
     }
     transaction.create(ref, {
-      phone: normalized,
       status: "opted_out",
       source: "whatsapp_inbound",
       optedOutAt: now,
