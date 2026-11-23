@@ -12,7 +12,12 @@ async function request(path: string, method = "GET", body?: unknown) {
     ...(body ? { body: JSON.stringify(body) } : {})
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || "Organization request failed.");
+  if (!response.ok) {
+    if (result.deliveryUnknown === true) {
+      throw new Error("Delivery status is unknown. Do not resend this message yet. Check the WhatsApp conversation first.");
+    }
+    throw new Error(result.error || "Organization request failed.");
+  }
   return result;
 }
 export interface Organization {
