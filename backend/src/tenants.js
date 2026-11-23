@@ -643,6 +643,37 @@ async function listOrganisationCampaigns(db, user, orgId) {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
+
+async function updateOrganisationContactConsent(db, user, orgId, phone, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  const normalizedPhone = normalizePhoneNumber(phone);
+  if (!normalizedPhone) fail("A valid customer phone number is required.");
+  const status = String(body.status || "");
+  const source = String(body.source || "").trim().slice(0, 120);
+  const evidence = String(body.evidence || "").trim().slice(0, 500);
+  if (!["opted_in", "opted_out"].includes(status)) fail("Consent status must be opted_in or opted_out.");
+  if (status === "opted_in" && (!source || !evidence)) {
+    fail("To record opt-in, provide where consent was collected and a short description of the consent evidence.");
+  }
+  const now = new Date();
+  const contactRef = db.collection("organisations").doc(orgId).collection("contacts").doc(normalizedPhone);
+  const eventRef = contactRef.collection("consentEvents").doc();
+  const update = status === "opted_in" ? {
+    whatsappOptIn: true, whatsappOptInAt: now, whatsappOptInSource: source,
+    whatsappOptInEvidence: evidence, whatsappOptInRecordedBy: user.uid,
+    whatsappOptOut: false, whatsappOptOutAt: null
+  } : {
+    whatsappOptIn: false, whatsappOptOut: true, whatsappOptOutAt: now,
+    whatsappOptOutSource: source || "organisation_manager",
+    whatsappOptOutRecordedBy: user.uid
+  };
+  await db.runTransaction(async (tx) => {
+    tx.set(contactRef, { phone: "+" + normalizedPhone, phoneId: normalizedPhone, ...update, updatedAt: now }, { merge: true });
+    tx.create(eventRef, { status, source: source || "organisation_manager", evidence: status === "opted_in" ? evidence : "", actorUid: user.uid, createdAt: now });
+  });
+  return { phone: "+" + normalizedPhone, status, updatedAt: now };
+}
+
 async function createOrganisationCampaign(db, user, orgId, body) {
   await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
   const title = String(body.title || "").trim();
@@ -676,7 +707,7 @@ async function previewOrganisationCampaign(db, user, orgId, campaignId) {
   const requiredTags = Array.isArray(campaign.audience?.tags) ? campaign.audience.tags : [];
   const eligible = contacts.docs.filter((doc) => {
     const contact = doc.data();
-    if (contact.whatsappOptIn !== true || !contact.whatsappOptInAt) return false;
+    if (contact.whatsappOptIn !== true || !contact.whatsappOptInAt || contact.whatsappOptOut === true) return false;
     const tags = Array.isArray(contact.tags) ? contact.tags : [];
     return requiredTags.every((tag) => tags.includes(tag));
   });
@@ -744,8 +775,9 @@ async function handleTenantRoute(event) {
   const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
   const campaignsMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/campaigns(?:\/([A-Za-z0-9_-]{10,40})\/preview)?$/);
+  const consentMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/contacts\/(\d{6,20})\/consent$/);
   const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -768,7 +800,7 @@ async function handleTenantRoute(event) {
     }
 
 
-    if (automationMatch && method === "GET") {
+    if (consentMatch && method === "PUT") {\n      const result = await updateOrganisationContactConsent(db, user, consentMatch[1], consentMatch[2], parseBody(event));\n      return jsonResponse(event, 200, { success: true, consent: result });\n    }\n    if (automationMatch && method === "GET") {
       const settings = await getOrganisationAutomation(db, user, automationMatch[1]);
       return jsonResponse(event, 200, { settings });
     }
