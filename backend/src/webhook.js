@@ -356,7 +356,12 @@ async function processWebhookPayload(payload) {
         if (created) {
           const phone = normalizePhoneNumber(message.from);
           await maybeSendTenantGreeting(db, organization, credentials, phone, message);
-          await maybeRunTenantKeywordAutomation(db, organization, credentials, phone, message);
+          try {
+            await maybeRunTenantKeywordAutomation(db, organization, credentials, phone, message);
+          } catch (error) {
+            // An automation failure must not make Meta retry an already-persisted inbound message.
+            console.error("Tenant keyword automation processing failed:", error);
+          }
           try {
             await sendTenantIncomingTextNotification(
               organization.id,
