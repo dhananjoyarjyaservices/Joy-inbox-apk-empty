@@ -258,3 +258,29 @@ test("a disconnected WhatsApp number can be connected to a different organizatio
   );
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
+
+
+test("a member of one organization cannot authenticate against another organization ID", async () => {
+  const db = fakeTenantDb();
+  db.docs.set("organizations/org_alpha", { status: "active" });
+  db.docs.set("organizations/org_beta", { status: "active" });
+  db.docs.set("organizations/org_alpha/members/shared_user", { status: "active", role: "owner" });
+  const ownWorkspace = await requireOrganization(db, { uid: "shared_user" }, "org_alpha");
+  assert.equal(ownWorkspace.id, "org_alpha");
+  await assert.rejects(
+    () => requireOrganization(db, { uid: "shared_user" }, "org_beta"),
+    { statusCode: 403 }
+  );
+});
+
+test("tenant authentication rejects organization IDs containing path traversal or invalid characters", async () => {
+  const db = fakeTenantDb();
+  await assert.rejects(
+    () => requireOrganization(db, { uid: "shared_user" }, "org_alpha/../org_beta"),
+    { statusCode: 400 }
+  );
+  await assert.rejects(
+    () => requireOrganization(db, { uid: "shared_user" }, "org alpha"),
+    { statusCode: 400 }
+  );
+});
