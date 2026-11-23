@@ -34,6 +34,28 @@ test("suppression IDs are deterministic and normalize phone punctuation", () => 
   assert.throws(() => suppressionDocumentId("123"), /valid international phone/);
 });
 
+test("production suppression IDs use a keyed HMAC and require a configured key", () => {
+  const crypto = require("node:crypto");
+  const previousKey = process.env.CAMPAIGN_SUPPRESSION_HASH_KEY;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const key = Buffer.alloc(32, 7);
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.CAMPAIGN_SUPPRESSION_HASH_KEY;
+    assert.throws(() => suppressionDocumentId("919876543210"), /must be configured in production/);
+    process.env.CAMPAIGN_SUPPRESSION_HASH_KEY = key.toString("base64");
+    const expected = crypto.createHmac("sha256", key).update("919876543210").digest("hex");
+    assert.equal(suppressionDocumentId("+91 98765 43210"), expected);
+    process.env.CAMPAIGN_SUPPRESSION_HASH_KEY = "not-a-valid-key";
+    assert.throws(() => suppressionDocumentId("919876543210"), /base64-encoded 32-byte key/);
+  } finally {
+    if (previousKey === undefined) delete process.env.CAMPAIGN_SUPPRESSION_HASH_KEY;
+    else process.env.CAMPAIGN_SUPPRESSION_HASH_KEY = previousKey;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
 test("recordCampaignOptOut creates an organization-scoped suppression record", async () => {
   let stored;
   const ref = {
