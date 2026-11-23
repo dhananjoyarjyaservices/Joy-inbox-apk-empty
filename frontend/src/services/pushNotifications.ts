@@ -45,6 +45,11 @@ function getInstallationId(): string {
   return installationId;
 }
 
+export type RegisteredPushDevice = {
+  installationId: string; deviceName: string; platform: string; userAgent: string;
+  createdAt: string | null; updatedAt: string | null;
+};
+
 async function authenticatedRequest(path: string, body: object): Promise<void> {
   if (!API_URL) {
     throw new Error("AWS API URL is not configured.");
@@ -133,7 +138,35 @@ export async function syncPushToken(): Promise<void> {
   const installationId = getInstallationId();
   const organizationId = getActiveOrganizationId();
   if (!organizationId) throw new Error("Please select an organization before enabling notifications.");
-  await authenticatedRequest("/organizations/fcm-tokens/register", { token, installationId, organizationId });
+  const userAgent = navigator.userAgent || "";
+  const deviceName = /android|iphone|ipad|mobile/i.test(userAgent) ? "Mobile browser" : "Desktop browser";
+  await authenticatedRequest("/organizations/fcm-tokens/register", {
+    token, installationId, organizationId, deviceName, platform: navigator.platform || "web", userAgent
+  });
+}
+
+async function authenticatedGet<T>(path: string): Promise<T> {
+  if (!API_URL) throw new Error("AWS API URL is not configured.");
+  const user = auth.currentUser;
+  if (!user) throw new Error("Please sign in again.");
+  const idToken = await user.getIdToken();
+  const response = await fetch(`${API_URL.replace(/\\/$/, "")}${path}`, {
+    headers: { Authorization: `Bearer ${idToken}` }
+  });
+  const result = await response.json() as T & { error?: string };
+  if (!response.ok) throw new Error(result.error || "Device request failed.");
+  return result;
+}
+
+export async function listRegisteredPushDevices(organizationId: string): Promise<RegisteredPushDevice[]> {
+  const result = await authenticatedGet<{ devices?: RegisteredPushDevice[] }>(
+    `/organizations/fcm-tokens/devices?organizationId=${encodeURIComponent(organizationId)}`
+  );
+  return Array.isArray(result.devices) ? result.devices : [];
+}
+
+export async function revokePushDevice(organizationId: string, installationId: string): Promise<void> {
+  await authenticatedRequest("/organizations/fcm-tokens/remove", { organizationId, installationId });
 }
 
 let notificationAudioContext: AudioContext | null = null;
