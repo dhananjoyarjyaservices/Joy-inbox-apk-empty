@@ -57,6 +57,16 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /automation/{settingsId} {
+        allow read: if hasOrgManagementRole(orgId);
+        allow write: if false;
+      }
+
+      match /automationEvents/{eventId} {
+        allow read: if hasOrgManagementRole(orgId);
+        allow write: if false;
+      }
+
       match /whatsappConnections/{connectionId} {
         allow read, write: if false;
       }
