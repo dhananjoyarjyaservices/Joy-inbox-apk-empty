@@ -105,9 +105,10 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     return "sent";
   } catch (error) {
     const attempts = Number(job.attempts || 1);
+    const rateLimited = Number(error?.metaStatusCode) === 429;
     const definitive = error?.definitive === true;
-    const explicitlyRetryable = error?.retryable === true || Number(error?.statusCode) === 429;
-    const canRetry = !definitive && explicitlyRetryable && attempts < MAX_ATTEMPTS;
+    const explicitlyRetryable = error?.retryable === true;
+    const canRetry = (rateLimited || (!definitive && explicitlyRetryable)) && attempts < MAX_ATTEMPTS;
     const failedAt = new Date();
     const nextStatus = canRetry ? "queued" : "failed";
     const patch = {
