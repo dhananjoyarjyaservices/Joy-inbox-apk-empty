@@ -365,7 +365,7 @@ async function handleTenantAutomationRules(event) {
       keyword: String(document.data().keyword || ""),
       matchType: String(document.data().matchType || "contains"),
       response: String(document.data().response || document.data().steps?.[0] || ""),
-      steps: Array.isArray(document.data().steps) && document.data().steps.length ? document.data().steps.slice(0, 5).map((step) => String(step)) : [String(document.data().response || "")],
+      steps: Array.isArray(document.data().steps) && document.data().steps.length ? document.data().steps.slice(0, 5).map((step) => typeof step === "string" ? { message: step, delaySeconds: 0 } : { message: String(step?.message || ""), delaySeconds: Number.isInteger(step?.delaySeconds) ? step.delaySeconds : 0 }) : [{ message: String(document.data().response || ""), delaySeconds: 0 }],
       enabled: document.data().enabled === true,
       priority: Number(document.data().priority || 100),
       createdAt: document.data().createdAt?.toDate ? document.data().createdAt.toDate().toISOString() : null,
