@@ -135,3 +135,8 @@ The Notification Center delivery monitor supports client-side filtering by final
 ### Notification delivery analytics
 
 The Notification Center summarizes the latest 100 per-device delivery records: delivered count, failed count, delivery percentage, records requiring a retry, and total send attempts. A seven-day daily trend separates successful and failed records. These are client-side summaries of the bounded API response, not organization-wide lifetime totals; FCM accepted/successful status does not prove that a person viewed or opened a notification.
+
+### Team notification delivery analytics
+
+Workspace owners and admins can request `GET /organizations/notifications/team-deliveries?organizationId=...`. The endpoint is restricted to owner/admin roles and reports per-active-member push delivery aggregates (delivered, failed, retried records, attempts, and delivery rate). It reads at most 50 member documents and the latest 100 delivery records for each member. The UI displays this table in Notification Center; agents continue to see only their own delivery history. This is an independently sampled recent window per member, not a lifetime or cross-member time-aligned total. FCM delivery success does not establish that a recipient opened or read a notification.
+
