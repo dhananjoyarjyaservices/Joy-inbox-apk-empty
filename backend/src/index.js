@@ -732,6 +732,26 @@ async function listTenantFcmDevices(event) {
   return jsonResponse(event, 200, { devices });
 }
 
+async function listTenantNotificationDeliveries(event) {
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, event.queryStringParameters?.organizationId);
+  requirePermission(organization, "chats:read");
+  const snapshot = await organization.ref.collection("members").doc(decoded.uid)
+    .collection("notificationDeliveries").orderBy("createdAt", "desc").limit(100).get();
+  const deliveries = snapshot.docs.map(document => {
+    const value = document.data() || {};
+    return {
+      id: document.id,
+      type: String(value.type || "notification"),
+      status: value.status === "delivered" ? "delivered" : "failed",
+      attempts: Number(value.attempts || 1),
+      errorCode: value.errorCode ? String(value.errorCode).slice(0, 120) : null,
+      createdAt: value.createdAt?.toDate ? value.createdAt.toDate().toISOString() : null
+    };
+  });
+  return jsonResponse(event, 200, { deliveries });
+}
+
 async function registerTenantFcmToken(event) {
   const decoded = await authenticateUser(event);
   let body;
@@ -2404,6 +2424,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Tenant SLA alert check failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "SLA alerts could not be checked." });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/notifications/deliveries")) {
+    try { return await listTenantNotificationDeliveries(event); }
+    catch (error) {
+      console.error("Tenant notification delivery list failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Delivery history could not be loaded." });
     }
   }
 
