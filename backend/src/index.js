@@ -48,6 +48,7 @@ const {
   markSendRequestFailed
 } = require("./sendRequests");
 const { runScheduledSlaChecks } = require("./slaScheduler");
+const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_SLA_MINUTES } = require("./slaSettings");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -410,6 +411,8 @@ async function saveTenantQuickReplyImage(event) {
 
 async function recordTenantFirstResponse(db, organizationId, chatId, agentUid, agentEmail, respondedAt = new Date()) {
   if (!agentUid || !chatId) return false;
+  const slaSettings = await getOrganizationSlaSettings(db, organizationId);
+  const slaTargetMs = slaSettings.targetMinutes * 60 * 1000;
   const chatRef = getTenantChatRef(db, organizationId, chatId);
   return db.runTransaction(async (transaction) => {
     const chatSnapshot = await transaction.get(chatRef);
@@ -425,7 +428,7 @@ async function recordTenantFirstResponse(db, organizationId, chatId, agentUid, a
       .collection("agentResponseMetrics").doc();
     transaction.set(metricRef, {
       organizationId, chatId, agentUid, agentEmail: String(agentEmail || "").slice(0, 254),
-      responseMs, slaTargetMs: 5 * 60 * 1000, slaMet: responseMs <= 5 * 60 * 1000,
+      responseMs, slaTargetMs, slaMet: responseMs <= slaTargetMs,
       inboundAt: pendingSince, respondedAt, createdAt: respondedAt
     });
     transaction.set(chatRef, {
@@ -726,6 +729,33 @@ async function registerTenantFcmToken(event) {
   return jsonResponse(event, 200, { success: true });
 }
 
+async function handleOrganizationSlaSettings(event) {
+  const decoded = await authenticateUser(event);
+  let body = {};
+  if (getMethod(event) !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organization = await requireOrganization(getDb(), decoded, getMethod(event) === "GET" ? event.queryStringParameters?.organizationId : body.organizationId);
+  if (!["owner", "admin"].includes(organization.role)) {
+    const error = new Error("Only workspace owners and admins can manage SLA settings.");
+    error.statusCode = 403;
+    throw error;
+  }
+  const ref = organization.ref.collection("settings").doc("sla");
+  if (getMethod(event) === "GET") {
+    const settings = await getOrganizationSlaSettings(getDb(), organization.id);
+    return jsonResponse(event, 200, { settings });
+  }
+  if (typeof body.enabled !== "boolean" || !Number.isInteger(Number(body.targetMinutes)) ||
+      Number(body.targetMinutes) < MIN_SLA_MINUTES || Number(body.targetMinutes) > MAX_SLA_MINUTES) {
+    return jsonResponse(event, 400, { error: `SLA settings require enabled and a target from ${MIN_SLA_MINUTES} to ${MAX_SLA_MINUTES} minutes.` });
+  }
+  const settings = normalizeSlaSettings({ enabled: body.enabled, targetMinutes: Number(body.targetMinutes) });
+  await ref.set({ ...settings, updatedAt: new Date(), updatedBy: decoded.uid }, { merge: true });
+  return jsonResponse(event, 200, { success: true, settings });
+}
+
 async function checkTenantSlaAlerts(event) {
   const decoded = await authenticateUser(event);
   let body;
@@ -736,7 +766,10 @@ async function checkTenantSlaAlerts(event) {
 
   const db = getDb();
   const admin = getFirebaseAdmin();
-  const cutoff = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
+  const slaSettings = await getOrganizationSlaSettings(db, organization.id);
+  if (!slaSettings.enabled) return jsonResponse(event, 200, { success: true, notified: 0, disabled: true });
+  const targetMs = slaSettings.targetMinutes * 60 * 1000;
+  const cutoff = admin.firestore.Timestamp.fromDate(new Date(Date.now() - targetMs));
   const chatsQuery = db.collection("organizations").doc(organization.id)
     .collection("chats")
     .where("responsePendingSince", "<=", cutoff);
@@ -763,7 +796,7 @@ async function checkTenantSlaAlerts(event) {
     const pendingMillis = pendingValue && typeof pendingValue.toMillis === "function"
       ? pendingValue.toMillis()
       : pendingValue instanceof Date ? pendingValue.getTime() : NaN;
-    if (!Number.isFinite(pendingMillis) || pendingMillis > Date.now() - 5 * 60 * 1000) continue;
+    if (!Number.isFinite(pendingMillis) || pendingMillis > Date.now() - targetMs) continue;
 
     const chatRef = document.ref;
     const claimed = await db.runTransaction(async (transaction) => {
@@ -2198,6 +2231,11 @@ exports.handler = async (event) => {
     } finally {
       logLatency("lambda_send_ms", startedAt);
     }
+  }
+
+  if (["GET", "PUT"].includes(method) && path.endsWith("/organizations/sla/settings")) {
+    try { return await handleOrganizationSlaSettings(event); }
+    catch (error) { return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "SLA settings could not be updated." }); }
   }
 
   if (method === "POST" && path.endsWith("/organizations/sla/check")) {
