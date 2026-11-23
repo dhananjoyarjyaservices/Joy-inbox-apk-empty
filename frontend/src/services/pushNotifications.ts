@@ -150,7 +150,7 @@ async function authenticatedGet<T>(path: string): Promise<T> {
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in again.");
   const idToken = await user.getIdToken();
-  const response = await fetch(`${API_URL.replace(/\\/$/, "")}${path}`, {
+  const response = await fetch(`${API_URL.replace(/\/$/, "")}${path}`, {
     headers: { Authorization: `Bearer ${idToken}` }
   });
   const result = await response.json() as T & { error?: string };
