@@ -47,7 +47,7 @@ async function readSendResponse(response, startedAt, type, fallbackMessage) {
     error.statusCode = 502;
     // A 4xx response is an explicit rejection. A 5xx response may occur
     // after Meta accepted the request, so delivery must remain unknown.
-    error.definitive = response.status >= 400 && response.status < 500;
+    error.definitive = response.status >= 400 && response.status < 500 && response.status !== 408;
     error.retryable = false;
     throw error;
   }
