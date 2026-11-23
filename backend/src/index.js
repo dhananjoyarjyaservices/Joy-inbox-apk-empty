@@ -406,6 +406,30 @@ async function saveTenantQuickReplyImage(event) {
   return jsonResponse(event, 200, { success: true, hasImage: true, imageMimeType: saved.mimeType });
 }
 
+async function handleTenantChatAssignmentAudit(event) {
+  const decoded = await authenticateUser(event);
+  const params = event.queryStringParameters || {};
+  const organization = await requireOrganization(getDb(), decoded, params.organizationId);
+  requirePermission(organization, "chats:read");
+  const chatId = String(params.chatId || "");
+  if (!/^\\d{6,20}$/.test(chatId)) {
+    return jsonResponse(event, 400, { error: "A valid conversation ID is required." });
+  }
+  const snapshot = await organization.ref.collection("auditLogs")
+    .where("details.chatId", "==", chatId)
+    .limit(50)
+    .get();
+  const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    .filter(item => ["chat.assigned", "chat.status_changed"].includes(item.action))
+    .sort((a, b) => {
+      const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+      const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+      return bTime - aTime;
+    })
+    .slice(0, 30);
+  return jsonResponse(event, 200, { events });
+}
+
 async function handleTenantChatAction(event, action) {
   const decoded = await authenticateUser(event);
   let body;
@@ -2096,6 +2120,14 @@ exports.handler = async (event) => {
           ? error.message
           : "Media could not be retrieved."
       });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/chat-assignment-audit")) {
+    try { return await handleTenantChatAssignmentAudit(event); }
+    catch (error) {
+      console.error("Chat assignment audit load failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Conversation activity could not be loaded." });
     }
   }
 
