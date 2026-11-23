@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { saveTenantIncomingMessage, verifyWebhook, isValidMetaWebhookPayload, getWebhookProcessingStatusCode } = require("../src/webhook");
+const { handler } = require("../src/index");
 
 function createRef(path, id = path.split("/").pop()) {
   return {
@@ -157,4 +158,49 @@ test("webhook processing errors preserve only retryable server status codes", ()
   assert.equal(getWebhookProcessingStatusCode({ statusCode: 503 }), 503);
   assert.equal(getWebhookProcessingStatusCode({ statusCode: 429 }), 500);
   assert.equal(getWebhookProcessingStatusCode(new Error("unknown")), 500);
+});
+
+
+test("HTTP Meta webhook route fails closed when the app secret is missing", async (t) => {
+  const previousSecret = process.env.META_APP_SECRET;
+  const previousLegacyFlag = process.env.LEGACY_OWNER_API_ENABLED;
+  delete process.env.META_APP_SECRET;
+  delete process.env.LEGACY_OWNER_API_ENABLED;
+  t.after(() => {
+    if (previousSecret === undefined) delete process.env.META_APP_SECRET;
+    else process.env.META_APP_SECRET = previousSecret;
+    if (previousLegacyFlag === undefined) delete process.env.LEGACY_OWNER_API_ENABLED;
+    else process.env.LEGACY_OWNER_API_ENABLED = previousLegacyFlag;
+  });
+
+  const response = await handler({
+    httpMethod: "POST",
+    path: "/webhook",
+    headers: {},
+    body: JSON.stringify({ object: "whatsapp_business_account", entry: [] })
+  });
+  assert.equal(response.statusCode, 500);
+  assert.match(response.body, /signature verification failed/i);
+});
+
+test("HTTP Meta webhook route rejects an invalid signature before processing payloads", async (t) => {
+  const previousSecret = process.env.META_APP_SECRET;
+  const previousLegacyFlag = process.env.LEGACY_OWNER_API_ENABLED;
+  process.env.META_APP_SECRET = "route-test-secret";
+  delete process.env.LEGACY_OWNER_API_ENABLED;
+  t.after(() => {
+    if (previousSecret === undefined) delete process.env.META_APP_SECRET;
+    else process.env.META_APP_SECRET = previousSecret;
+    if (previousLegacyFlag === undefined) delete process.env.LEGACY_OWNER_API_ENABLED;
+    else process.env.LEGACY_OWNER_API_ENABLED = previousLegacyFlag;
+  });
+
+  const response = await handler({
+    httpMethod: "POST",
+    path: "/webhook",
+    headers: { "x-hub-signature-256": "sha256=invalid" },
+    body: JSON.stringify({ object: "whatsapp_business_account", entry: [] })
+  });
+  assert.equal(response.statusCode, 401);
+  assert.match(response.body, /invalid webhook signature/i);
 });
