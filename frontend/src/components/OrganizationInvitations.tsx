@@ -31,8 +31,14 @@ export default function OrganizationInvitations({ organizationId, actorRole }: P
     try {
       const result = await createOrganizationInvitation(organizationId, email.trim(), role);
       setEmail("");
-      setInviteUrl(result.inviteUrl || "");
-      setNotice(result.inviteUrl ? "Invitation created. Copy and send this secure link to the invited person." : "Invitation created. Set FRONTEND_BASE_URL to generate a shareable invitation link.");
+      const shareUrl = result.inviteUrl || (() => {
+        const url = new URL("/setup", window.location.origin);
+        url.searchParams.set("organizationId", organizationId);
+        url.searchParams.set("invite", result.token);
+        return url.toString();
+      })();
+      setInviteUrl(shareUrl);
+      setNotice("Invitation created. Copy and send this secure link to the invited person.");
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "Invitation could not be created."); }
     finally { setBusy(false); }
