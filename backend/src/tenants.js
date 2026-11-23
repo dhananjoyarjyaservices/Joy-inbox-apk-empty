@@ -60,6 +60,7 @@ async function requireMembership(db, orgId, uid, allowedRoles = []) {
 }
 
 async function createOrganisation(db, user, body) {
+  if (user.email_verified !== true) fail("Verify your email before creating an organisation.", 403);
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (!name || name.length > 80) fail("Organisation name must be 1 to 80 characters.");
   const orgRef = db.collection("organisations").doc();
