@@ -10,7 +10,7 @@ import {
   listMembers,
   listOrganisations,
   type Organisation,
-  type OrganisationMember,
+  type OrganisationMember,\n  getOrganisationWhatsAppConnection,\n  saveOrganisationWhatsAppConnection,\n  type WhatsAppConnection,
 } from "../services/organisations";
 
 export default function Setup() {
@@ -29,7 +29,11 @@ export default function Setup() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [createdInvite, setCreatedInvite] = useState("");\n  const [phoneNumberId, setPhoneNumberId] = useState("");\n  const [wabaId, setWabaId] = useState("");\n  const [accessToken, setAccessToken] = useState("");\n  const [waConnection, setWaConnection] = useState<WhatsAppConnection>({ connected: false });
+  const [createdInvite, setCreatedInvite] = useState("");
+  const [phoneNumberId, setPhoneNumberId] = useState("");
+  const [wabaId, setWabaId] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [waConnection, setWaConnection] = useState<WhatsAppConnection>({ connected: false });
 
   const selected = useMemo(
     () => organisations.find((org) => org.id === selectedId) || null,
@@ -72,7 +76,30 @@ export default function Setup() {
     return () => { active = false; };
   }, [selected?.id, selected?.role]);
 
-  useEffect(() => {\n    if (!selected) { setWaConnection({ connected: false }); return; }\n    let active = true;\n    getOrganisationWhatsAppConnection(selected.id)\n      .then((result) => { if (active) { setWaConnection(result); setPhoneNumberId(result.phoneNumberId || ""); setWabaId(result.wabaId || ""); } })\n      .catch(() => { if (active) setWaConnection({ connected: false }); });\n    return () => { active = false; };\n  }, [selected?.id]);\n\n  async function handleWhatsAppConnect(event: FormEvent<HTMLFormElement>) {\n    event.preventDefault();\n    if (!selected) return;\n    setBusy(true); setError(""); setNotice("");\n    try {\n      const result = await saveOrganisationWhatsAppConnection(selected.id, { phoneNumberId: phoneNumberId.trim(), wabaId: wabaId.trim(), accessToken: accessToken.trim() });\n      setWaConnection(result.connection);\n      setAccessToken("");\n      setNotice("Meta credentials verified and encrypted for this organisation. Webhook routing and live inbox activation are still pending.");\n    } catch (reason) {\n      setError(reason instanceof Error ? reason.message : "WhatsApp connection failed.");\n    } finally { setBusy(false); }\n  }\n\n  async function verifyEmail() {
+  useEffect(() => {
+    if (!selected) { setWaConnection({ connected: false }); return; }
+    let active = true;
+    getOrganisationWhatsAppConnection(selected.id)
+      .then((result) => { if (active) { setWaConnection(result); setPhoneNumberId(result.phoneNumberId || ""); setWabaId(result.wabaId || ""); } })
+      .catch(() => { if (active) setWaConnection({ connected: false }); });
+    return () => { active = false; };
+  }, [selected?.id]);
+
+  async function handleWhatsAppConnect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await saveOrganisationWhatsAppConnection(selected.id, { phoneNumberId: phoneNumberId.trim(), wabaId: wabaId.trim(), accessToken: accessToken.trim() });
+      setWaConnection(result.connection);
+      setAccessToken("");
+      setNotice("Meta credentials verified and encrypted for this organisation. Webhook routing and live inbox activation are still pending.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "WhatsApp connection failed.");
+    } finally { setBusy(false); }
+  }
+
+  async function verifyEmail() {
     setBusy(true);
     setError("");
     try {
@@ -245,7 +272,8 @@ export default function Setup() {
                 <button disabled={busy} className="rounded-xl bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Create invite</button>
               </form>
             )}
-            {createdInvite && <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-700"><p className="font-semibold">Share these IDs securely with the invited email owner:</p><p className="mt-2 break-all">Organisation: {selected.id}</p><p className="mt-1 break-all">Invitation: {createdInvite}</p><button onClick={() => navigator.clipboard?.writeText(`Organisation ID: ${selected.id}\nInvitation ID: ${createdInvite}`)} className="mt-2 inline-flex items-center gap-2 font-semibold text-[#075e54]"><Copy size={13} /> Copy IDs</button><p className="mt-2 text-amber-700">Email delivery is not configured yet; send these IDs through a trusted channel only to the invited email address.</p></div>}
+            {createdInvite && <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-700"><p className="font-semibold">Share these IDs securely with the invited email owner:</p><p className="mt-2 break-all">Organisation: {selected.id}</p><p className="mt-1 break-all">Invitation: {createdInvite}</p><button onClick={() => navigator.clipboard?.writeText(`Organisation ID: ${selected.id}
+Invitation ID: ${createdInvite}`)} className="mt-2 inline-flex items-center gap-2 font-semibold text-[#075e54]"><Copy size={13} /> Copy IDs</button><p className="mt-2 text-amber-700">Email delivery is not configured yet; send these IDs through a trusted channel only to the invited email address.</p></div>}
             <div className="mt-5"><h3 className="mb-2 text-sm font-semibold text-gray-800">Team members</h3>{members.length ? <div className="divide-y divide-gray-100">{members.map((member) => <div key={member.uid} className="flex items-center justify-between py-2 text-sm"><span className="text-gray-700">{member.email || member.uid}</span><span className="rounded-full bg-gray-100 px-2 py-1 text-xs capitalize text-gray-600">{member.role}</span></div>)}</div> : <p className="text-xs text-gray-500">Member list unavailable for your role or no members found.</p>}</div>
           </section>
         )}
