@@ -6,6 +6,8 @@ import {
   loginWithEmail,
   registerWithEmail,
   loginWithGoogle,
+  logout,
+  resendVerificationEmail,
 } from "../services/auth";
 
 export default function Login() {
@@ -36,7 +38,13 @@ export default function Login() {
         setNotice("Account created. Verification email bheja gaya hai. Email verify karke isi invitation link se sign in karo.");
         return;
       }
-      await loginWithEmail(email, password);
+      const signedInUser = await loginWithEmail(email, password);
+      if (!signedInUser.emailVerified) {
+        await resendVerificationEmail(signedInUser);
+        await logout();
+        setNotice("Email abhi verify nahi hua. Verification email dobara bheja hai. Email verify karke invitation link se phir sign in karo.");
+        return;
+      }
       navigate(destination, { replace: true });
     } catch {
       setError(isRegister ? "Account create ya verification email send nahi hua. Email check karke dobara try karo." : "Login failed. Email aur password check karo.");
