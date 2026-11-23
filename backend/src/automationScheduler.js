@@ -7,12 +7,20 @@ async function runScheduledAutomationSteps(options = {}) {
   const db = getDb();
   const now = Date.now();
   const limit = Number.isInteger(options.limit) ? Math.max(1, Math.min(100, options.limit)) : 50;
-  const due = await db.collectionGroup("automationQueue")
+  const dueSnapshot = await db.collectionGroup("automationQueue")
     .where("status", "==", "queued")
-    .where("dueAt", "<=", admin.firestore.Timestamp.fromMillis(now))
-    .orderBy("dueAt", "asc")
-    .limit(limit)
+    .limit(200)
     .get();
+  const due = { docs: dueSnapshot.docs.filter((document) => {
+    const value = document.get("dueAt");
+    const millis = value && typeof value.toMillis === "function" ? value.toMillis() : value instanceof Date ? value.getTime() : NaN;
+    return Number.isFinite(millis) && millis <= now;
+  }).sort((a, b) => {
+    const left = a.get("dueAt"); const right = b.get("dueAt");
+    const leftMs = left?.toMillis ? left.toMillis() : new Date(left).getTime();
+    const rightMs = right?.toMillis ? right.toMillis() : new Date(right).getTime();
+    return leftMs - rightMs;
+  }).slice(0, limit), get size() { return this.docs.length; } };
   let sent = 0;
   let failed = 0;
   let skipped = 0;
