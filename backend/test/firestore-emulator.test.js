@@ -105,7 +105,7 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
   await assertFails(getDoc(doc(agentDb, "chats/legacy_chat")));
   await assertFails(getDoc(doc(agentDb, "deletedChats/legacy_chat")));
   await assertFails(getDoc(doc(agentDb, "whatsappPhoneNumbers/legacy_number")));
-  await assertFails(getDoc(doc(agentDb, "users/agent_a/privateProfile")));
+  await assertFails(getDoc(doc(agentDb, "users/agent_a/privateProfiles/profile_a")));
   await assertFails(setDoc(doc(legacyOwnerDb, "chats/legacy_chat"), { customerPhone: "+15559999999" }));
 
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/chats/new_chat"), { text: "client write" }));
