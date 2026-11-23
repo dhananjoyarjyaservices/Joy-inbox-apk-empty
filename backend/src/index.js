@@ -14,6 +14,7 @@ const {
 } = require("./webhook");
 const {
   normalizePhoneNumber,
+  isDefinitiveWhatsAppSendRejection,
   sendWhatsAppText,
   sendWhatsAppMedia,
   checkWhatsAppConnection
@@ -798,8 +799,7 @@ async function sendTenantTemplate(event) {
       error.statusCode = 502;
       // Explicit 4xx rejects are definitive, except 408. Server errors,
       // timeouts, and successful responses without a message ID are ambiguous.
-      error.definitive = !response.ok &&
-        response.status >= 400 && response.status < 500 && response.status !== 408;
+      error.definitive = !response.ok && isDefinitiveWhatsAppSendRejection(response.status);
       error.retryable = false;
       throw error;
     }
