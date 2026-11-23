@@ -44,7 +44,7 @@ function createInvitationUrl(baseUrl, organizationId, token) {
   }
   // Preserve a configured app base path (for example GitHub Pages project
   // deployments) instead of forcing the route to the domain root.
-  const basePath = url.pathname.replace(/\\/+$/, "");
+  const basePath = url.pathname.replace(/\/+$/, "");
   url.pathname = `${basePath}/setup`;
   url.search = "";
   url.hash = "";
