@@ -2501,12 +2501,54 @@ async function handleTenantCampaigns(event) {
           status: String(value.status || "draft"),
           recipientCount: Number(value.recipientCount || 0),
           skippedRecipients: Number(value.skippedRecipients || 0),
+          sentCount: Number(value.sentCount || 0),
+          failedCount: Number(value.failedCount || 0),
+          uncertainCount: Number(value.uncertainCount || 0),
+          skippedCount: Number(value.skippedCount || 0),
+          scheduledAt: value.scheduledAt?.toDate ? value.scheduledAt.toDate().toISOString() : null,
           createdAt: value.createdAt?.toDate ? value.createdAt.toDate().toISOString() : null
         };
       })
     });
   }
   if (method !== "POST") return jsonResponse(event, 405, { error: "Method not allowed." });
+
+  if (typeof body.action === "string") {
+    const campaignId = String(body.campaignId || "").trim();
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(campaignId)) {
+      return jsonResponse(event, 400, { error: "A valid campaign ID is required." });
+    }
+    const campaignRef = campaigns.doc(campaignId);
+    const now = new Date();
+    const snapshot = await campaignRef.get();
+    if (!snapshot.exists) return jsonResponse(event, 404, { error: "Campaign was not found." });
+    const currentStatus = String(snapshot.get("status") || "draft");
+    const transitions = {
+      start: { from: ["draft"], to: "queued" },
+      schedule: { from: ["draft"], to: "scheduled" },
+      pause: { from: ["queued", "sending", "scheduled"], to: "paused" },
+      resume: { from: ["paused"], to: "queued" },
+      cancel: { from: ["draft", "scheduled", "queued", "sending", "paused"], to: "cancelled" }
+    };
+    const transition = transitions[body.action];
+    if (!transition) return jsonResponse(event, 400, { error: "Unsupported campaign action." });
+    if (!transition.from.includes(currentStatus)) {
+      return jsonResponse(event, 409, { error: `Campaign cannot ${body.action} while status is ${currentStatus}.` });
+    }
+    const patch = { status: transition.to, updatedAt: now, updatedBy: decoded.uid };
+    if (body.action === "start" || body.action === "resume") patch.queuedAt = now;
+    if (body.action === "schedule") {
+      const scheduledAt = new Date(body.scheduledAt);
+      if (!body.scheduledAt || Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() <= now.getTime()) {
+        return jsonResponse(event, 400, { error: "Choose a future campaign schedule time." });
+      }
+      patch.scheduledAt = scheduledAt;
+    }
+    if (body.action === "cancel") patch.cancelledAt = now;
+    if (body.action === "pause") patch.pausedAt = now;
+    await campaignRef.set(patch, { merge: true });
+    return jsonResponse(event, 200, { success: true, campaignId, status: transition.to });
+  }
 
   const definition = normalizeCampaignDefinition(body);
   const normalizedInput = normalizeCampaignRecipients(body.recipients);
@@ -2561,11 +2603,14 @@ async function handleTenantCampaigns(event) {
   const batch = db.batch();
   batch.set(campaignRef, {
     ...definition,
+    organizationId: organization.id,
     status: "preparing",
     recipientCount: normalized.recipients.length,
     skippedRecipients: normalized.skipped,
     sentCount: 0,
     failedCount: 0,
+    uncertainCount: 0,
+    skippedCount: 0,
     createdBy: decoded.uid,
     createdAt: now,
     updatedAt: now
@@ -2625,6 +2670,14 @@ exports.slaScheduledHandler = async () => {
   const result = { sla, automation };
   console.info("Scheduled SLA and automation checks completed:", JSON.stringify(result));
   return result;
+};
+
+// Configure a separate EventBridge schedule for campaign delivery.
+exports.campaignScheduledHandler = async () => {
+  const { runScheduledCampaigns } = require("./campaignWorker");
+  const campaigns = await runScheduledCampaigns();
+  console.info("Scheduled campaign processing completed:", JSON.stringify(campaigns));
+  return campaigns;
 };
 
 exports.handler = async (event) => {
