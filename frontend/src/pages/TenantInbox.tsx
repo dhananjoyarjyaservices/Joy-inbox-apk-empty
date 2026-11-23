@@ -597,7 +597,7 @@ export default function TenantInbox() {
   }
   async function sendInteractiveMessage() {
     if (!organization || !selected || interactiveSending) return;
-    const optionLines = interactiveOptions.split("\\n").map(line => line.trim()).filter(Boolean);
+    const optionLines = interactiveOptions.split("\n").map(line => line.trim()).filter(Boolean);
     let interactive: TenantInteractiveMessageInput;
     if (interactiveType === "button") {
       interactive = {
