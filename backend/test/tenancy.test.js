@@ -336,3 +336,64 @@ test("invalid keyrings and missing rotation keys fail closed", () => {
   })));
   assert.throws(() => rotateEncryptedSecret({}, { targetKeyring: {} }));
 });
+
+
+test("tenant credential migration defaults to dry-run and rotates legacy and per-number records", async () => {
+  const db = fakeTenantDb();
+  const oldKey = Buffer.alloc(32, 31).toString("base64");
+  const newKey = Buffer.alloc(32, 32).toString("base64");
+  const targetKeyring = {
+    activeKeyId: "rotation_2026",
+    keys: { rotation_2026: Buffer.from(newKey, "base64") }
+  };
+  process.env.TENANT_SECRET_ENCRYPTION_KEYRING = JSON.stringify({
+    activeKeyId: "legacy_2025",
+    keys: { legacy_2025: oldKey }
+  });
+  db.docs.set("organizations/org_rotate", { status: "active" });
+  const legacySecret = encryptSecret("EAA_legacy_primary");
+  const numberSecret = encryptSecret("EAA_number_specific");
+  db.docs.set("organizations/org_rotate/settings/whatsapp", {
+    phoneNumberId: "777777777777777", connected: true, accessToken: legacySecret
+  });
+  db.docs.set("organizations/org_rotate/settings/whatsapp/numbers/777777777777777", {
+    phoneNumberId: "777777777777777", connected: true, accessToken: numberSecret
+  });
+
+  const { rotateOrganizationWhatsAppCredentials } = require("../src/tenancy");
+  const preview = await rotateOrganizationWhatsAppCredentials(db, "org_rotate", targetKeyring);
+  assert.deepEqual(
+    { dryRun: preview.dryRun, scanned: preview.scanned, rotated: preview.rotated, failed: preview.failed },
+    { dryRun: true, scanned: 2, rotated: 2, failed: 0 }
+  );
+  assert.equal(db.docs.get("organizations/org_rotate/settings/whatsapp").accessToken.keyId, "legacy_2025");
+
+  const migrated = await rotateOrganizationWhatsAppCredentials(db, "org_rotate", targetKeyring, { dryRun: false });
+  assert.equal(migrated.rotated, 2);
+  assert.equal(migrated.failed, 0);
+  const rootRecord = db.docs.get("organizations/org_rotate/settings/whatsapp").accessToken;
+  const numberRecord = db.docs.get("organizations/org_rotate/settings/whatsapp/numbers/777777777777777").accessToken;
+  assert.equal(rootRecord.keyId, "rotation_2026");
+  assert.equal(numberRecord.keyId, "rotation_2026");
+  assert.equal(decryptSecret(rootRecord, newKey), "EAA_legacy_primary");
+  assert.equal(decryptSecret(numberRecord, newKey), "EAA_number_specific");
+  assert.equal(JSON.stringify([...db.docs.values()]).includes("EAA_legacy_primary"), false);
+
+  const secondPass = await rotateOrganizationWhatsAppCredentials(db, "org_rotate", targetKeyring, { dryRun: false });
+  assert.equal(secondPass.rotated, 0);
+  assert.equal(secondPass.alreadyCurrent, 2);
+  delete process.env.TENANT_SECRET_ENCRYPTION_KEYRING;
+});
+
+test("tenant credential migration rejects invalid tenant IDs and missing organizations", async () => {
+  const db = fakeTenantDb();
+  const { rotateOrganizationWhatsAppCredentials } = require("../src/tenancy");
+  await assert.rejects(
+    () => rotateOrganizationWhatsAppCredentials(db, "../invalid", { activeKeyId: "new", keys: { new: Buffer.alloc(32) } }),
+    { statusCode: 400 }
+  );
+  await assert.rejects(
+    () => rotateOrganizationWhatsAppCredentials(db, "missing_org", { activeKeyId: "new", keys: { new: Buffer.alloc(32) } }),
+    { statusCode: 404 }
+  );
+});
