@@ -170,6 +170,9 @@ async function updateOrganizationMemberRole(organization, actor, input) {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists || snapshot.data().status !== "active") throw httpError("Active member was not found.", 404);
     if (snapshot.data().role === "owner") throw httpError("The owner role cannot be changed.", 403);
+    if (snapshot.data().role === "admin" && actor.role !== "owner") {
+      throw httpError("Only the organization owner can change another admin's role.", 403);
+    }
     targetEmail = String(snapshot.data().email || "");
     transaction.set(ref, { role, updatedAt: new Date() }, { merge: true });
     transaction.set(indexRef, { role }, { merge: true });
@@ -190,6 +193,9 @@ async function removeOrganizationMember(organization, actor, input) {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists || snapshot.data().status !== "active") throw httpError("Active member was not found.", 404);
     if (snapshot.data().role === "owner") throw httpError("The owner cannot be removed.", 403);
+    if (snapshot.data().role === "admin" && actor.role !== "owner") {
+      throw httpError("Only the organization owner can remove another admin.", 403);
+    }
     targetEmail = String(snapshot.data().email || "");
     const now = new Date();
     transaction.set(ref, { status: "removed", removedAt: now, updatedAt: now }, { merge: true });
