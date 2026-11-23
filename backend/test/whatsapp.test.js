@@ -103,3 +103,44 @@ test("Meta 4xx send response is a definitive rejection", async () => {
     global.fetch = originalFetch;
   }
 });
+
+
+test("Meta request timeout response is uncertain and must not be automatically retried", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: false,
+    status: 408,
+    async json() { return { error: { message: "Request timed out" } }; }
+  });
+  try {
+    await assert.rejects(
+      sendWhatsAppText("15551234567", "Hello", undefined, {
+        accessToken: "EAA-test-token",
+        phoneNumberId: "123456789012345"
+      }),
+      (error) => error.definitive === false && error.retryable === false
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("Meta rate-limit response is a definitive rejection", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: false,
+    status: 429,
+    async json() { return { error: { message: "Rate limit reached" } }; }
+  });
+  try {
+    await assert.rejects(
+      sendWhatsAppText("15551234567", "Hello", undefined, {
+        accessToken: "EAA-test-token",
+        phoneNumberId: "123456789012345"
+      }),
+      (error) => error.definitive === true && error.retryable === false
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
