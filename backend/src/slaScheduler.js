@@ -1,6 +1,7 @@
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const { sendTenantSlaOverdueNotification } = require("./push");
 const { getOrganizationSlaSettings } = require("./slaSettings");
+const { getTenantNotificationPreferences } = require("./notificationPreferences");
 
 function timestampMillis(value) {
   if (value && typeof value.toMillis === "function") return value.toMillis();
@@ -33,6 +34,9 @@ async function checkOrganization(db, admin, organizationId) {
       if (!assignedTo || !Number.isFinite(pendingMillis) ||
           pendingMillis > Date.now() - targetMs ||
           chat.archived === true || chat.status === "resolved") continue;
+
+      const notificationPreferences = await getTenantNotificationPreferences(db, organizationId, assignedTo);
+      if (!notificationPreferences.sla) continue;
 
       const chatRef = document.ref;
       const claimed = await db.runTransaction(async (transaction) => {
