@@ -195,3 +195,13 @@ export async function updateOrganisationChatStatus(
     { method: "POST", body: JSON.stringify({ status }) },
   );
 }
+
+export async function sendOrganisationWhatsAppMedia(
+  orgId: string,
+  details: { to: string; type: string; mimeType: string; filename: string; caption?: string; fileBase64: string },
+) {
+  return request<{ success: boolean; message: { messageId: string; chatId: string; status: string; mediaRetained: boolean } }>(
+    `/organisations/${encodeURIComponent(orgId)}/media`,
+    { method: "POST", body: JSON.stringify(details) },
+  );
+}
