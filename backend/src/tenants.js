@@ -217,6 +217,16 @@ async function saveWhatsAppConnection(db, user, orgId, body) {
     fail(String(result?.error?.message || "Meta could not verify this WhatsApp number and token.").slice(0, 300), 400);
   }
 
+  const wabaResponse = await fetch(
+    `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const wabaResult = await wabaResponse.json().catch(() => ({}));
+  const belongsToWaba = Array.isArray(wabaResult.data) && wabaResult.data.some((item) => String(item.id) === phoneNumberId);
+  if (!wabaResponse.ok || !belongsToWaba) {
+    fail(String(wabaResult?.error?.message || "The Phone Number ID is not accessible under the supplied WABA ID.").slice(0, 300), 400);
+  }
+
   const encrypted = encryptSecret(accessToken);
   const webhookVerifyToken = crypto.randomBytes(32).toString("hex");
   const webhookVerifyTokenHash = crypto.createHash("sha256").update(webhookVerifyToken).digest("hex");
