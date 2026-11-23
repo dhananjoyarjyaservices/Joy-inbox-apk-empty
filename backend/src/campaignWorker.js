@@ -268,18 +268,6 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
         continue;
       }
 
-      // Re-check the tenant suppression record immediately before every send.
-      const suppressionRef = organizationRef.collection("campaignSuppressions")
-        .doc(suppressionDocumentId(recipient.phone));
-      const suppressionSnapshot = await suppressionRef.get();
-      if (suppressionSnapshot.exists && suppressionSnapshot.get("status") !== "active") {
-        await finishRecipient(db, campaignRef, document.ref, recipient, "skipped", {
-          reason: "whatsapp_opt_out_suppression"
-        }, dependencies);
-        skipped += 1;
-        continue;
-      }
-
       const latestCampaign = await campaignRef.get();
       const latestStatus = latestCampaign.exists ? latestCampaign.get("status") : "cancelled";
       if (!["queued", "sending"].includes(latestStatus)) {
@@ -300,6 +288,19 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
           error: "Recipient template variable count does not match the approved template."
         }, dependencies);
         failed += 1;
+        continue;
+      }
+
+      // This is the final read before calling Meta, so a new STOP reply
+      // recorded after draft creation is honored at send time.
+      const suppressionRef = organizationRef.collection("campaignSuppressions")
+        .doc(suppressionDocumentId(recipient.phone));
+      const suppressionSnapshot = await suppressionRef.get();
+      if (suppressionSnapshot.exists && suppressionSnapshot.get("status") !== "active") {
+        await finishRecipient(db, campaignRef, document.ref, recipient, "skipped", {
+          reason: "whatsapp_opt_out_suppression"
+        }, dependencies);
+        skipped += 1;
         continue;
       }
 
