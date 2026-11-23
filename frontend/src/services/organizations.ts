@@ -178,3 +178,22 @@ export async function saveOrganizationAutomationRule(
 export async function deleteOrganizationAutomationRule(organizationId: string, resourceId: string): Promise<void> {
   await request("/organizations/automation-rules", "DELETE", { organizationId, resourceId });
 }
+
+
+export interface OrganizationAutomationRun {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  customerPhone: string;
+  status: "sending" | "sent" | "failed" | "partially_failed" | "skipped" | string;
+  completedSteps: number;
+  totalSteps: number;
+  error: string;
+  reason: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+export async function listOrganizationAutomationRuns(organizationId: string): Promise<OrganizationAutomationRun[]> {
+  const result = await request(`/organizations/automation-runs?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.runs) ? result.runs : [];
+}
