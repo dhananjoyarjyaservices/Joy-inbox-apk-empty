@@ -130,6 +130,42 @@ async function handleWhatsAppConnections(event) {
   return jsonResponse(event, 200, { connections });
 }
 
+async function handleWhatsAppTemplates(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const phoneNumberId = event.queryStringParameters?.phoneNumberId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "chats:read");
+  if (typeof phoneNumberId !== "string" || !/^[0-9]{5,32}$/.test(phoneNumberId)) {
+    return jsonResponse(event, 400, { error: "A valid connected WhatsApp phone number is required." });
+  }
+  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  const connection = connections.find(item => item.phoneNumberId === phoneNumberId && item.connected);
+  if (!connection) return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the workspace." });
+  const credentials = await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
+  const version = process.env.GRAPH_API_VERSION || "v26.0";
+  const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(connection.wabaId || credentials.wabaId || phoneNumberId)}/message_templates`);
+  url.searchParams.set("fields", "id,name,status,language,category,components");
+  url.searchParams.set("limit", "100");
+  const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.warn("Meta template list request failed:", response.status, payload.error?.code);
+    return jsonResponse(event, response.status === 401 || response.status === 403 ? 502 : 502, {
+      error: payload.error?.message || "Meta could not load message templates. Check the WhatsApp Business Account ID and token permissions."
+    });
+  }
+  const templates = Array.isArray(payload.data) ? payload.data.map(item => ({
+    id: String(item.id || ""),
+    name: String(item.name || ""),
+    status: String(item.status || "UNKNOWN"),
+    language: String(item.language || ""),
+    category: String(item.category || ""),
+    components: Array.isArray(item.components) ? item.components : []
+  })) : [];
+  return jsonResponse(event, 200, { templates, paging: payload.paging?.cursors ? { hasNext: Boolean(payload.paging?.next) } : { hasNext: false } });
+}
+
 async function handleWhatsAppConnectionHealth(event) {
   const decoded = await authenticateUser(event);
   let body;
@@ -1535,6 +1571,14 @@ exports.handler = async (event) => {
       return jsonResponse(event, error.statusCode || 500, {
         error: error.statusCode ? error.message : "WhatsApp connections could not be loaded."
       });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/whatsapp/templates")) {
+    try { return await handleWhatsAppTemplates(event); }
+    catch (error) {
+      console.error("WhatsApp templates could not load:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "WhatsApp templates could not be loaded." });
     }
   }
 
