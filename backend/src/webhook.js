@@ -499,6 +499,25 @@ async function processOrganisationWebhookChange(orgId, value) {
       updatedAt: new Date()
     }, { merge: true });
 
+    const stopWords = new Set(["stop", "unsubscribe", "cancel", "end", "quit"]);
+    const inboundText = message.type === "text" ? String(message.text?.body || "").trim().toLowerCase() : "";
+    if (stopWords.has(inboundText)) {
+      const contactRef = orgRef.collection("contacts").doc(phone);
+      const eventRef = contactRef.collection("consentEvents").doc();
+      await db.runTransaction(async (tx) => {
+        tx.set(contactRef, {
+          whatsappOptIn: false, whatsappOptOut: true,
+          whatsappOptOutAt: new Date(), whatsappOptOutSource: "customer_keyword",
+          updatedAt: new Date()
+        }, { merge: true });
+        tx.create(eventRef, {
+          status: "opted_out", source: "customer_keyword",
+          keyword: inboundText, actorUid: "customer", createdAt: new Date()
+        });
+      });
+      continue;
+    }
+
     await maybeRunOrganisationAutomation(orgId, phone, message, contactName);
   }
 
