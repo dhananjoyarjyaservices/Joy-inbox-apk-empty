@@ -176,33 +176,40 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
 
   const responseMessageIds = [];
   const chatRef = organization.ref.collection("chats").doc(phone);
+  const firstDelayedIndex = steps.findIndex((step, index) => index > 0 && step.delaySeconds > 0);
+  const immediateCount = firstDelayedIndex < 0 ? steps.length : firstDelayedIndex;
   try {
-    const first = steps[0];
-    const result = await sendWhatsAppText(phone, first.message, undefined, credentials);
-    const timestamp = new Date();
-    responseMessageIds.push(result.messageId);
+    let lastMessage = "";
+    let lastTimestamp = new Date();
     const batch = db.batch();
-    batch.set(chatRef.collection("messages").doc(result.messageId), {
-      messageId: result.messageId, chatId: phone, organizationId: organization.id,
-      direction: "outgoing", type: "text", text: first.message, timestamp, status: "sent",
-      source: "automation", automationRuleId: rule.id, automationStep: 1,
-      phoneNumberId: credentials.phoneNumberId || null, sender: "system"
-    });
+    for (let index = 0; index < immediateCount; index += 1) {
+      const replyText = steps[index].message;
+      const result = await sendWhatsAppText(phone, replyText, undefined, credentials);
+      lastTimestamp = new Date();
+      lastMessage = replyText;
+      responseMessageIds.push(result.messageId);
+      batch.set(chatRef.collection("messages").doc(result.messageId), {
+        messageId: result.messageId, chatId: phone, organizationId: organization.id,
+        direction: "outgoing", type: "text", text: replyText, timestamp: lastTimestamp, status: "sent",
+        source: "automation", automationRuleId: rule.id, automationStep: index + 1,
+        phoneNumberId: credentials.phoneNumberId || null, sender: "system"
+      });
+    }
     batch.set(chatRef, {
-      lastMessage: first.message, lastMessageAt: timestamp, lastMessageDirection: "outgoing",
-      ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}), updatedAt: timestamp
+      lastMessage, lastMessageAt: lastTimestamp, lastMessageDirection: "outgoing",
+      ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}), updatedAt: lastTimestamp
     }, { merge: true });
     const runUpdates = {
-      responseMessageIds,
-      completedSteps: 1,
+      responseMessageIds: [...responseMessageIds],
+      completedSteps: immediateCount,
       totalSteps: steps.length,
-      status: steps.length === 1 ? "sent" : "sending",
-      updatedAt: timestamp,
-      ...(steps.length === 1 ? { sentAt: timestamp } : {})
+      status: immediateCount === steps.length ? "sent" : "sending",
+      updatedAt: lastTimestamp,
+      ...(immediateCount === steps.length ? { sentAt: lastTimestamp } : {})
     };
     batch.set(runRef, runUpdates, { merge: true });
-    let dueAt = timestamp.getTime();
-    for (let index = 1; index < steps.length; index += 1) {
+    let dueAt = lastTimestamp.getTime();
+    for (let index = immediateCount; index < steps.length; index += 1) {
       dueAt += steps[index].delaySeconds * 1000;
       const queueRef = organization.ref.collection("automationQueue").doc(`${runId}_${index + 1}`);
       batch.set(queueRef, {
@@ -212,7 +219,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
         delaySeconds: steps[index].delaySeconds,
         dueAt: new Date(dueAt),
         windowExpiresAt: new Date(inboundTimestamp.getTime() + 24 * 60 * 60 * 1000),
-        status: "queued", attempts: 0, createdAt: timestamp, updatedAt: timestamp
+        status: "queued", attempts: 0, createdAt: lastTimestamp, updatedAt: lastTimestamp
       });
     }
     await batch.commit();
