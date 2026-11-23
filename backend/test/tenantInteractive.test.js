@@ -73,3 +73,32 @@ test("creates a bounded internal preview for the inbox history", () => {
   });
   assert.equal(preview, "Interactive button message · 2 option(s): Pick an option");
 });
+
+test("builds secure CTA URL messages for payment and catalog links", () => {
+  const payload = buildWhatsAppInteractivePayload("919876543210", {
+    type: "cta_url",
+    body: "Complete your payment securely.",
+    displayText: "Pay now",
+    url: "https://payments.example.com/order/123"
+  });
+  assert.equal(payload.interactive.type, "cta_url");
+  assert.deepEqual(payload.interactive.action, {
+    name: "cta_url",
+    parameters: {
+      display_text: "Pay now",
+      url: "https://payments.example.com/order/123"
+    }
+  });
+  assert.match(getInteractivePreview({
+    type: "cta_url", body: "Complete your payment", displayText: "Pay", url: "https://payments.example.com"
+  }), /1 option/);
+});
+
+test("CTA URL messages reject insecure URLs and invalid button labels", () => {
+  assert.throws(() => normalizeInteractiveMessage({
+    type: "cta_url", body: "Pay", displayText: "Pay now", url: "http://payments.example.com"
+  }), /HTTPS/);
+  assert.throws(() => normalizeInteractiveMessage({
+    type: "cta_url", body: "Pay", displayText: "x".repeat(21), url: "https://payments.example.com"
+  }), /Link button text/);
+});
