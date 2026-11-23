@@ -74,7 +74,7 @@ async function sendIncomingTextNotification(phone, senderName, text, messageId) 
   });
 }
 
-async function sendTenantSlaOverdueNotification(organizationId, uid, phone, senderName) {
+async function sendTenantSlaOverdueNotification(organizationId, uid, phone, senderName, preferences = {}) {
   const db = getDb();
   const admin = getFirebaseAdmin();
   const title = "First reply SLA overdue";
@@ -84,7 +84,9 @@ async function sendTenantSlaOverdueNotification(organizationId, uid, phone, send
     title,
     body,
     chatId: String(phone),
-    organizationId
+    organizationId,
+    soundEnabled: preferences.soundEnabled === false ? "false" : "true",
+    desktopEnabled: preferences.desktopEnabled === false ? "false" : "true"
   });
 }
 
@@ -98,7 +100,14 @@ async function sendTenantIncomingTextNotification(organizationId, phone, senderN
   const data = { type: "incoming_whatsapp_text", title, body, chatId: phone, messageId, organizationId };
   for (const member of members.docs) {
     if (!["owner", "admin", "agent"].includes(member.get("role"))) continue;
-    await sendToDeviceCollection(admin, getTenantDeviceCollection(db, organizationId, member.id), data);
+    const { getTenantNotificationPreferences } = require("./notificationPreferences");
+    const preferences = await getTenantNotificationPreferences(db, organizationId, member.id);
+    if (!preferences.desktopEnabled && !preferences.soundEnabled) continue;
+    await sendToDeviceCollection(admin, getTenantDeviceCollection(db, organizationId, member.id), {
+      ...data,
+      soundEnabled: preferences.soundEnabled ? "true" : "false",
+      desktopEnabled: preferences.desktopEnabled ? "true" : "false"
+    });
   }
 }
 
