@@ -3,7 +3,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { ArrowLeft, MessageCircle, Send, RefreshCw, UserRoundCheck, StickyNote } from "lucide-react";
 import { db } from "../firebase/config";
-import {\n  sendOrganisationWhatsAppText,\n  getOrganisationNotes,\n  addOrganisationNote,\n  assignOrganisationChat,\n  type OrganisationNote,\n} from "../services/organisations";\nimport { useAuth } from "../context/AuthContext";
+import {
+  sendOrganisationWhatsAppText,
+  getOrganisationNotes,
+  addOrganisationNote,
+  assignOrganisationChat,
+  type OrganisationNote,
+} from "../services/organisations";
+import { useAuth } from "../context/AuthContext";
 
 type ChatRow = {
   id: string;
@@ -34,14 +41,19 @@ function toDate(value: MessageRow["timestamp"] | ChatRow["lastMessageAt"]) {
 
 export default function OrganisationInbox() {
   const { orgId = "" } = useParams();
-  const navigate = useNavigate();\n  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [chats, setChats] = useState<ChatRow[]>([]);
   const [selectedChatId, setSelectedChatId] = useState("");
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState("");\n  const [notes, setNotes] = useState<OrganisationNote[]>([]);\n  const [noteDraft, setNoteDraft] = useState("");\n  const [savingNote, setSavingNote] = useState(false);\n  const [assigning, setAssigning] = useState(false);
+  const [error, setError] = useState("");
+  const [notes, setNotes] = useState<OrganisationNote[]>([]);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
   const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
 
