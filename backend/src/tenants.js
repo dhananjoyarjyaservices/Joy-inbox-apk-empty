@@ -218,7 +218,9 @@ async function listOrganisationInvitations(db, user, orgId) {
       status,
       createdAt: invitation.createdAt || null,
       expiresAt: invitation.expiresAt || null,
-      createdBy: invitation.createdBy || ""
+      createdBy: invitation.createdBy || "",
+      emailDelivery: invitation.emailDelivery || "failed",
+      emailLastAttemptAt: invitation.emailLastAttemptAt || null
     };
   });
 }
