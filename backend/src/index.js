@@ -2341,7 +2341,7 @@ async function retrieveTenantMessageMedia(event) {
   if (!snapshot.exists) return jsonResponse(event, 404, { error: "Message was not found in this workspace." });
   const message = snapshot.data();
   if (!message.mediaId) return jsonResponse(event, 404, { error: "This message has no WhatsApp media ID." });
-  const credentials = await getWhatsAppCredentials(getDb(), organization.id);
+  const credentials = await getWhatsAppCredentials(getDb(), organization.id, message.phoneNumberId || undefined);
   const media = await fetchWhatsAppMediaForProxy(message.mediaId, credentials);
   return {
     statusCode: 200,
