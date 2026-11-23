@@ -71,6 +71,20 @@ async function sendIncomingTextNotification(phone, senderName, text, messageId) 
   });
 }
 
+async function sendTenantSlaOverdueNotification(organizationId, uid, phone, senderName) {
+  const db = getDb();
+  const admin = getFirebaseAdmin();
+  const title = "First reply SLA overdue";
+  const body = `Customer ${String(senderName || `+${phone}`).slice(0, 90)} is waiting for your reply.`;
+  await sendToDeviceCollection(admin, getTenantDeviceCollection(db, organizationId, uid), {
+    type: "tenant_sla_overdue",
+    title,
+    body,
+    chatId: String(phone),
+    organizationId
+  });
+}
+
 async function sendTenantIncomingTextNotification(organizationId, phone, senderName, text, messageId) {
   const db = getDb();
   const organizationRef = db.collection("organizations").doc(organizationId);
@@ -100,5 +114,6 @@ module.exports = {
   isValidFcmToken,
   isValidInstallationId,
   sendIncomingTextNotification,
-  sendTenantIncomingTextNotification
+  sendTenantIncomingTextNotification,
+  sendTenantSlaOverdueNotification
 };
