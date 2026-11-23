@@ -142,3 +142,5 @@ Workspace owners and admins can request `GET /organizations/notifications/team-d
 
 The team analytics endpoint also accepts optional inclusive `from=YYYY-MM-DD` and `to=YYYY-MM-DD` query parameters. The UI date controls request the selected range from the API and can export the currently displayed per-member aggregates to CSV. Each member query is bounded to 500 records in the selected range; the UI should be understood as a sampled report when this cap is reached, not a lifetime total.
 
+Team delivery analytics also groups the sampled delivery records by notification type (for example, incoming message and SLA push), both per active member and across the displayed team. The CSV export includes per-member message and SLA delivered/failed counts. Unknown future notification types remain available in the type breakdown rather than being discarded.
+
