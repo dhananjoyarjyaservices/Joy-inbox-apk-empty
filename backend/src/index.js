@@ -412,6 +412,7 @@ async function handleTenantChatAction(event, action) {
   const { organizationId, ...actionInput } = body;
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "chats:manage");
+  const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };
   if (action === "chat-assignment") {
     const result = await updateTenantChatAssignment(getDb(), organization, actor, actionInput);
     return jsonResponse(event, 200, { success: true, ...result });
