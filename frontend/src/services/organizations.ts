@@ -300,3 +300,30 @@ export async function openOrganizationBillingPortal(organizationId: string): Pro
   if (typeof result.portal?.url !== "string") throw new Error("Stripe billing portal URL was not returned.");
   return result.portal.url;
 }
+
+
+export interface OrganizationCampaignRecipient {
+  id: string;
+  phone: string;
+  status: string;
+  deliveryStatus: string;
+  reason: string;
+  error: string;
+  messageId: string;
+  createdAt: string | null;
+  sentAt: string | null;
+  deliveryUpdatedAt: string | null;
+}
+export async function getOrganizationCampaignRecipients(
+  organizationId: string,
+  campaignId: string,
+  cursor?: string
+): Promise<{ recipients: OrganizationCampaignRecipient[]; nextCursor: string | null }> {
+  const query = new URLSearchParams({ organizationId, campaignId, limit: "100" });
+  if (cursor) query.set("cursor", cursor);
+  const result = await request(`/organizations/campaigns?${query.toString()}`);
+  return {
+    recipients: Array.isArray(result.recipients) ? result.recipients : [],
+    nextCursor: typeof result.nextCursor === "string" ? result.nextCursor : null
+  };
+}
