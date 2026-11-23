@@ -70,3 +70,69 @@ test("does not claim a job that is not queued or is not due", async () => {
     assert.equal(await claimQueueJob(db, { id: "job" }, now), null);
   }
 });
+
+test("marks an expired sending job uncertain without making it retryable", async () => {
+  const { markExpiredQueueJobUncertain } = require("../src/automationWorker");
+  const now = new Date("2026-11-23T12:00:00.000Z");
+  const writes = [];
+  const runRef = { path: "organizations/org_1/automationRuns/run_1" };
+  const organizationRef = {
+    collection(name) {
+      assert.equal(name, "automationRuns");
+      return { doc(id) { assert.equal(id, "run_1"); return runRef; } };
+    }
+  };
+  const jobRef = {
+    parent: { parent: organizationRef }
+  };
+  const stale = {
+    ref: jobRef,
+    data() { return { runId: "run_1", stepIndex: 1 }; }
+  };
+  const db = {
+    async runTransaction(callback) {
+      return callback({
+        async get() {
+          return {
+            exists: true,
+            data() { return { status: "sending", leaseUntil: new Date(now.getTime() - 1) }; }
+          };
+        },
+        update(reference, patch) { writes.push({ type: "update", reference, patch }); },
+        set(reference, patch, options) { writes.push({ type: "set", reference, patch, options }); }
+      });
+    }
+  };
+
+  assert.equal(await markExpiredQueueJobUncertain(db, stale, now), true);
+  assert.equal(writes.length, 2);
+  assert.equal(writes[0].patch.status, "uncertain");
+  assert.equal(writes[0].patch.leaseUntil, null);
+  assert.match(writes[0].patch.error, /automatic resend was prevented/i);
+  assert.equal(writes[1].reference, runRef);
+  assert.equal(writes[1].patch.status, "partially_failed");
+});
+
+test("does not alter a job whose lease has not expired", async () => {
+  const { markExpiredQueueJobUncertain } = require("../src/automationWorker");
+  const now = new Date("2026-11-23T12:00:00.000Z");
+  const stale = {
+    data() { return { runId: "run_1" }; },
+    ref: { parent: { parent: { collection() { return { doc() { return {}; } }; } } } }
+  };
+  const db = {
+    async runTransaction(callback) {
+      return callback({
+        async get() {
+          return {
+            exists: true,
+            data() { return { status: "sending", leaseUntil: new Date(now.getTime() + 60_000) }; }
+          };
+        },
+        update() { assert.fail("A live lease must not be changed."); },
+        set() { assert.fail("A live lease must not update its run."); }
+      });
+    }
+  };
+  assert.equal(await markExpiredQueueJobUncertain(db, stale, now), false);
+});
