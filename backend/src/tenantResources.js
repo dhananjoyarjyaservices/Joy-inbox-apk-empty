@@ -19,7 +19,8 @@ function contactInput(input) {
   if (input.tags !== undefined && (!Array.isArray(input.tags) || input.tags.length > 20 || input.tags.some((tag) => typeof tag !== "string" || tag.trim().length > 30))) {
     throw httpError("Contact tags must be up to 20 labels, each 30 characters or fewer.", 400);
   }
-  const tags = [...new Map((input.tags || []).map((tag) => tag.trim()).filter(Boolean).map((tag) => [tag.toLowerCase(), tag])).values()];
+  const normalizedTags = (input.tags || []).map((tag) => tag.trim()).filter(Boolean);
+  const tags = normalizedTags.filter((tag, index) => normalizedTags.findIndex((item) => item.toLowerCase() === tag.toLowerCase()) === index);
   if (!name || name.length > 100) throw httpError("Contact name is required (maximum 100 characters).", 400);
   if (!/^\+[1-9]\d{6,14}$/.test(phone)) throw httpError("Enter a valid international phone number.", 400);
   if (email.length > 254 || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw httpError("Enter a valid email address.", 400);
