@@ -108,12 +108,16 @@ async function clearClaim(db, admin, chatRef, pendingMillis, retry = true) {
 
 async function saveTenantSlaNotification(db, organizationId, uid, chatId, pendingMillis, senderName) {
   const notificationId = `sla_${pendingMillis}_${chatId}`;
-  await db.collection("organizations").doc(organizationId)
-    .collection("members").doc(uid).collection("notifications").doc(notificationId).set({
-      type: "sla", title: "SLA response overdue",
-      body: `A customer conversation needs your reply: ${String(senderName || chatId)}`,
-      chatId, createdAt: new Date(), read: false
-    }, { merge: true });
+  try {
+    await db.collection("organizations").doc(organizationId)
+      .collection("members").doc(uid).collection("notifications").doc(notificationId).set({
+        type: "sla", title: "SLA response overdue",
+        body: `A customer conversation needs your reply: ${String(senderName || chatId)}`,
+        chatId, createdAt: new Date(), read: false
+      }, { merge: true });
+  } catch (error) {
+    console.error("SLA notification history write failed:", error);
+  }
   return notificationId;
 }
 
