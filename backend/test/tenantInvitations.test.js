@@ -62,6 +62,7 @@ test("normalizes invitation emails and builds trusted setup URLs", () => {
   assert.equal(normalizeInvitationEmail("  Agent@Example.com "), "agent@example.com");
   assert.throws(() => normalizeInvitationEmail("not-an-email"), /valid invitation email/);
   assert.match(createInvitationUrl("https://app.example.com", "org_1", "a".repeat(43)), /#organizationId=org_1&invite=/);
+  assert.equal(new URL(createInvitationUrl("https://app.example.com/joy-inbox/", "org_1", "a".repeat(43))).pathname, "/joy-inbox/setup");
   assert.throws(() => createInvitationUrl("http://app.example.com", "org_1", "a".repeat(43)), /HTTPS/);
 });
 
