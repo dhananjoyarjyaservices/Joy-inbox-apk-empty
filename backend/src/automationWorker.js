@@ -135,6 +135,31 @@ async function processAutomationQueue(options = {}) {
   const db = options.db || getDb();
   const now = options.now || new Date();
   const limit = Math.max(1, Math.min(MAX_JOBS_PER_INVOCATION, Number(options.limit) || MAX_JOBS_PER_INVOCATION));
+  const staleSnapshot = await db.collectionGroup("automationQueue").where("status", "==", "sending").limit(limit * 4).get();
+  for (const stale of staleSnapshot.docs) {
+    const data = stale.data();
+    if (!timestampMillis(data.leaseUntil) || timestampMillis(data.leaseUntil) > now.getTime()) continue;
+    const organizationRef = stale.ref.parent.parent;
+    if (!organizationRef || !data.runId) continue;
+    const runRef = organizationRef.collection("automationRuns").doc(data.runId);
+    await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(stale.ref);
+      if (!current.exists || current.data().status !== "sending" ||
+          timestampMillis(current.data().leaseUntil) > now.getTime()) return;
+      transaction.update(stale.ref, {
+        status: "uncertain",
+        leaseUntil: null,
+        error: "Worker lease expired during send. Delivery outcome needs manual review; automatic resend was prevented.",
+        updatedAt: now
+      });
+      transaction.set(runRef, {
+        status: "partially_failed",
+        error: "A queued step has an uncertain delivery outcome and needs manual review.",
+        failedStep: Number(data.stepIndex || 0) + 1,
+        updatedAt: now
+      }, { merge: true });
+    });
+  }
   const snapshot = await db.collectionGroup("automationQueue").where("status", "==", "queued").limit(limit * 4).get();
   const dueJobs = snapshot.docs
     .filter((document) => timestampMillis(document.data().dueAt) <= now.getTime())
@@ -143,7 +168,8 @@ async function processAutomationQueue(options = {}) {
   const results = { scanned: snapshot.size, due: dueJobs.length, sent: 0, failed: 0, skipped: 0, deferred: 0, retried: 0, claimed: 0 };
   for (const document of dueJobs) {
     const organizationRef = document.ref.parent.parent;
-    if (!organizationRef) continue;
+    const data = document.data();
+    if (!organizationRef || !data.runId || !data.organizationId || !data.customerPhone || !data.text) continue;
     const job = await claimQueueJob(db, document.ref, now);
     if (!job) continue;
     results.claimed += 1;
