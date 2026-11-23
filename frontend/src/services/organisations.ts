@@ -99,3 +99,14 @@ export async function saveOrganisationWhatsAppConnection(
     { method: "POST", body: JSON.stringify(details) },
   );
 }
+
+export async function sendOrganisationWhatsAppText(
+  orgId: string,
+  to: string,
+  text: string,
+) {
+  return request<{ success: boolean; message: { messageId: string; chatId: string; status: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/messages`,
+    { method: "POST", body: JSON.stringify({ to, text }) },
+  );
+}
