@@ -44,9 +44,10 @@ export async function disconnectWhatsApp(organizationId: string, phoneNumberId: 
   return request("/whatsapp/connect", "DELETE", { organizationId, phoneNumberId });
 }
 
-export async function sendTenantText(organizationId: string, to: string, text: string, phoneNumberId?: string) {
+export async function sendTenantText(organizationId: string, to: string, text: string, phoneNumberId?: string, replyToMessageId?: string) {
   return request("/organizations/send", "POST", {
     organizationId, to, chatId: to, text, ...(phoneNumberId ? { phoneNumberId } : {}),
+    ...(replyToMessageId ? { replyToMessageId } : {}),
     clientMessageId: crypto.randomUUID()
   });
 }
