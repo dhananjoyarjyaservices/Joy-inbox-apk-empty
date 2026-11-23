@@ -144,3 +144,70 @@ test("campaign delivery counters advance monotonically with Meta delivery status
     {}
   );
 });
+
+test("Meta delivery webhooks update campaign recipient and delivery counters idempotently", async () => {
+  const crypto = require("node:crypto");
+  const { updateTenantMessageStatus } = require("../src/webhook");
+  const phone = "15551234567";
+  const recipientId = crypto.createHash("sha256").update(phone).digest("hex");
+  const message = { status: "sent", source: "campaign", campaignId: "campaign_1" };
+  const recipient = { deliveryStatus: "sent" };
+  const campaign = { deliveredCount: 0, readCount: 0, deliveryFailedCount: 0 };
+  const messageRef = {};
+  const recipientRef = {};
+  const campaignRef = {
+    collection(name) {
+      assert.equal(name, "recipients");
+      return { doc(id) { assert.equal(id, recipientId); return recipientRef; } };
+    }
+  };
+  const refs = new Map([[messageRef, message], [campaignRef, campaign], [recipientRef, recipient]]);
+  const writes = [];
+  messageRef.firestore = {
+    async runTransaction(callback) {
+      return callback({
+        async get(ref) {
+          const value = refs.get(ref);
+          return { exists: Boolean(value), data: () => value ? ({ ...value }) : undefined, get: key => value?.[key] };
+        },
+        update(ref, patch) {
+          Object.assign(refs.get(ref), patch);
+          writes.push({ ref, patch });
+        }
+      });
+    }
+  };
+  const organization = {
+    id: "org_1",
+    ref: {
+      collection(name) {
+        if (name === "chats") {
+          return { doc(id) {
+            assert.equal(id, phone);
+            return { collection(child) {
+              assert.equal(child, "messages");
+              return { doc(messageId) {
+                assert.equal(messageId, "wamid.campaign.1");
+                return messageRef;
+              } };
+            } };
+          } };
+        }
+        if (name === "campaigns") {
+          return { doc(id) {
+            assert.equal(id, "campaign_1");
+            return campaignRef;
+          } };
+        }
+        throw new Error("Unexpected collection " + name);
+      }
+    }
+  };
+  const event = { id: "wamid.campaign.1", recipient_id: phone, status: "delivered" };
+  await updateTenantMessageStatus(organization, event);
+  await updateTenantMessageStatus(organization, event);
+  assert.equal(message.status, "delivered");
+  assert.equal(recipient.deliveryStatus, "delivered");
+  assert.equal(campaign.deliveredCount, 1);
+  assert.equal(writes.length, 3);
+});
