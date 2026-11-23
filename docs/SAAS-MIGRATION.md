@@ -205,3 +205,8 @@ The utility copies legacy chats/messages, contacts, quick replies and greeting s
 Customer media bytes, Firebase Storage paths, signed URLs and base64 media payloads are deliberately excluded. Meta media IDs and safe message metadata may be retained; old media without a Meta media ID is marked unavailable and must not be copied into tenant storage. Quick Reply image references are marked unavailable and need to be re-uploaded to the workspace.
 
 The script is not run automatically and has not been executed against any production data. Do not pass `--execute` until the dry-run counts, owner identity, target organization, backups and rollback plan have been reviewed.
+
+
+## Conversation internal notes
+
+The tenant inbox now supports private internal notes at `organizations/{organizationId}/chats/{chatId}/internalNotes`. Active members with chat permissions can list the latest 100 notes and add notes up to 2,000 characters. Each note records its author UID/name and timestamp. Internal notes are served only through authenticated tenant APIs; Firestore client rules deny direct access and notes are never sent to WhatsApp.
