@@ -2972,12 +2972,41 @@ exports.campaignScheduledHandler = async () => {
   return campaigns;
 };
 
+const LEGACY_OWNER_API_ROUTE_SUFFIXES = Object.freeze([
+  "/send",
+  "/chat-state",
+  "/message-state",
+  "/delete-messages",
+  "/delete-chats",
+  "/send-media",
+  "/media",
+  "/status",
+  "/greeting-settings",
+  "/fcm-tokens/register",
+  "/fcm-tokens/remove"
+]);
+
+function isLegacyOwnerApiRoute(path) {
+  // Organization-scoped routes are handled separately and must never be gated here.
+  if (typeof path !== "string" || path.includes("/organizations/")) return false;
+  return LEGACY_OWNER_API_ROUTE_SUFFIXES.some((suffix) => path.endsWith(suffix));
+}
+
 exports.handler = async (event) => {
   const method = getMethod(event);
   const path = getPath(event);
 
   if (method === "OPTIONS") {
     return emptyResponse(event, 204);
+  }
+
+  // Legacy single-owner endpoints are opt-in only. New SaaS deployments remain
+  // tenant-scoped by default; temporarily enable this only during a controlled
+  // migration window with LEGACY_OWNER_API_ENABLED=true.
+  if (isLegacyOwnerApiRoute(path) && process.env.LEGACY_OWNER_API_ENABLED !== "true") {
+    return jsonResponse(event, 410, {
+      error: "This legacy endpoint is disabled. Use the organization-scoped Joy Inbox API."
+    });
   }
 
   if (method === "GET" && path.endsWith("/whatsapp/connections")) {
