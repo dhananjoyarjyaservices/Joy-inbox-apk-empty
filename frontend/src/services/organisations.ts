@@ -307,3 +307,15 @@ export async function saveOrganisationAutomation(orgId: string, settings: Organi
     { method: "PUT", body: JSON.stringify(settings) },
   );
 }
+
+
+export async function updateOrganisationContactConsent(
+  orgId: string,
+  phone: string,
+  details: { status: "opted_in" | "opted_out"; source?: string; evidence?: string },
+) {
+  return request<{ success: boolean; consent: { phone: string; status: string; updatedAt: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/contacts/${encodeURIComponent(phone.replace(/\\D/g, ""))}/consent`,
+    { method: "PUT", body: JSON.stringify(details) },
+  );
+}
