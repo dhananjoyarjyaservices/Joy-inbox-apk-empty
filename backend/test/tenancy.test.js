@@ -397,3 +397,18 @@ test("tenant credential migration rejects invalid tenant IDs and missing organiz
     { statusCode: 404 }
   );
 });
+
+
+test("WhatsApp phone number IDs must be numeric and bounded at credential boundaries", async () => {
+  const db = fakeTenantDb();
+  for (const phoneNumberId of ["abcde", "1234", "123456789012345678901234567890123"]) {
+    await assert.rejects(
+      () => getWhatsAppCredentials(db, "org_valid", phoneNumberId),
+      { statusCode: 400 }
+    );
+    await assert.rejects(
+      () => resolvePhoneNumberOrganization(db, phoneNumberId),
+      { statusCode: 400 }
+    );
+  }
+});
