@@ -111,3 +111,37 @@ export async function sendOrganisationWhatsAppText(
     { method: "POST", body: JSON.stringify({ to, text }) },
   );
 }
+
+export interface OrganisationNote {
+  id: string;
+  content: string;
+  authorUid: string;
+  authorEmail: string;
+  createdAt: { toDate?: () => Date } | Date;
+}
+
+export async function getOrganisationNotes(orgId: string, chatId: string) {
+  const result = await request<{ notes: OrganisationNote[] }>(
+    `/organisations/${encodeURIComponent(orgId)}/chats/${encodeURIComponent(chatId)}/notes`,
+  );
+  return result.notes || [];
+}
+
+export async function addOrganisationNote(orgId: string, chatId: string, content: string) {
+  return request<{ success: boolean; result: { id: string; content: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/chats/${encodeURIComponent(chatId)}/notes`,
+    { method: "POST", body: JSON.stringify({ content }) },
+  );
+}
+
+export async function assignOrganisationChat(
+  orgId: string,
+  chatId: string,
+  assignedToUid: string | null,
+  status?: "open" | "pending" | "resolved",
+) {
+  return request<{ success: boolean; result: { assignedToUid: string | null; assignedToEmail: string | null; status: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/chats/${encodeURIComponent(chatId)}/assignment`,
+    { method: "POST", body: JSON.stringify({ assignedToUid, ...(status ? { status } : {}) }) },
+  );
+}
