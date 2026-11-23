@@ -372,37 +372,80 @@ async function maybeRunOrganisationAutomation(orgId, phone, message, contactName
   const priorContact = contactSnapshot.exists ? contactSnapshot.data() : {};
   const body = message.type === "text" ? String(message.text?.body || "").trim() : "";
   let action = null;
-  if (settings.awayEnabled && settings.awayText) {
+  const lastAwayAt = priorContact.awaySentAt?.toDate
+    ? priorContact.awaySentAt.toDate()
+    : priorContact.awaySentAt ? new Date(priorContact.awaySentAt) : null;
+  const awayWindowElapsed = !lastAwayAt || Number.isNaN(lastAwayAt.getTime())
+    || Date.now() - lastAwayAt.getTime() >= 24 * 60 * 60 * 1000;
+  if (settings.awayEnabled && settings.awayText && awayWindowElapsed) {
     action = { kind: "away", text: settings.awayText };
   } else if (!priorContact.greetingSentAt && settings.greetingEnabled && settings.greetingText) {
     action = { kind: "greeting", text: settings.greetingText };
   } else if (body && Array.isArray(settings.keywordRules)) {
     const normalized = body.toLowerCase();
-    const rule = settings.keywordRules.find((item) => item.enabled !== false && item.keyword && normalized.includes(String(item.keyword).toLowerCase()));
+    const rule = settings.keywordRules.find((item) =>
+      item.enabled !== false && item.keyword &&
+      normalized.includes(String(item.keyword).toLowerCase())
+    );
     if (rule) action = { kind: "keyword", text: rule.reply };
   }
   if (!action || !action.text) return;
-  const eventId = crypto.createHash("sha256").update(String(message.id) + ":" + action.kind).digest("hex");
+
+  const eventId = crypto.createHash("sha256")
+    .update(String(message.id) + ":" + action.kind).digest("hex");
   const eventRef = orgRef.collection("automationEvents").doc(eventId);
+  const contactRef = orgRef.collection("contacts").doc(phone);
   const claimed = await db.runTransaction(async (tx) => {
-    const eventSnapshot = await tx.get(eventRef);
+    const [eventSnapshot, currentContactSnapshot] = await Promise.all([
+      tx.get(eventRef), tx.get(contactRef)
+    ]);
     if (eventSnapshot.exists) return false;
-    tx.create(eventRef, { messageId: message.id, customerPhone: phone, kind: action.kind, status: "processing", createdAt: new Date() });
-    if (action.kind === "greeting") {
-      tx.set(orgRef.collection("contacts").doc(phone), { greetingSentAt: new Date() }, { merge: true });
+    const currentContact = currentContactSnapshot.exists ? currentContactSnapshot.data() : {};
+    if (action.kind === "greeting" && currentContact.greetingSentAt) return false;
+    if (action.kind === "away" && currentContact.awaySentAt) {
+      const sentAt = currentContact.awaySentAt.toDate
+        ? currentContact.awaySentAt.toDate()
+        : new Date(currentContact.awaySentAt);
+      if (!Number.isNaN(sentAt.getTime()) && Date.now() - sentAt.getTime() < 24 * 60 * 60 * 1000) return false;
     }
+    tx.create(eventRef, {
+      messageId: message.id, customerPhone: phone, kind: action.kind,
+      status: "processing", createdAt: new Date()
+    });
+    if (action.kind === "greeting") tx.set(contactRef, { greetingSentAt: new Date() }, { merge: true });
+    if (action.kind === "away") tx.set(contactRef, { awaySentAt: new Date() }, { merge: true });
     return true;
   });
   if (!claimed) return;
+
   try {
     const sent = await sendWhatsAppText(phone, action.text, null, credentials);
-    await eventRef.set({ status: "sent", outgoingMessageId: sent.messageId, completedAt: new Date() }, { merge: true });
+    const now = new Date();
+    const chatRef = orgRef.collection("chats").doc(phone);
+    await chatRef.collection("messages").doc(sent.messageId).set({
+      messageId: sent.messageId, chatId: phone, direction: "outgoing",
+      type: "text", text: action.text, timestamp: now, status: "sent",
+      source: "automation", automationKind: action.kind, sender: "business"
+    });
+    await chatRef.set({
+      organisationId: orgId, customerPhone: phone, customerName: contactName,
+      lastMessage: action.text, lastMessageAt: now,
+      lastMessageDirection: "outgoing", updatedAt: now
+    }, { merge: true });
+    await eventRef.set({
+      status: "sent", outgoingMessageId: sent.messageId, completedAt: now
+    }, { merge: true });
   } catch (error) {
-    await eventRef.set({ status: "failed", error: String(error.message || "Send failed").slice(0, 250), completedAt: new Date() }, { merge: true });
+    await eventRef.set({
+      status: "failed",
+      error: String(error.message || "Send failed").slice(0, 250),
+      completedAt: new Date()
+    }, { merge: true });
     console.error("Organisation automation send failed:", error);
   }
 }
-\nasync function processOrganisationWebhookChange(orgId, value) {
+
+async function processOrganisationWebhookChange(orgId, value) {
   const db = getDb();
   const orgRef = db.collection("organisations").doc(orgId);
   const contacts = value.contacts || [];
