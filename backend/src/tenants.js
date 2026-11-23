@@ -217,6 +217,8 @@ async function saveWhatsAppConnection(db, user, orgId, body) {
   }
 
   const encrypted = encryptSecret(accessToken);
+  const webhookVerifyToken = crypto.randomBytes(32).toString("hex");
+  const webhookVerifyTokenHash = crypto.createHash("sha256").update(webhookVerifyToken).digest("hex");
   const now = new Date();
   const ref = db.collection("organisations").doc(orgId).collection("whatsappConnections").doc("primary");
   await db.runTransaction(async (tx) => {
@@ -233,7 +235,9 @@ async function saveWhatsAppConnection(db, user, orgId, body) {
     tx.set(ref, {
       phoneNumberId,
       wabaId,
-      accessTokenEncrypted: encrypted,\n      webhookVerifyTokenHash,
+      accessTokenEncrypted: encrypted,
+      webhookVerifyTokenHash,
+      webhookVerifyTokenHash,
       displayPhoneNumber: String(result.display_phone_number || ""),
       verifiedName: String(result.verified_name || ""),
       status: "credentials_verified",
@@ -249,7 +253,8 @@ async function saveWhatsAppConnection(db, user, orgId, body) {
     wabaId,
     displayPhoneNumber: String(result.display_phone_number || ""),
     verifiedName: String(result.verified_name || ""),
-    status: "credentials_verified"
+    status: "credentials_verified",
+    webhookVerifyToken
   };
 }
 
