@@ -747,19 +747,25 @@ async function handleOrganizationNotifications(event) {
     if (body.markAllRead === true) {
       const [history, audit] = await Promise.all([
         organization.ref.collection("members").doc(decoded.uid).collection("notifications").limit(450).get(),
-        organization.ref.collection("auditLogs").orderBy("createdAt", "desc").limit(50).get()
+        organization.ref.collection("auditLogs").orderBy("createdAt", "desc").limit(450).get()
       ]);
-      const batch = db.batch();
-      for (const doc of history.docs) batch.set(doc.ref, { read: true, readAt: now }, { merge: true });
+      const historyBatch = db.batch();
+      for (const doc of history.docs) historyBatch.set(doc.ref, { read: true, readAt: now }, { merge: true });
+      await historyBatch.commit();
+      const auditBatch = db.batch();
+      let auditMarked = 0;
       for (const doc of audit.docs) {
         const item = doc.data() || {};
         const assignedTo = String(item.details?.assignedTo || item.targetUid || "");
         const relevant = item.action === "chat.assigned" ? assignedTo === decoded.uid
           : item.action === "chat.status_changed" && String(item.actorUid || "") !== decoded.uid;
-        if (relevant) batch.set(readRef.doc(`audit_${doc.id}`), { readAt: now }, { merge: true });
+        if (relevant) {
+          auditBatch.set(readRef.doc(`audit_${doc.id}`), { readAt: now }, { merge: true });
+          auditMarked += 1;
+        }
       }
-      await batch.commit();
-      return jsonResponse(event, 200, { success: true, markedRead: history.size + audit.size });
+      if (auditMarked) await auditBatch.commit();
+      return jsonResponse(event, 200, { success: true, markedRead: history.size + auditMarked });
     }
     if (typeof body.notificationId !== "string" || !/^[A-Za-z0-9_-]{1,180}$/.test(body.notificationId)) {
       return jsonResponse(event, 400, { error: "A valid notification ID is required." });
