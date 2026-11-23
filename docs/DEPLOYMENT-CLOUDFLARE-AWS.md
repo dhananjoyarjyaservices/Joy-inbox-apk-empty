@@ -100,4 +100,8 @@ The backend now exports a separate Lambda entry point for scheduled checks. This
 
 The scheduled runner scans organizations in pages and checks up to 1,000 overdue chats per organization per invocation. It uses the same per-chat transactional claim fields as the interactive checker to avoid duplicate notifications when both paths run. A chat is marked notified only after FCM reports at least one successful device delivery; failed/no-device deliveries remain eligible for a later check.
 
+### Organization SLA settings
+
+Workspace owners and admins can open Inbox → Settings → SLA alerts to enable or disable overdue push alerts and select a first-response target from 1 to 120 minutes. Settings are stored at `organizations/{organizationId}/settings/sla`; workspaces without a saved setting retain the default of enabled with a 5-minute target. Both the interactive checker and scheduled runner read this same setting, and first-response analytics store the configured target with each response metric. Agents can view the setting but cannot change it.
+
 **Not deployed:** adding this code does not create the EventBridge schedule, change Lambda runtime settings, or deploy AWS resources. Until the schedule and dedicated scheduled Lambda target are configured, background SLA alerts will not run when all clients are closed.
