@@ -185,24 +185,19 @@ async function rotateOrganizationWhatsAppCredentials(db, organizationId, targetK
         summary.rotated += 1;
         continue;
       }
-      await db.runTransaction(async (transaction) => {
+      const outcome = await db.runTransaction(async (transaction) => {
         const latest = await transaction.get(candidate.ref);
-        if (!latest.exists || !latest.data()?.accessToken) {
-          summary.alreadyCurrent += 1;
-          return;
-        }
+        if (!latest.exists || !latest.data()?.accessToken) return "alreadyCurrent";
         const latestRecord = latest.data().accessToken;
-        if (latestRecord?.version === 2 && latestRecord.keyId === target.activeKeyId) {
-          summary.alreadyCurrent += 1;
-          return;
-        }
+        if (latestRecord?.version === 2 && latestRecord.keyId === target.activeKeyId) return "alreadyCurrent";
         const rotated = rotateEncryptedSecret(latestRecord, { targetKeyring: target });
         transaction.set(candidate.ref, {
           accessToken: rotated,
           credentialEncryptionUpdatedAt: new Date()
         }, { merge: true });
-        summary.rotated += 1;
+        return "rotated";
       });
+      summary[outcome === "rotated" ? "rotated" : "alreadyCurrent"] += 1;
     } catch (error) {
       summary.failed += 1;
       if (options.failOnError) throw error;
