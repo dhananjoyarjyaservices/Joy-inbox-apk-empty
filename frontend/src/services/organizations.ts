@@ -45,9 +45,9 @@ export async function sendTenantText(organizationId: string, to: string, text: s
   });
 }
 
-export async function sendTenantTemplate(organizationId: string, to: string, phoneNumberId: string, wabaId: string, templateName: string, language: string, variables: string[]) {
+export async function sendTenantTemplate(organizationId: string, to: string, phoneNumberId: string, wabaId: string, templateName: string, language: string, variables: string[], headerVariables: string[] = [], buttonVariables: string[] = []) {
   return request("/organizations/send-template", "POST", {
-    organizationId, to, chatId: to, phoneNumberId, wabaId, templateName, language, variables,
+    organizationId, to, chatId: to, phoneNumberId, wabaId, templateName, language, variables, headerVariables, buttonVariables,
     clientMessageId: crypto.randomUUID()
   });
 }
