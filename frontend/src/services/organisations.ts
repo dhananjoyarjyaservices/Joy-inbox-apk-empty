@@ -74,3 +74,28 @@ export async function listMembers(orgId: string): Promise<OrganisationMember[]> 
   );
   return result.members || [];
 }
+
+export interface WhatsAppConnection {
+  connected: boolean;
+  phoneNumberId?: string;
+  wabaId?: string;
+  displayPhoneNumber?: string;
+  verifiedName?: string;
+  status?: string;
+}
+
+export async function getOrganisationWhatsAppConnection(orgId: string) {
+  return request<WhatsAppConnection>(
+    `/organisations/${encodeURIComponent(orgId)}/whatsapp-connection`,
+  );
+}
+
+export async function saveOrganisationWhatsAppConnection(
+  orgId: string,
+  details: { phoneNumberId: string; wabaId: string; accessToken: string },
+) {
+  return request<{ success: boolean; connection: WhatsAppConnection }>(
+    `/organisations/${encodeURIComponent(orgId)}/whatsapp-connection`,
+    { method: "POST", body: JSON.stringify(details) },
+  );
+}
