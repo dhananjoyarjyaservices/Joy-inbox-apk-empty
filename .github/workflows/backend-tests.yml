@@ -11,6 +11,7 @@ on:
     branches: [main, "feature/**"]
     paths:
       - "backend/**"
+      - "firestore.rules"
       - ".github/workflows/backend-tests.yml"
 
 permissions:
