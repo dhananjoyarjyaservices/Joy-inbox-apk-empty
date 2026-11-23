@@ -57,6 +57,7 @@ const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./
 const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
+const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -1397,6 +1398,92 @@ async function sendTenantMessage(event) {
   await batch.commit();
   await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
 
+  return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
+}
+
+async function sendTenantInteractiveMessage(event) {
+  const body = parseBody(event);
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "messages:send");
+  const to = normalizePhoneNumber(body.to || body.chatId);
+  const chatId = normalizePhoneNumber(body.chatId || body.to);
+  if (!to || !chatId || to !== chatId) {
+    return jsonResponse(event, 400, { error: "Valid matching to and chatId are required." });
+  }
+  const interactive = normalizeInteractiveMessage(body.interactive);
+  const db = getDb();
+  const credentials = await getWhatsAppCredentials(db, organization.id, body.phoneNumberId);
+  const payload = buildWhatsAppInteractivePayload(to, interactive);
+  const clientMessageId = getClientMessageId(body.clientMessageId);
+  const payloadHash = hashSendPayload({
+    organizationId: organization.id,
+    phoneNumberId: credentials.phoneNumberId || null,
+    to,
+    interactive
+  });
+  const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
+  if (claim.state === "completed") {
+    return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  }
+  if (claim.state === "unknown") {
+    return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
+  }
+  if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
+
+  let result;
+  try {
+    const version = process.env.GRAPH_API_VERSION || "v26.0";
+    const response = await fetch(`https://graph.facebook.com/${version}/${encodeURIComponent(credentials.phoneNumberId)}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const responseBody = await response.json().catch(() => ({}));
+    if (!response.ok || !responseBody.messages?.[0]?.id) {
+      const error = new Error(responseBody.error?.message || "Meta did not confirm interactive message delivery.");
+      error.statusCode = 502;
+      error.definitive = !response.ok && isDefinitiveWhatsAppSendRejection(response.status);
+      error.retryable = false;
+      throw error;
+    }
+    result = { messageId: responseBody.messages[0].id };
+  } catch (error) {
+    await markTenantSendRequestFailed(claim.ref, error);
+    throw error;
+  }
+
+  const chatRef = getTenantChatRef(db, organization.id, chatId);
+  const messageRef = getTenantMessageRef(db, organization.id, chatId, result.messageId);
+  const timestamp = new Date();
+  const preview = getInteractivePreview(interactive);
+  const batch = db.batch();
+  batch.set(messageRef, {
+    messageId: result.messageId,
+    clientMessageId,
+    chatId,
+    organizationId: organization.id,
+    direction: "outgoing",
+    phoneNumberId: credentials.phoneNumberId || null,
+    type: "interactive",
+    text: preview,
+    interactive,
+    timestamp,
+    status: "sending",
+    source: "interactive",
+    sender: decoded.uid
+  });
+  batch.set(chatRef, {
+    customerPhone: chatId,
+    ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
+    lastMessage: preview,
+    lastMessageAt: timestamp,
+    lastMessageDirection: "outgoing",
+    updatedAt: timestamp
+  }, { merge: true });
+  batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
+  await batch.commit();
+  await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
 
@@ -2951,6 +3038,16 @@ exports.handler = async (event) => {
   if (method === "POST" && path.endsWith("/organizations/send-quick-reply")) {
     try { return await sendTenantQuickReplyImage(event); }
     catch (error) { console.error("Quick Reply image send failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Reply image could not be sent.", retryable: error.retryable ?? !error.definitive }); }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/send-interactive")) {
+    try { return await sendTenantInteractiveMessage(event); }
+    catch (error) {
+      console.error("Tenant interactive message send failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Interactive message could not be sent."
+      });
+    }
   }
 
   if (method === "POST" && path.endsWith("/organizations/send-template")) {
