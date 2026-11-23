@@ -43,11 +43,9 @@ test("recipient normalization requires opt-in evidence and deduplicates numbers"
 
 test("recipient normalization rejects future-dated opt-in evidence", () => {
   const future = new Date(Date.now() + 60_000).toISOString();
-  const result = normalizeCampaignRecipients([
+  assert.throws(() => normalizeCampaignRecipients([
     { phone: "919876543210", optedIn: true, consentAt: future, consentSource: "website form" }
-  ]);
-  assert.equal(result.recipients.length, 0);
-  assert.equal(result.skipped, 1);
+  ]), /No eligible recipients/);
 });
 
 test("recipient normalization rejects empty or oversized campaigns", () => {
