@@ -170,6 +170,44 @@ async function sendWhatsAppMedia(to, type, mediaId, caption, filename, contextMe
   return { messageId, response: result };
 }
 
+
+async function sendWhatsAppPayload(to, type, content, credentials = null) {
+  const accessToken = credentials?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = credentials?.phoneNumberId || process.env.PHONE_NUMBER_ID;
+  const recipient = normalizePhoneNumber(to);
+  if (!accessToken || !phoneNumberId) throw definitiveError("WhatsApp API credentials are missing.");
+  if (!recipient) throw definitiveError("A valid recipient phone number is required.");
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(phoneNumberId)}/messages`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: recipient,
+          type,
+          [type]: content
+        })
+      }
+    );
+  } catch (error) {
+    logWhatsAppLatency(startedAt, type, "network_error");
+    throw error;
+  }
+  const result = await readSendResponse(response, startedAt, type, `WhatsApp ${type} message could not be sent.`);
+  const messageId = result?.messages?.[0]?.id;
+  if (!messageId) {
+    const error = new Error("WhatsApp did not return a message ID.");
+    error.retryable = true;
+    throw error;
+  }
+  return { messageId, response: result };
+}
+
 async function checkWhatsAppConnection() {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.PHONE_NUMBER_ID;
