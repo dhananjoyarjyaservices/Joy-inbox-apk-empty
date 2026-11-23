@@ -56,6 +56,7 @@ const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = requ
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
+const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -2475,6 +2476,28 @@ async function saveGreetingSettings(event) {
   });
 }
 
+async function handleTenantInternalNotes(event) {
+  const method = getMethod(event);
+  if (!["GET", "POST"].includes(method)) return jsonResponse(event, 405, { error: "Method not allowed." });
+  const decoded = await authenticateUser(event);
+  let body = {};
+  if (method === "POST") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const params = event.queryStringParameters || {};
+  const organizationId = method === "GET" ? params.organizationId : body.organizationId;
+  const chatId = method === "GET" ? params.chatId : body.chatId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, method === "GET" ? "chats:read" : "chats:manage");
+  if (method === "GET") {
+    const notes = await listTenantInternalNotes(getDb(), organization.id, chatId);
+    return jsonResponse(event, 200, { notes });
+  }
+  const note = await addTenantInternalNote(getDb(), organization.id, chatId, body, decoded);
+  return jsonResponse(event, 201, { note });
+}
+
 async function handleTenantBilling(event) {
   const method = getMethod(event);
   const decoded = await authenticateUser(event);
@@ -2863,6 +2886,16 @@ exports.handler = async (event) => {
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/automation-rules")) {
     try { return await handleTenantAutomationRules(event); }
     catch (error) { console.error("Tenant automation rules request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Automation rules request could not be completed." }); }
+  }
+
+  if (["GET", "POST"].includes(method) && path.endsWith("/organizations/internal-notes")) {
+    try { return await handleTenantInternalNotes(event); }
+    catch (error) {
+      console.error("Tenant internal note request failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Internal notes could not be loaded or saved."
+      });
+    }
   }
 
   if (method === "POST" && path.endsWith("/billing/stripe-webhook")) {
