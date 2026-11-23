@@ -108,3 +108,31 @@ export async function listChatAssignmentAudit(organizationId: string, chatId: st
   const result = await request(`/organizations/chat-assignment-audit?${params.toString()}`);
   return Array.isArray(result.events) ? result.events as ChatAssignmentAuditEvent[] : [];
 }
+
+
+export interface HistoricalAgentPerformance {
+  uid: string;
+  email: string;
+  assignedCount: number;
+  resolvedCount: number;
+  lastActivityAt?: unknown;
+}
+
+export interface HistoricalAgentPerformanceResult {
+  days: number;
+  since: string;
+  agents: HistoricalAgentPerformance[];
+}
+
+export async function listHistoricalAgentPerformance(
+  organizationId: string,
+  days: 7 | 30 | 90 = 30
+): Promise<HistoricalAgentPerformanceResult> {
+  const params = new URLSearchParams({ organizationId, days: String(days) });
+  const result = await request(`/organizations/agent-performance?${params.toString()}`);
+  return {
+    days: result.days === 7 || result.days === 90 ? result.days : 30,
+    since: typeof result.since === "string" ? result.since : "",
+    agents: Array.isArray(result.agents) ? result.agents as HistoricalAgentPerformance[] : []
+  };
+}
