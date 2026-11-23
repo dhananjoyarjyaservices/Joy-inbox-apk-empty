@@ -130,3 +130,8 @@ Push delivery attempts for tenant incoming-message and SLA alerts are recorded p
 ### Delivery log filters and CSV export
 
 The Notification Center delivery monitor supports client-side filtering by final status (delivered/failed), notification type (incoming message/SLA), text or error-code search, and inclusive local date range. Export CSV downloads only the currently filtered rows from the latest 100 entries returned by the API. The export is generated in the browser and is not uploaded to another service.
+
+
+### Notification delivery analytics
+
+The Notification Center summarizes the latest 100 per-device delivery records: delivered count, failed count, delivery percentage, records requiring a retry, and total send attempts. A seven-day daily trend separates successful and failed records. These are client-side summaries of the bounded API response, not organization-wide lifetime totals; FCM accepted/successful status does not prove that a person viewed or opened a notification.
