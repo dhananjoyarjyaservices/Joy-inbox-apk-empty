@@ -41,9 +41,9 @@ async function readSendResponse(response, startedAt, type, fallbackMessage) {
   return result;
 }
 
-async function sendWhatsAppText(to, text, contextMessageId) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+async function sendWhatsAppText(to, text, contextMessageId, credentials = null) {
+  const accessToken = credentials?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = credentials?.phoneNumberId || process.env.PHONE_NUMBER_ID;
 
   if (!accessToken || !phoneNumberId) {
     throw definitiveError("WhatsApp API credentials are missing.");
