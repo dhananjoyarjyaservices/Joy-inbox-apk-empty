@@ -924,6 +924,7 @@ async function sendTenantTemplate(event) {
   }, { merge: true });
   batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
   await batch.commit();
+  await recordTenantFirstResponse(db, organization.id, to, decoded.uid, decoded.email, timestamp);
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
 
@@ -1002,6 +1003,7 @@ async function retryTenantFailedTemplate(event) {
     batch.set(chatRef,{customerPhone:chatId,phoneNumberId,lastMessage:preview,lastMessageAt:timestamp,lastMessageDirection:"outgoing",updatedAt:timestamp},{merge:true});
     batch.set(claim.ref,{status:"completed",messageId:newMessageId,updatedAt:timestamp},{merge:true});
     await batch.commit();
+    await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
     return jsonResponse(event,200,{success:true,messageId:newMessageId,clientMessageId});
   } catch(error) { await markTenantSendRequestFailed(claim.ref,error); throw error; }
 }
@@ -1086,6 +1088,7 @@ async function retryTenantFailedText(event) {
   }, { merge: true });
   batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
   await batch.commit();
+  await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
 
@@ -1162,6 +1165,7 @@ async function sendTenantMediaMessage(event) {
   batch.set(chatRef, { customerPhone: chatId, ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}), lastMessage: preview, lastMessageAt: timestamp, lastMessageDirection: "outgoing", updatedAt: timestamp }, { merge: true });
   batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
   await batch.commit();
+  await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
 
