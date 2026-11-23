@@ -83,3 +83,10 @@ export async function listOrganizationMemberAudit(
     nextCursor: typeof result.nextCursor === "string" ? result.nextCursor : null
   };
 }
+
+export async function updateOrganizationChatAssignment(
+  organizationId: string,
+  input: { chatId: string; assignedTo?: string | null; status?: "open" | "pending" | "resolved" }
+) {
+  return request("/organizations/chat-assignment", "POST", { organizationId, ...input });
+}
