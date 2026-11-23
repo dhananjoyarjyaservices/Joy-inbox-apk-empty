@@ -557,7 +557,7 @@ async function sendOrganisationTemplate(db, user, orgId, body) {
   const name = String(body.name || "").trim();
   const language = String(body.language || "en_US").trim();
   const parameters = body.bodyParameters === undefined ? [] : body.bodyParameters;
-  if (!/^\\d{6,20}$/.test(to) || !/^[a-zA-Z0-9_]{1,512}$/.test(name) ||
+  if (!/^\d{6,20}$/.test(to) || !/^[a-zA-Z0-9_]{1,512}$/.test(name) ||
       !/^[a-z]{2,3}_[A-Z]{2}$/.test(language) || !Array.isArray(parameters) || parameters.length > 20 ||
       parameters.some((value) => typeof value !== "string" || value.length > 1024)) {
     fail("Provide a valid recipient, approved template name, language and up to 20 text parameters.");
@@ -580,7 +580,7 @@ async function sendOrganisationInteractive(db, user, orgId, body) {
   const messageBody = String(body.body || "").trim();
   const header = String(body.header || "").trim();
   const footer = String(body.footer || "").trim();
-  if (!/^\\d{6,20}$/.test(to) || !["button", "list"].includes(kind) ||
+  if (!/^\d{6,20}$/.test(to) || !["button", "list"].includes(kind) ||
       !messageBody || messageBody.length > 1024 || header.length > 60 || footer.length > 60) {
     fail("Provide a valid recipient and interactive message content.");
   }
