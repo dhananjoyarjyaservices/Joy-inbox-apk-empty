@@ -28,7 +28,12 @@ async function listTenantInternalNotes(db, organizationId, chatId, limit = 100) 
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 100));
   const snapshot = await getInternalNotesCollection(db, organizationId, chatId)
     .orderBy("createdAt", "desc").limit(safeLimit).get();
-  return snapshot.docs.map(document => ({ id: document.id, ...document.data() }));
+  return snapshot.docs.map(document => {
+    const value = document.data() || {};
+    const createdAt = value.createdAt?.toDate ? value.createdAt.toDate().toISOString()
+      : value.createdAt instanceof Date ? value.createdAt.toISOString() : value.createdAt || null;
+    return { id: document.id, ...value, createdAt };
+  });
 }
 
 async function addTenantInternalNote(db, organizationId, chatId, input, actor) {
