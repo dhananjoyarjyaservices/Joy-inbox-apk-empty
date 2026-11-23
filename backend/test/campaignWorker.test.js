@@ -116,3 +116,148 @@ test("marks an expired campaign delivery lease uncertain instead of retrying it"
   assert.equal(writes[1].patch.uncertainCount, 3);
   assert.match(writes[0].patch.error, /automatic resend was prevented/i);
 });
+
+test("revalidates template approval and reads the approved body variable count", async () => {
+  let requestedUrl = "";
+  const count = await verifyApprovedTemplate(
+    { wabaId: "123456789", templateName: "order_update", language: "en", category: "UTILITY" },
+    { accessToken: "server-secret" },
+    async (url, options) => {
+      requestedUrl = url;
+      assert.equal(options.headers.Authorization, "Bearer server-secret");
+      return {
+        ok: true,
+        async json() {
+          return { data: [{
+            name: "order_update", language: "en", status: "APPROVED", category: "UTILITY",
+            components: [{ type: "BODY", text: "Order {{1}} is {{2}}" }]
+          }] };
+        }
+      };
+    }
+  );
+  assert.equal(count, 2);
+  assert.match(requestedUrl, /message_templates/);
+});
+
+function createCampaignHarness(suppressionStatus = null) {
+  const campaign = {
+    status: "queued", organizationId: "org_1", phoneNumberId: "123456789",
+    wabaId: "987654321", templateName: "order_update", language: "en",
+    category: "UTILITY", recipientCount: 1, sentCount: 0, failedCount: 0,
+    uncertainCount: 0, skippedCount: 0, createdAt: new Date()
+  };
+  const recipient = {
+    status: "pending", phone: "919876543210", optedIn: true,
+    consentAt: "2026-11-20T10:00:00.000Z", consentSource: "website form",
+    variables: ["ORD-1"], updatedAt: new Date()
+  };
+  const writes = [];
+  const campaignRef = {
+    id: "campaign_1",
+    parent: { parent: null },
+    async get() { return { exists: true, data: () => campaign, get: key => campaign[key] }; },
+    async set(patch, options) { Object.assign(campaign, patch); writes.push({ type: "campaignSet", patch, options }); },
+    collection(name) {
+      if (name !== "recipients") throw new Error("Unexpected collection " + name);
+      return {
+        where(field, operator, value) {
+          let status = value;
+          return {
+            orderBy() { return this; },
+            limit() { return this; },
+            async get() {
+              const docs = recipient.status === status ? [{
+                id: "recipient_1",
+                ref: recipientRef,
+                get: key => recipient[key],
+                data: () => recipient
+              }] : [];
+              return { docs, size: docs.length };
+            }
+          };
+        }
+      };
+    }
+  };
+  const organizationRef = {
+    collection(name) {
+      if (name === "campaignSuppressions") {
+        return { doc() { return { async get() {
+          return { exists: Boolean(suppressionStatus), get: () => suppressionStatus };
+        } }; } };
+      }
+      if (name === "chats") {
+        return { doc(phone) {
+          return {
+            collection(child) {
+              assert.equal(child, "messages");
+              return { doc(messageId) { return { path: phone + "/messages/" + messageId }; } };
+            },
+            path: "chats/" + phone
+          };
+        } };
+      }
+      throw new Error("Unexpected organization collection " + name);
+    }
+  };
+  campaignRef.parent.parent = organizationRef;
+  const recipientRef = {
+    id: "recipient_1",
+    async update(patch) { Object.assign(recipient, patch); writes.push({ type: "recipientUpdate", patch }); }
+  };
+  const db = {
+    async runTransaction(callback) {
+      return callback({
+        async get(ref) {
+          const value = ref === campaignRef ? campaign : recipient;
+          return { exists: true, data: () => value, get: key => value[key] };
+        },
+        update(ref, patch) { Object.assign(ref === campaignRef ? campaign : recipient, patch); writes.push({ type: "update", ref, patch }); },
+        set(ref, value, options) { writes.push({ type: "set", ref, value, options }); }
+      });
+    }
+  };
+  return { db, campaignRef, campaign, recipient, writes };
+}
+
+test("campaign worker suppresses opted-out recipients immediately before sending", async () => {
+  const harness = createCampaignHarness("opted_out");
+  let sendCalls = 0;
+  const result = await processCampaign(harness.db, harness.campaignRef, {
+    now: () => new Date("2026-11-23T12:00:00.000Z"),
+    getCredentials: async () => ({ accessToken: "server-secret", phoneNumberId: "123456789" }),
+    fetch: async () => ({ ok: true, async json() { return { data: [{
+      name: "order_update", language: "en", status: "APPROVED", category: "UTILITY",
+      components: [{ type: "BODY", text: "Order {{1}}" }]
+    }] }; } }),
+    sendRecipient: async () => { sendCalls += 1; return { messageId: "wamid.1" }; }
+  });
+  assert.equal(sendCalls, 0);
+  assert.equal(result.skipped, 1);
+  assert.equal(harness.recipient.status, "skipped");
+  assert.equal(harness.recipient.reason, "whatsapp_opt_out_suppression");
+  assert.equal(harness.campaign.skippedCount, 1);
+  assert.equal(harness.campaign.status, "failed");
+});
+
+test("campaign worker sends an eligible recipient and records message and campaign counters", async () => {
+  const harness = createCampaignHarness(null);
+  let sendCalls = 0;
+  const result = await processCampaign(harness.db, harness.campaignRef, {
+    now: () => new Date("2026-11-23T12:00:00.000Z"),
+    getCredentials: async () => ({ accessToken: "server-secret", phoneNumberId: "123456789" }),
+    fetch: async () => ({ ok: true, async json() { return { data: [{
+      name: "order_update", language: "en", status: "APPROVED", category: "UTILITY",
+      components: [{ type: "BODY", text: "Order {{1}}" }]
+    }] }; } }),
+    sendRecipient: async () => { sendCalls += 1; return { messageId: "wamid.confirmed" }; }
+  });
+  assert.equal(sendCalls, 1);
+  assert.equal(result.sent, 1);
+  assert.equal(harness.recipient.status, "sent");
+  assert.equal(harness.recipient.messageId, "wamid.confirmed");
+  assert.equal(harness.campaign.sentCount, 1);
+  assert.equal(harness.campaign.status, "completed");
+  assert.ok(harness.writes.some(write => write.type === "set" && write.value?.source === "campaign"));
+});
