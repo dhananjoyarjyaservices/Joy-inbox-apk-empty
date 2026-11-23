@@ -206,7 +206,7 @@ test("checkout completion webhook stores subscription state in the correct organ
       assert.equal(name, "billing");
       return { doc(id) {
         assert.equal(id, "subscription");
-        return { async set(value) { subscriptionRecord = value; } };
+        return { async get() { return { exists: false }; }, async set(value) { subscriptionRecord = value; } };
       } };
     }
   };
