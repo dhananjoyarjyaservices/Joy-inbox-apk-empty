@@ -6,7 +6,8 @@ const {
   claimTenantSendRequest,
   getRetryableTenantTextMessage,
   resolveTenantReplyContext,
-  getTenantReplyMessageFields
+  getTenantReplyMessageFields,
+  markTenantSendRequestFailed
 } = require("../src/tenantMessaging");
 
 function fakeDb() {
@@ -129,4 +130,27 @@ test("retry rejects messages without the original WhatsApp sender number", () =>
     status: "failed",
     text: "Hello"
   }), { statusCode: 409 });
+});
+
+test("ambiguous delivery is quarantined and cannot be automatically resent", async () => {
+  const db = fakeDb();
+  const first = await claimTenantSendRequest(db, "org_one", "15551234567", "client-unknown", "hash-a");
+  assert.equal(first.state, "claimed");
+
+  await markTenantSendRequestFailed(first.ref, new Error("Network connection timed out"));
+  const record = db.docs.get(first.ref.path);
+  assert.equal(record.status, "unknown");
+  assert.equal(record.deliveryMayHaveSucceeded, true);
+
+  const retry = await claimTenantSendRequest(db, "org_one", "15551234567", "client-unknown", "hash-a");
+  assert.equal(retry.state, "unknown");
+});
+
+test("definitively rejected sends can be retried with the same idempotency key", async () => {
+  const db = fakeDb();
+  const first = await claimTenantSendRequest(db, "org_one", "15551234567", "client-failed", "hash-a");
+  await markTenantSendRequestFailed(first.ref, Object.assign(new Error("Meta rejected request"), { definitive: true }));
+
+  const retry = await claimTenantSendRequest(db, "org_one", "15551234567", "client-failed", "hash-a");
+  assert.equal(retry.state, "claimed");
 });
