@@ -185,7 +185,7 @@ export default function OrganisationInbox() {
     setError("");
     try {
       const result = await saveOrganisationQuickReply(orgId, {
-        shortcut: quickReplyShortcut.trim().replace(/^\\/+/, "").toLowerCase(),
+        shortcut: quickReplyShortcut.trim().replace(/^\/+/, "").toLowerCase(),
         title: quickReplyTitle.trim(),
         text: draft.trim(),
       });
