@@ -1,14 +1,16 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Building2, LogOut, MessageCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
-import { connectWhatsApp, disconnectWhatsApp, checkWhatsAppConnectionHealth, createOrganization, listOrganizations, listWhatsAppConnections, type Organization, type WhatsAppConnection } from "../services/organizations";
+import { connectWhatsApp, disconnectWhatsApp, checkWhatsAppConnectionHealth, createOrganization, listOrganizations, listWhatsAppConnections, acceptOrganizationInvitation, type Organization, type WhatsAppConnection } from "../services/organizations";
 import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
 
 export default function Setup() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const invitationHandled = useRef(false);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [name, setName] = useState("");
   const [organizationId, setOrganizationId] = useState(() => getActiveOrganizationId());
@@ -33,6 +35,25 @@ export default function Setup() {
     finally { setLoading(false); }
   }
   useEffect(() => { void refresh(); }, []);
+
+  useEffect(() => {
+    const inviteOrganizationId = searchParams.get("organizationId") || "";
+    const inviteToken = searchParams.get("invite") || "";
+    if (!user || !inviteOrganizationId || !inviteToken || invitationHandled.current) return;
+    invitationHandled.current = true;
+    setSearchParams({}, { replace: true });
+    setBusy(true); setError(""); setNotice("");
+    void acceptOrganizationInvitation(inviteOrganizationId, inviteToken)
+      .then(async () => {
+        setActiveOrganizationId(inviteOrganizationId);
+        setOrganizationId(inviteOrganizationId);
+        setNotice("Invitation accepted. Your workspace access is ready.");
+        await refresh();
+        navigate("/inbox", { replace: true });
+      })
+      .catch(e => setError(e instanceof Error ? e.message : "Invitation could not be accepted. Sign in with the invited verified email address."))
+      .finally(() => setBusy(false));
+  }, [user, searchParams, setSearchParams, navigate]);
 
   useEffect(() => {
     if (!organizationId) { setConnections([]); return; }
