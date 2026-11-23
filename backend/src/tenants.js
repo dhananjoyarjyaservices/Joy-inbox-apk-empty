@@ -330,7 +330,8 @@ async function handleTenantRoute(event) {
   const inviteMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations$/);
   const acceptMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/accept$/);
   const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
-  const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);\n  const orgMessagesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages$/);
+  const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
+  const orgMessagesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages$/);
   if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch)) return null;
 
   try {
@@ -352,7 +353,11 @@ async function handleTenantRoute(event) {
       const result = await acceptInvitation(db, user, acceptMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, membership: result });
     }
-    if (orgMessagesMatch && method === "POST") {\n      const result = await sendOrganisationText(db, user, orgMessagesMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, message: result });\n    }\n    if (whatsappMatch && method === "GET") {
+    if (orgMessagesMatch && method === "POST") {
+      const result = await sendOrganisationText(db, user, orgMessagesMatch[1], parseBody(event));
+      return jsonResponse(event, 200, { success: true, message: result });
+    }
+    if (whatsappMatch && method === "GET") {
       const result = await getWhatsAppConnection(db, user, whatsappMatch[1]);
       return jsonResponse(event, 200, result);
     }
