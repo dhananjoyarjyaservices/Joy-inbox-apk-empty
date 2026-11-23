@@ -302,7 +302,7 @@ export async function openOrganizationBillingPortal(organizationId: string): Pro
 }
 
 
-export interface OrganizationCampaignRecipient {
+export interface OrganizationCampaignReportRecipient {
   id: string;
   phone: string;
   status: string;
@@ -314,11 +314,11 @@ export interface OrganizationCampaignRecipient {
   sentAt: string | null;
   deliveryUpdatedAt: string | null;
 }
-export async function getOrganizationCampaignRecipients(
+export async function getOrganizationCampaignReportRecipients(
   organizationId: string,
   campaignId: string,
   cursor?: string
-): Promise<{ recipients: OrganizationCampaignRecipient[]; nextCursor: string | null }> {
+): Promise<{ recipients: OrganizationCampaignReportRecipient[]; nextCursor: string | null }> {
   const query = new URLSearchParams({ organizationId, campaignId, limit: "100" });
   if (cursor) query.set("cursor", cursor);
   const result = await request(`/organizations/campaigns?${query.toString()}`);
