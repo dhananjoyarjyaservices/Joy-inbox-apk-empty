@@ -553,6 +553,7 @@ module.exports = {
   saveTenantIncomingMessage,
   updateTenantMessageStatus,
   shouldApplyMessageStatus,
+  getCampaignDeliveryCounterPatch,
   isValidMetaWebhookPayload,
   isIgnorableWebhookRoutingError,
   processWebhookPayload,
