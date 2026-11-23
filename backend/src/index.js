@@ -47,6 +47,7 @@ const {
   claimSendRequest,
   markSendRequestFailed
 } = require("./sendRequests");
+const { runScheduledSlaChecks } = require("./slaScheduler");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -2001,6 +2002,14 @@ async function saveGreetingSettings(event) {
     trigger: "first_inbound"
   });
 }
+
+// EventBridge Scheduler invokes this handler through Lambda's IAM permissions.
+// Set the configured handler name to "src/index.slaScheduledHandler".
+exports.slaScheduledHandler = async () => {
+  const result = await runScheduledSlaChecks();
+  console.info("Scheduled SLA alert check completed:", JSON.stringify(result));
+  return result;
+};
 
 exports.handler = async (event) => {
   const method = getMethod(event);
