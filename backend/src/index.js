@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const {
   getHeader,
+  getRawBody,
   jsonResponse,
   getCorsHeaders,
   textResponse,
@@ -54,6 +55,7 @@ const { normalizeNotificationPreferences, getTenantNotificationPreferences } = r
 const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = require("./automationRules");
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
+const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -2473,6 +2475,74 @@ async function saveGreetingSettings(event) {
   });
 }
 
+async function handleTenantBilling(event) {
+  const method = getMethod(event);
+  const decoded = await authenticateUser(event);
+  let body = {};
+  if (method === "POST") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "settings:manage");
+  const subscriptionRef = organization.ref.collection("billing").doc("subscription");
+
+  if (method === "GET") {
+    const [snapshot, plans] = await Promise.all([
+      subscriptionRef.get(),
+      Promise.resolve(getConfiguredBillingPlans().map(({ key, name }) => ({ key, name })))
+    ]);
+    const value = snapshot.exists ? snapshot.data() || {} : {};
+    const asIso = input => input?.toDate ? input.toDate().toISOString()
+      : input instanceof Date ? input.toISOString() : null;
+    return jsonResponse(event, 200, {
+      billingEnabled: plans.length > 0,
+      plans,
+      subscription: snapshot.exists ? {
+        plan: String(value.plan || value.checkoutPlan || "unknown"),
+        status: String(value.status || "incomplete"),
+        currentPeriodEnd: asIso(value.currentPeriodEnd),
+        trialEnd: asIso(value.trialEnd),
+        cancelAtPeriodEnd: value.cancelAtPeriodEnd === true
+      } : null
+    });
+  }
+  if (method !== "POST") return jsonResponse(event, 405, { error: "Method not allowed." });
+  if (body.action === "checkout") {
+    const session = await createCheckoutSession({
+      organization,
+      decoded,
+      planKey: String(body.plan || "")
+    });
+    return jsonResponse(event, 200, { success: true, checkout: session });
+  }
+  if (body.action === "portal") {
+    const session = await createPortalSession({ organization });
+    return jsonResponse(event, 200, { success: true, portal: session });
+  }
+  return jsonResponse(event, 400, { error: "Choose a valid billing action." });
+}
+
+async function handleStripeBillingWebhook(event) {
+  const rawBody = getRawBody(event);
+  const signature = getHeader(event, "stripe-signature");
+  if (!verifyStripeSignature(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET)) {
+    return textResponse(event, 400, "Invalid Stripe signature.");
+  }
+  let payload;
+  try { payload = JSON.parse(rawBody.toString("utf8")); }
+  catch { return textResponse(event, 400, "Invalid Stripe event JSON."); }
+  try {
+    const result = await processStripeWebhookEvent(getDb(), payload);
+    if (result.inProgress) return textResponse(event, 503, "Stripe event is already being processed.");
+    return textResponse(event, 200, "EVENT_RECEIVED");
+  } catch (error) {
+    console.error("Stripe billing webhook failed:", error);
+    return textResponse(event, error.statusCode && error.statusCode < 500 ? error.statusCode : 500, "Stripe event processing failed.");
+  }
+}
+
 async function handleTenantCampaigns(event) {
   const method = getMethod(event);
   const decoded = await authenticateUser(event);
@@ -2793,6 +2863,20 @@ exports.handler = async (event) => {
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/automation-rules")) {
     try { return await handleTenantAutomationRules(event); }
     catch (error) { console.error("Tenant automation rules request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Automation rules request could not be completed." }); }
+  }
+
+  if (method === "POST" && path.endsWith("/billing/stripe-webhook")) {
+    return await handleStripeBillingWebhook(event);
+  }
+
+  if (["GET", "POST"].includes(method) && path.endsWith("/organizations/billing")) {
+    try { return await handleTenantBilling(event); }
+    catch (error) {
+      console.error("Tenant billing request failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Billing request could not be completed."
+      });
+    }
   }
 
   if (["GET", "POST"].includes(method) && path.endsWith("/organizations/campaigns")) {
