@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const { getHeader, jsonResponse } = require("./security");
-const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
+const { normalizePhoneNumber, sendWhatsAppText, sendWhatsAppMedia } = require("./whatsapp");
 
 function getMethod(event) {
   return (event.requestContext?.http?.method || event.httpMethod || "GET").toUpperCase();
@@ -445,6 +445,85 @@ async function deleteOrganisationQuickReply(db, user, orgId, shortcut) {
   return { deleted: shortcut };
 }
 
+
+async function sendOrganisationMedia(db, user, orgId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager", "agent"]);
+  const to = normalizePhoneNumber(body.to);
+  const type = String(body.type || "");
+  const caption = String(body.caption || "").trim();
+  const filename = String(body.filename || "attachment").replace(/[\\\\/\\r\\n]/g, "_").slice(0, 180);
+  const mimeType = String(body.mimeType || "");
+  const encoded = String(body.fileBase64 || "");
+  if (!/^\\d{6,20}$/.test(to) || !["image", "video", "audio", "document"].includes(type)) {
+    fail("A valid recipient and supported media type are required.");
+  }
+  const allowed = {
+    image: ["image/jpeg", "image/png"],
+    video: ["video/mp4", "video/3gpp"],
+    audio: ["audio/aac", "audio/amr", "audio/mpeg", "audio/mp4", "audio/ogg"],
+    document: ["application/pdf", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/msword"]
+  };
+  if (!allowed[type].includes(mimeType)) fail("This media type is not supported for WhatsApp " + type + " messages.");
+  if (!encoded || encoded.length > 4_200_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    fail("Media payload is invalid or exceeds 3 MB.");
+  }
+  const buffer = Buffer.from(encoded, "base64");
+  if (!buffer.length || buffer.length > 3 * 1024 * 1024 || buffer.toString("base64") !== encoded) {
+    fail("Media payload is invalid or exceeds 3 MB.");
+  }
+  if (caption.length > 1024 || (type === "audio" && caption)) fail("Caption is invalid for this media type.");
+
+  const connectionSnapshot = await db.collection("organisations").doc(orgId)
+    .collection("whatsappConnections").doc("primary").get();
+  if (!connectionSnapshot.exists || connectionSnapshot.data().status !== "credentials_verified") {
+    fail("This organisation has no verified WhatsApp Cloud API connection.", 409);
+  }
+  const connection = connectionSnapshot.data();
+  const accessToken = decryptSecret(connection.accessTokenEncrypted);
+  const graphVersion = process.env.GRAPH_API_VERSION || "v26.0";
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", mimeType);
+  form.append("file", new Blob([buffer], { type: mimeType }), filename);
+  const uploadResponse = await fetch(
+    `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(connection.phoneNumberId)}/media`,
+    { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form }
+  );
+  const uploadResult = await uploadResponse.json().catch(() => ({}));
+  if (!uploadResponse.ok || !uploadResult.id) {
+    fail(String(uploadResult?.error?.message || "WhatsApp media upload failed.").slice(0, 300), 502);
+  }
+  const sent = await sendWhatsAppMedia(to, type, uploadResult.id, caption, filename, undefined, {
+    accessToken, phoneNumberId: connection.phoneNumberId
+  });
+  const timestamp = new Date();
+  const preview = caption || (type[0].toUpperCase() + type.slice(1));
+  const chatRef = db.collection("organisations").doc(orgId).collection("chats").doc(to);
+  await db.runTransaction(async (tx) => {
+    tx.create(chatRef.collection("messages").doc(sent.messageId), {
+      messageId: sent.messageId,
+      chatId: to,
+      direction: "outgoing",
+      type,
+      text: caption,
+      timestamp,
+      status: "sent",
+      source: "manual",
+      sender: user.uid,
+      mediaRetained: false
+    });
+    tx.set(chatRef, {
+      organisationId: orgId,
+      customerPhone: to,
+      lastMessage: preview,
+      lastMessageAt: timestamp,
+      lastMessageDirection: "outgoing",
+      updatedAt: timestamp
+    }, { merge: true });
+  });
+  return { messageId: sent.messageId, chatId: to, status: "sent", mediaRetained: false };
+}
+
 async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
@@ -456,7 +535,7 @@ async function handleTenantRoute(event) {
   const orgMessagesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages$/);
   const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgChatActionMatch || quickRepliesMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -500,7 +579,7 @@ async function handleTenantRoute(event) {
       const result = await updateOrganisationChat(db, user, orgChatActionMatch[1], orgChatActionMatch[2], parseBody(event), action);
       return jsonResponse(event, 200, { success: true, result });
     }
-    if (orgMessagesMatch && method === "POST") {
+    if (orgMediaMatch && method === "POST") {\n      const result = await sendOrganisationMedia(db, user, orgMediaMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, message: result });\n    }\n    if (orgMessagesMatch && method === "POST") {
       const result = await sendOrganisationText(db, user, orgMessagesMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, message: result });
     }
