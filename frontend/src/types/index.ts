@@ -30,13 +30,24 @@ export interface ChatMessage {
   mediaDownloadError?: string | null;
   status?: "received" | "sending" | "sent" | "delivered" | "read" | "failed" | "unknown";
   clientMessageId?: string;
-  source?: "manual" | "quick_reply" | "whatsapp" | "webhook";
+  source?: "manual" | "quick_reply" | "whatsapp" | "webhook" | "interactive" | "campaign";
   sender?: string;
   pinned?: boolean;
   replyToMessageId?: string;
   replyToMessageText?: string;
   replyToMessageSender?: string;
   replyToMessageType?: string;
+  interactive?: {
+    type: "button" | "list";
+    body: string;
+    header?: string;
+    footer?: string;
+    buttons?: Array<{ id: string; title: string }>;
+    buttonTitle?: string;
+    sections?: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>;
+  };
+  interactiveReplyId?: string;
+  interactiveReplyTitle?: string;
 }
 
 export interface ReplyContext {
