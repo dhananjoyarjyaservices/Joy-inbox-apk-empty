@@ -152,3 +152,7 @@ Workspace owners and admins can manage up to 100 rules through the authenticated
 
 For each newly persisted inbound WhatsApp text message, the webhook checks up to 100 rules and runs only the first enabled match. Media-only messages do not trigger keyword rules. A run record keyed by the inbound message and rule prevents duplicate replies when Meta retries the same webhook. Replies are sent only inside WhatsApp's 24-hour customer service window; out-of-window matches are recorded as skipped. Automation send failures are recorded and logged without causing Meta to retry an already-saved inbound message. This is a first keyword-auto-reply milestone, not yet a visual workflow builder or multi-step chatbot.
 
+### Multi-step automation reply sequences
+
+Each keyword automation rule can now contain one to five ordered text reply steps. The webhook sends the steps in order and records progress, completed step count, message IDs, and final status in the automation run. If a later step fails after earlier replies were sent, the run is marked `partially_failed` and is not automatically replayed, preventing duplicate sends on webhook retries. Existing single-response rules remain compatible. Steps are sent immediately; timed delays, branching, non-text actions, and a drag-and-drop canvas are not part of this release.
+
