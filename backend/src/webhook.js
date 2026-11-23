@@ -59,13 +59,19 @@ async function saveTenantIncomingMessage(db, organization, message, contactName,
   if (Number.isNaN(timestamp.getTime())) return false;
   const messageType = typeof message.type === "string" ? message.type.slice(0, 40) : "unknown";
   const mediaMessage = message[messageType] && typeof message[messageType] === "object" ? message[messageType] : {};
+  const interactiveReply = messageType === "interactive"
+    ? (message.interactive?.button_reply || message.interactive?.list_reply || null)
+    : null;
+  const buttonReply = messageType === "button" ? message.button || null : null;
   const rawText = messageType === "text"
     ? (typeof message.text?.body === "string" ? message.text.body : "")
-    : (typeof mediaMessage.caption === "string" ? mediaMessage.caption
-      : typeof mediaMessage.title === "string" ? mediaMessage.title
-      : messageType === "location" && message.location
-        ? String(message.location.latitude ?? "") + ", " + String(message.location.longitude ?? "")
-        : messageType + " message");
+    : interactiveReply && typeof interactiveReply.title === "string" ? interactiveReply.title
+      : buttonReply && typeof buttonReply.text === "string" ? buttonReply.text
+      : (typeof mediaMessage.caption === "string" ? mediaMessage.caption
+        : typeof mediaMessage.title === "string" ? mediaMessage.title
+        : messageType === "location" && message.location
+          ? String(message.location.latitude ?? "") + ", " + String(message.location.longitude ?? "")
+          : messageType + " message");
   // Bound untrusted webhook fields before writing Firestore documents.
   const text = rawText.slice(0, 4096);
   const safeContactName = typeof contactName === "string" ? contactName.slice(0, 100) : phone;
@@ -114,6 +120,9 @@ async function saveTenantIncomingMessage(db, organization, message, contactName,
       mediaSize,
       mediaFilename,
       mediaSha256,
+      ...(interactiveReply && typeof interactiveReply.id === "string" ? { interactiveReplyId: interactiveReply.id.slice(0, 256) } : {}),
+      ...(buttonReply && typeof buttonReply.payload === "string" ? { interactiveReplyId: buttonReply.payload.slice(0, 256) } : {}),
+      ...(interactiveReply || buttonReply ? { interactiveReplyTitle: String(interactiveReply?.title || buttonReply?.text || "").slice(0, 100) } : {}),
       ...replyFields
     });
     transaction.set(chatRef, {
