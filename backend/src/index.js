@@ -894,7 +894,7 @@ async function retryTenantFailedTemplate(event) {
       body:JSON.stringify({messaging_product:"whatsapp",recipient_type:"individual",to:chatId,type:"template",template:{name:templateName,language:{code:language},...(components.length?{components}:{})}})
     });
     const payload = await response.json().catch(()=>({}));
-    if (!response.ok || !payload.messages?.[0]?.id) { const error=new Error(payload.error?.message||"Meta rejected the template retry."); error.statusCode=502; error.definitive=true; error.retryable=false; throw error; }
+    if (!response.ok || !payload.messages?.[0]?.id) { const error=new Error(payload.error?.message||"Meta did not confirm template retry delivery."); error.statusCode=502; error.definitive=!response.ok && isDefinitiveWhatsAppSendRejection(response.status); error.retryable=false; throw error; }
     const newMessageId=payload.messages[0].id; const timestamp=new Date();
     const newRef=getTenantMessageRef(db,organization.id,chatId,newMessageId);
     const preview=`Template: ${templateName}`;
