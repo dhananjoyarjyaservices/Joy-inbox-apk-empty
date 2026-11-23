@@ -6,7 +6,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Setup from "./pages/Setup";
-import OrganisationInbox from "./pages/OrganisationInbox";\nimport Campaigns from "./pages/Campaigns";
+import OrganisationInbox from "./pages/OrganisationInbox";
+import Campaigns from "./pages/Campaigns";
 
 const LEGACY_INBOX_OWNER_UID = "Vy49nGnw74gR5SFHmjN0DOQ2QFE3";
 
