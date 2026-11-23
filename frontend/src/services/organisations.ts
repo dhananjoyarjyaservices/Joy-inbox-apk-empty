@@ -286,6 +286,21 @@ export async function previewOrganisationCampaign(orgId: string, campaignId: str
 }
 
 
+export async function scheduleOrganisationCampaign(orgId: string, campaignId: string, scheduledAt: string) {
+  return request<{ success: boolean; deliveryEnabled: boolean; campaign: { id: string; status: string; scheduledAt: Date | string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/campaigns/${encodeURIComponent(campaignId)}/schedule`,
+    { method: "POST", body: JSON.stringify({ scheduledAt }) },
+  );
+}
+
+export async function cancelOrganisationCampaign(orgId: string, campaignId: string) {
+  return request<{ success: boolean; campaign: { id: string; status: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/campaigns/${encodeURIComponent(campaignId)}/cancel`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+
 export interface OrganisationAutomationSettings {
   greetingEnabled: boolean;
   greetingText: string;
