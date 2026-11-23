@@ -12,7 +12,9 @@ All endpoints below require a Firebase ID token in the `Authorization: Bearer <i
 | GET | `/organisations` | List active organisations for the signed-in user. |
 | POST | `/organisations/:orgId/invitations` | Owner/admin creates an invitation. Body: `{ "email": "agent@example.com", "role": "agent" }`. Roles: admin, manager, agent. |
 | POST | `/organisations/:orgId/invitations/accept` | Accept an invitation using `{ "invitationId": "..." }`. Email must be verified and match the invitation. |
-| GET | `/organisations/:orgId/members` | List active members for owner/admin/manager. |
+| GET | `/organisations/:orgId/members` | List active members for active organisation members. |
+| PUT | `/organisations/:orgId/members/:uid` | Owner/admin changes a member role. Body: `{ "role": "manager" }`. |
+| DELETE | `/organisations/:orgId/members/:uid` | Owner/admin revokes a member's organisation access (soft removal). |
 
 Invitations currently create a pending invitation record and return its ID; an email-delivery provider is not configured yet, so the ID must be shared by the organisation admin through a trusted channel.
 
@@ -141,3 +143,16 @@ Organisation owners, admins and managers can configure greeting messages, away m
 ## Consent records and broadcast suppression
 
 Campaign managers can record WhatsApp opt-in or opt-out for an individual contact. Opt-in requires a source and evidence description; each change is written to a restricted consent audit subcollection with the actor and timestamp. Incoming exact STOP, UNSUBSCRIBE, CANCEL, END or QUIT text messages automatically mark the contact opted out and create an audit event. Contacts marked opted out, or without explicit opt-in and opt-in timestamp, are excluded from campaign audience previews. Consent records do not themselves prove legal validity; businesses must retain the underlying customer permission evidence and comply with applicable WhatsApp and local laws. Campaign sending remains disabled.
+
+
+## Team member administration
+
+The Business setup page now provides role management and member removal controls for owners and admins.
+
+- Owners can promote active members to admin, manager or agent, and can remove any non-owner member.
+- Admins can manage managers and agents only; they cannot promote someone to admin or change/remove another admin.
+- The organisation owner is protected from role changes and removal.
+- Removing a member sets their membership status to `removed`; the member immediately fails active-membership checks and loses access to organisation-scoped APIs and Firestore reads.
+- The backend enforces these permissions independently of the UI. Managers and agents cannot change roles or remove members.
+
+Role changes and removals are committed by the backend using the Firebase Admin SDK. Invitation email delivery and pending-invitation cancellation are not implemented yet.
