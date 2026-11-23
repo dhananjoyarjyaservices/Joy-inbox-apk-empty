@@ -119,8 +119,10 @@ async function runLegacyMigration(db, options = {}) {
   }
 
   const writes = [];
+  const verificationRefs = { chats: [], messages: [], contacts: [], quickReplies: [], settings: [] };
   for (const chatDocument of chatsSnapshot.docs) {
     const destinationChat = organizationRef.collection("chats").doc(chatDocument.id);
+    verificationRefs.chats.push(destinationChat);
     const existingChat = await destinationChat.get();
     if (!existingChat.exists) {
       writes.push({ ref: destinationChat, data: sanitizeLegacyChat(chatDocument.data()) });
@@ -128,8 +130,10 @@ async function runLegacyMigration(db, options = {}) {
     } else summary.skippedExisting.chats += 1;
 
     const messages = await chatDocument.ref.collection("messages").get();
+    summary.source.messages += messages.size;
     for (const messageDocument of messages.docs) {
       const destinationMessage = destinationChat.collection("messages").doc(messageDocument.id);
+      verificationRefs.messages.push(destinationMessage);
       const existingMessage = await destinationMessage.get();
       if (!existingMessage.exists) {
         writes.push({ ref: destinationMessage, data: sanitizeLegacyMessage(messageDocument.data()) });
@@ -140,6 +144,7 @@ async function runLegacyMigration(db, options = {}) {
 
   for (const contact of contactsSnapshot.docs) {
     const destination = organizationRef.collection("contacts").doc(contact.id);
+    verificationRefs.contacts.push(destination);
     const existing = await destination.get();
     if (!existing.exists) {
       writes.push({ ref: destination, data: sanitizeLegacyContact(contact.data()) });
@@ -149,6 +154,7 @@ async function runLegacyMigration(db, options = {}) {
 
   for (const reply of repliesSnapshot.docs) {
     const destination = organizationRef.collection("quickReplies").doc(reply.id);
+    verificationRefs.quickReplies.push(destination);
     const existing = await destination.get();
     if (!existing.exists) {
       writes.push({ ref: destination, data: sanitizeLegacyQuickReply(reply.data()) });
@@ -158,6 +164,7 @@ async function runLegacyMigration(db, options = {}) {
 
   if (greetingSnapshot.exists) {
     const destination = organizationRef.collection("settings").doc("greeting");
+    verificationRefs.settings.push(destination);
     const existing = await destination.get();
     if (!existing.exists) {
       writes.push({ ref: destination, data: { ...copySafeFields(greetingSnapshot.data()), migratedFromLegacy: true } });
@@ -166,6 +173,16 @@ async function runLegacyMigration(db, options = {}) {
   }
 
   await commitWrites(db, writes);
+  const verified = {};
+  for (const [kind, refs] of Object.entries(verificationRefs)) {
+    let count = 0;
+    for (const ref of refs) {
+      if ((await ref.get()).exists) count += 1;
+    }
+    verified[kind] = count;
+    if (count !== refs.length) throw new Error(`Legacy migration verification failed for ${kind}: expected ${refs.length}, found ${count}.`);
+  }
+  summary.verified = verified;
   await markerRef.set({
     status: "completed",
     version: 1,
