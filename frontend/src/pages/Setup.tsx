@@ -36,6 +36,7 @@ export default function Setup() {
   const [phoneNumberId, setPhoneNumberId] = useState("");
   const [wabaId, setWabaId] = useState("");
   const [accessToken, setAccessToken] = useState("");
+  const [webhookVerifyToken, setWebhookVerifyToken] = useState("");
   const [waConnection, setWaConnection] = useState<WhatsAppConnection>({ connected: false });
 
   const selected = useMemo(
@@ -95,6 +96,7 @@ export default function Setup() {
     try {
       const result = await saveOrganisationWhatsAppConnection(selected.id, { phoneNumberId: phoneNumberId.trim(), wabaId: wabaId.trim(), accessToken: accessToken.trim() });
       setWaConnection(result.connection);
+      setWebhookVerifyToken(result.connection.webhookVerifyToken || "");
       setAccessToken("");
       setNotice("Meta credentials verified and encrypted for this organisation. Webhook routing and live inbox activation are still pending.");
     } catch (reason) {
@@ -266,7 +268,8 @@ export default function Setup() {
                   <button disabled={busy} className="w-full rounded-xl bg-[#075e54] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Verifying with Meta..." : waConnection.connected ? "Update WhatsApp credentials" : "Verify and connect number"}</button>
                 </form>
               )}
-              <p className="mt-3 text-xs leading-5 text-amber-700">Access token encrypted on the server and never returned to the browser. This verifies the Meta credentials only; webhook subscription, incoming-message routing and tenant-isolated inbox are not yet enabled.</p>
+              {webhookVerifyToken && <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-700"><p className="font-semibold">One-time Meta webhook verify token</p><p className="mt-2 break-all font-mono">{webhookVerifyToken}</p><button type="button" onClick={() => navigator.clipboard?.writeText(webhookVerifyToken)} className="mt-2 font-semibold text-[#075e54]">Copy verify token</button><p className="mt-2 text-amber-700">Save this token now. It is shown only once and cannot be retrieved later; reconnect to rotate it.</p></div>}
+              <p className="mt-3 text-xs leading-5 text-amber-700">Access token encrypted on the server and never returned to the browser. The webhook handler routes incoming messages into this organisation's own chat collection. Configure the Meta callback URL and subscribe the WABA to this app before testing.</p>
             </div>
             {["owner", "admin"].includes(selected.role) && (
               <form onSubmit={handleInvite} className="mt-5 grid gap-3 sm:grid-cols-[1fr_140px_auto]">
