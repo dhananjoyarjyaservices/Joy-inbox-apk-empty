@@ -49,10 +49,12 @@ async function readSendResponse(response, startedAt, type, fallbackMessage) {
       result?.error?.message || fallbackMessage
     );
     error.statusCode = 502;
+    error.metaStatusCode = response.status;
     // A 4xx response is an explicit rejection. A 5xx response may occur
     // after Meta accepted the request, so delivery must remain unknown.
     error.definitive = isDefinitiveWhatsAppSendRejection(response.status);
-    error.retryable = false;
+    // A Meta 429 response is an explicit rate-limit rejection and is safe to retry.
+    error.retryable = response.status === 429;
     throw error;
   }
   return result;
