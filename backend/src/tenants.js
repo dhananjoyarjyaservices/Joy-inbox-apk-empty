@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const { getHeader, jsonResponse } = require("./security");
+const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 
 function getMethod(event) {
   return (event.requestContext?.http?.method || event.httpMethod || "GET").toUpperCase();
@@ -275,6 +276,53 @@ async function getWhatsAppConnection(db, user, orgId) {
   };
 }
 
+
+async function sendOrganisationText(db, user, orgId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager", "agent"]);
+  const to = normalizePhoneNumber(body.to);
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!to || !/^\d{6,20}$/.test(to) || !text || text.length > 4096) {
+    fail("A valid customer phone number and message text (1 to 4096 characters) are required.");
+  }
+  const connectionRef = db.collection("organisations").doc(orgId)
+    .collection("whatsappConnections").doc("primary");
+  const connectionSnapshot = await connectionRef.get();
+  if (!connectionSnapshot.exists || connectionSnapshot.data().status !== "credentials_verified") {
+    fail("This organisation has no verified WhatsApp Cloud API connection.", 409);
+  }
+  const connection = connectionSnapshot.data();
+  const accessToken = decryptSecret(connection.accessTokenEncrypted);
+  const result = await sendWhatsAppText(to, text, undefined, {
+    accessToken,
+    phoneNumberId: connection.phoneNumberId
+  });
+  const timestamp = new Date();
+  const chatRef = db.collection("organisations").doc(orgId).collection("chats").doc(to);
+  await db.runTransaction(async (tx) => {
+    const chat = await tx.get(chatRef);
+    tx.create(chatRef.collection("messages").doc(result.messageId), {
+      messageId: result.messageId,
+      chatId: to,
+      direction: "outgoing",
+      type: "text",
+      text,
+      timestamp,
+      status: "sent",
+      source: "manual",
+      sender: user.uid
+    });
+    tx.set(chatRef, {
+      organisationId: orgId,
+      customerPhone: to,
+      lastMessage: text,
+      lastMessageAt: timestamp,
+      lastMessageDirection: "outgoing",
+      updatedAt: timestamp
+    }, { merge: true });
+  });
+  return { messageId: result.messageId, chatId: to, status: "sent" };
+}
+
 async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
@@ -282,8 +330,8 @@ async function handleTenantRoute(event) {
   const inviteMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations$/);
   const acceptMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/accept$/);
   const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
-  const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch)) return null;
+  const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);\n  const orgMessagesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages$/);
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -304,7 +352,7 @@ async function handleTenantRoute(event) {
       const result = await acceptInvitation(db, user, acceptMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, membership: result });
     }
-    if (whatsappMatch && method === "GET") {
+    if (orgMessagesMatch && method === "POST") {\n      const result = await sendOrganisationText(db, user, orgMessagesMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, message: result });\n    }\n    if (whatsappMatch && method === "GET") {
       const result = await getWhatsAppConnection(db, user, whatsappMatch[1]);
       return jsonResponse(event, 200, result);
     }
