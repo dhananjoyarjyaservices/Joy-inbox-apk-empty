@@ -2597,6 +2597,9 @@ async function handleTenantInvitations(event) {
     return jsonResponse(event, 200, { invitations });
   }
   if (method === "POST") {
+    if (String(body.role || "agent").toLowerCase() === "admin" && organization.role !== "owner") {
+      return jsonResponse(event, 403, { error: "Only the workspace owner can invite an admin." });
+    }
     const invitation = await createTenantInvitation(getDb(), organization.id, decoded, {
       email: body.email,
       role: body.role
