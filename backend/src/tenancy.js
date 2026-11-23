@@ -47,7 +47,7 @@ function decryptSecret(record, keyValue = process.env.TENANT_SECRET_ENCRYPTION_K
 async function resolvePhoneNumberOrganization(db, phoneNumberId) {
   if (!validId(phoneNumberId)) throw httpError("Invalid WhatsApp phone number ID.", 400);
   const mapping = await db.collection("whatsappPhoneNumbers").doc(phoneNumberId).get();
-  if (!mapping.exists || !validId(mapping.data().organizationId)) throw httpError("No organization is connected to this WhatsApp number.", 404);
+  if (!mapping.exists || mapping.data().status !== "active" || !validId(mapping.data().organizationId)) throw httpError("No active organization is connected to this WhatsApp number.", 404);
   return requireOrganizationForWebhook(db, mapping.data().organizationId);
 }
 
