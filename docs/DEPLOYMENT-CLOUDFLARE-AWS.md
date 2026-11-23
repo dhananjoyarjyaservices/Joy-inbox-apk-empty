@@ -61,7 +61,7 @@ Lambda must use Node.js 22 and the deployment package must include the backend d
 - `CORS_ORIGINS=https://final-joy-inbox.pages.dev`
 - `FRONTEND_BASE_URL=https://YOUR_FRONTEND_DOMAIN` (include any deployment base path; used to generate workspace invitation links)
 
-Legacy `PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN` are only for legacy owner-only routes. New tenant connections should use organization-encrypted credentials.
+Legacy `PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN` are only for legacy owner-only routes. New tenant connections should use organization-encrypted credentials. Set `LEGACY_OWNER_API_ENABLED=false` (or leave it unset) in staging/production to return HTTP 410 from legacy single-owner API routes. Set it to `true` only during an explicitly approved, time-limited migration window; this does not enable legacy routes for other users because the owner UID check remains in place. Organization-scoped `/organizations/*` routes and Meta webhook endpoints are not affected.
 
 ## Current deployment blockers
 
@@ -71,7 +71,7 @@ Legacy `PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN` are only for legacy owner-o
 4. The current Lambda Function URL in the old frontend example was not validated as the correct deployed SaaS API. Set `VITE_API_BASE_URL` only after confirming the intended Lambda Function URL.
 5. Firebase project values and the VAPID public key must be copied from the correct Firebase Web App configuration. The example file intentionally uses placeholders.
 6. The tenant encryption key must be provisioned securely in AWS before onboarding/WhatsApp connection routes can store tenant credentials.
-7. Firestore rules, webhook tenant routing, legacy route exposure, migration/rollback, media proxy behavior and real Meta/Firebase integration tests still require a security and production-readiness review.
+7. Firestore rules, webhook tenant routing, migration/rollback, media proxy behavior and real Meta/Firebase integration tests still require a security and production-readiness review. Legacy owner-only routes are now disabled by default unless the explicit migration flag is enabled.
 
 ## Safe rollout sequence
 
