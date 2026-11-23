@@ -4,6 +4,7 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
+  sendEmailVerification,
   type User,
 } from "firebase/auth";
 
@@ -31,7 +32,7 @@ export async function registerWithEmail(
     email.trim(),
     password
   );
-
+  await sendEmailVerification(result.user);
   return result.user;
 }
 
