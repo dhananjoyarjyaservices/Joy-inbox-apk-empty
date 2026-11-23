@@ -747,7 +747,7 @@ async function handleOrganizationNotificationPreferences(event) {
     const preferences = await getTenantNotificationPreferences(db, organization.id, decoded.uid);
     return jsonResponse(event, 200, { preferences });
   }
-  for (const key of ["assignment", "status", "sla"]) {
+  for (const key of ["assignment", "status", "sla", "soundEnabled", "desktopEnabled"]) {
     if (typeof body[key] !== "boolean") return jsonResponse(event, 400, { error: `Preference '${key}' must be true or false.` });
   }
   const preferences = normalizeNotificationPreferences(body);
