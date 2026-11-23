@@ -767,7 +767,15 @@ async function handleTenantRoute(event) {
     }
 
 
-    if (automationMatch && method === "GET") {\n      const settings = await getOrganisationAutomation(db, user, automationMatch[1]);\n      return jsonResponse(event, 200, { settings });\n    }\n    if (automationMatch && method === "PUT") {\n      const settings = await saveOrganisationAutomation(db, user, automationMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, settings });\n    }\n    if (campaignsMatch && method === "GET" && !campaignsMatch[2]) {
+    if (automationMatch && method === "GET") {
+      const settings = await getOrganisationAutomation(db, user, automationMatch[1]);
+      return jsonResponse(event, 200, { settings });
+    }
+    if (automationMatch && method === "PUT") {
+      const settings = await saveOrganisationAutomation(db, user, automationMatch[1], parseBody(event));
+      return jsonResponse(event, 200, { success: true, settings });
+    }
+    if (campaignsMatch && method === "GET" && !campaignsMatch[2]) {
       const campaigns = await listOrganisationCampaigns(db, user, campaignsMatch[1]);
       return jsonResponse(event, 200, { campaigns });
     }
