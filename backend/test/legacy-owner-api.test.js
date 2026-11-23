@@ -43,6 +43,31 @@ test("every legacy owner API route is disabled by default", async () => {
   });
 });
 
+test("every legacy owner API route still requires the verified owner when migration opt-in is enabled", async () => {
+  const routes = [
+    ["POST", "/send"],
+    ["POST", "/chat-state"],
+    ["POST", "/message-state"],
+    ["POST", "/delete-messages"],
+    ["POST", "/delete-chats"],
+    ["POST", "/send-media"],
+    ["GET", "/media"],
+    ["GET", "/status"],
+    ["GET", "/greeting-settings"],
+    ["POST", "/greeting-settings"],
+    ["POST", "/fcm-tokens/register"],
+    ["POST", "/fcm-tokens/remove"]
+  ];
+
+  await withLegacyFlag("true", async () => {
+    for (const [method, path] of routes) {
+      const response = await handler(request(method, path));
+      assert.equal(response.statusCode, 401, `${method} ${path} must still authenticate the owner`);
+      assert.match(response.body, /authentication required/i);
+    }
+  });
+});
+
 test("legacy owner API can only be enabled through the explicit migration flag", async () => {
   await withLegacyFlag("true", async () => {
     const response = await handler(request("POST", "/send"));
