@@ -128,3 +128,17 @@ test("does not update a missing conversation", async () => {
   );
   assert.equal(writes.length, 0);
 });
+
+test("tenant chat assignment route builds actor context from verified user and stored workspace role", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const source = fs.readFileSync(path.join(__dirname, "../src/index.js"), "utf8");
+  const handlerStart = source.indexOf("async function handleTenantChatAction");
+  const handlerEnd = source.indexOf("\\nasync function ", handlerStart + 1);
+  assert.notEqual(handlerStart, -1);
+  assert.notEqual(handlerEnd, -1);
+  const handler = source.slice(handlerStart, handlerEnd);
+  assert.match(handler, /const actor = \\{ uid: decoded\\.uid, email: decoded\\.email \\|\\| "", role: organization\\.role \\}/);
+  assert.match(handler, /updateTenantChatAssignment\\(getDb\\(\\), organization, actor, actionInput\\)/);
+});
+
