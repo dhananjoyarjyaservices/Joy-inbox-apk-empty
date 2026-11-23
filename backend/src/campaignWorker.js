@@ -188,7 +188,18 @@ async function verifyApprovedTemplate(campaign, credentials, fetchImpl = fetch) 
     error.definitive = true;
     throw error;
   }
-  const bodyText = approved.components?.find(item => item.type === "BODY")?.text || "";
+  const components = Array.isArray(approved.components) ? approved.components : [];
+  const bodyText = components.find(item => item.type === "BODY")?.text || "";
+  const header = components.find(item => item.type === "HEADER");
+  const headerText = header?.format === "TEXT" ? header.text || "" : "";
+  const headerVariables = [...String(headerText).matchAll(/\{\{\s*(\d+)\s*\}\}/g)];
+  const dynamicButtons = components.some(item => item.type === "BUTTONS" && Array.isArray(item.buttons) &&
+    item.buttons.some(button => button.type === "URL" && String(button.url || "").includes("{{")));
+  if ((header && header.format !== "TEXT") || headerVariables.length || dynamicButtons) {
+    const error = new Error("Campaign template uses a header or button parameter not supported by this campaign worker.");
+    error.definitive = true;
+    throw error;
+  }
   const indexes = [...String(bodyText).matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
   return indexes.length ? Math.max(...indexes) : 0;
 }
