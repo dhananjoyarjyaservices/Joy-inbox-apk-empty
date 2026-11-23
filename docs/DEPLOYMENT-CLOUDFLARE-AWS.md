@@ -121,3 +121,7 @@ Notification delivery controls are stored per organization member at `organizati
 ### Registered push devices and delivery retries
 
 Each member can view and revoke up to 50 recently active browser/device registrations in Notification Center. Device records are scoped to that member and organization; the API returns device label, platform, user agent summary, and timestamps, never the FCM token. Removing a device deletes its token registration. Re-registering a browser refreshes its last-active timestamp and metadata. FCM multicast delivery retries once after a short delay for transient server/internal/unknown errors; invalid or unregistered tokens are removed automatically. Persistent failures are not reported as delivered.
+
+### Notification delivery monitoring
+
+Push delivery attempts for tenant incoming-message and SLA alerts are recorded per member at `organizations/{organizationId}/members/{uid}/notificationDeliveries`. The authenticated `GET /organizations/notifications/deliveries?organizationId=...` endpoint returns at most the latest 100 records for the requesting member, including delivered/failed status, attempt count, timestamp, notification type, and provider error code. FCM registration tokens are never included. Transient retries are reflected in the final per-device status; log-write failures are warned in CloudWatch and do not change FCM delivery outcomes.
