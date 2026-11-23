@@ -74,8 +74,9 @@ function fakeTenantDb() {
           writes.push([reference.path, options ? { ...(docs.get(reference.path) || {}), ...value } : value]);
         }
       };
-      await callback(tx);
+      const result = await callback(tx);
       for (const [path, value] of writes) docs.set(path, value);
+      return result;
     }
   };
 }
