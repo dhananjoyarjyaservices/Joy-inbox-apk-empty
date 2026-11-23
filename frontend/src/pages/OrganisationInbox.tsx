@@ -58,9 +58,14 @@ export default function OrganisationInbox() {
   const [showQuickReplyForm, setShowQuickReplyForm] = useState(false);
   const [quickReplyTitle, setQuickReplyTitle] = useState("");
   const [quickReplyShortcut, setQuickReplyShortcut] = useState("");
-  const [savingQuickReply, setSavingQuickReply] = useState(false);\n  const [chatSearch, setChatSearch] = useState("");\n  const [tagDraft, setTagDraft] = useState("");\n  const [savingTags, setSavingTags] = useState(false);\n  const [changingStatus, setChangingStatus] = useState(false);
+  const [savingQuickReply, setSavingQuickReply] = useState(false);
+  const [chatSearch, setChatSearch] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
+  const [savingTags, setSavingTags] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
 
-  const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);\n  const filteredChats = useMemo(() => { const term = chatSearch.trim().toLowerCase(); return term ? chats.filter((chat) => [chat.customerName, chat.customerPhone, chat.lastMessage, ...(chat.tags || [])].some((value) => String(value || "").toLowerCase().includes(term))) : chats; }, [chats, chatSearch]);
+  const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
+  const filteredChats = useMemo(() => { const term = chatSearch.trim().toLowerCase(); return term ? chats.filter((chat) => [chat.customerName, chat.customerPhone, chat.lastMessage, ...(chat.tags || [])].some((value) => String(value || "").toLowerCase().includes(term))) : chats; }, [chats, chatSearch]);
 
   useEffect(() => {
     if (!orgId) return;
