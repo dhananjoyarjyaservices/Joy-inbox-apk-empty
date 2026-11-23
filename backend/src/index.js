@@ -53,6 +53,7 @@ const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_S
 const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
 const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = require("./automationRules");
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
+const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -2508,7 +2509,10 @@ async function handleTenantCampaigns(event) {
   if (method !== "POST") return jsonResponse(event, 405, { error: "Method not allowed." });
 
   const definition = normalizeCampaignDefinition(body);
-  const normalized = normalizeCampaignRecipients(body.recipients);
+  const normalizedInput = normalizeCampaignRecipients(body.recipients);
+  const suppression = await filterSuppressedCampaignRecipients(getDb(), organization.id, normalizedInput.recipients);
+  const normalized = { recipients: suppression.recipients, skipped: normalizedInput.skipped + suppression.suppressed };
+  if (!normalized.recipients.length) return jsonResponse(event, 400, { error: "No eligible recipients remain after applying WhatsApp opt-out suppressions." });
   const connections = await listWhatsAppConnections(getDb(), organization.id);
   if (!connections.some(item => item.phoneNumberId === definition.phoneNumberId && item.connected)) {
     return jsonResponse(event, 404, { error: "The selected WhatsApp number is not connected to this workspace." });
