@@ -156,3 +156,71 @@ test("legacy migration refuses a target user who is not an active organization o
     /active owner/
   );
 });
+
+test("execute migration copies tenant records, strips media paths, verifies and marks completion", async () => {
+  const values = new Map([
+    ["organizations/org_123", { status: "active" }],
+    ["organizations/org_123/members/uid_123", { status: "active", role: "owner" }],
+    ["chats/15551234567", { customerPhone: "15551234567", lastMessage: "Hello" }],
+    ["chats/15551234567/messages/msg_1", { text: "Photo", mediaStoragePath: "customer-uploads/photo.jpg", mimeType: "image/jpeg" }],
+    ["users/uid_123/contacts/contact_1", { name: "Customer", phone: "+15551234567", privateField: "remove" }],
+    ["users/uid_123/quickReplies/reply_1", { title: "Welcome", shortcut: "welcome", message: "Hello", imageStoragePath: "private/reply.png" }],
+    ["users/uid_123/settings/greeting", { text: "Welcome to our business", privateToken: "remove" }]
+  ]);
+  const makeRef = path => ({
+    path,
+    id: path.split("/").pop(),
+    collection(name) { return makeCollection(path + "/" + name); },
+    async get() {
+      const value = values.get(path);
+      return { exists: Boolean(value), id: this.id, data: () => value, get: key => value?.[key] };
+    },
+    async set(value, options) {
+      values.set(path, options?.merge ? { ...(values.get(path) || {}), ...value } : value);
+    }
+  });
+  const makeCollection = path => ({
+    doc(id) { return makeRef(path + "/" + id); },
+    async get() {
+      const prefix = path + "/";
+      const docs = [...values.entries()]
+        .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/"))
+        .map(([key, value]) => ({ id: key.split("/").pop(), ref: makeRef(key), data: () => value }));
+      return { size: docs.length, docs };
+    }
+  });
+  const db = {
+    collection(name) { return makeCollection(name); },
+    batch() {
+      const pending = [];
+      return {
+        set(ref, value, options) { pending.push([ref.path, value, options]); },
+        async commit() {
+          for (const [path, value, options] of pending) {
+            values.set(path, options?.merge ? { ...(values.get(path) || {}), ...value } : value);
+          }
+        }
+      };
+    }
+  };
+  const result = await runLegacyMigration(db, {
+    organizationId: "org_123",
+    ownerUid: "uid_123",
+    execute: true
+  });
+  assert.equal(result.migrated.chats, 1);
+  assert.equal(result.migrated.messages, 1);
+  assert.equal(result.migrated.contacts, 1);
+  assert.equal(result.migrated.quickReplies, 1);
+  assert.equal(result.migrated.settings, 1);
+  assert.deepEqual(result.verified, { chats: 1, messages: 1, contacts: 1, quickReplies: 1, settings: 1 });
+  const migratedMessage = values.get("organizations/org_123/chats/15551234567/messages/msg_1");
+  assert.equal(migratedMessage.mediaStoragePath, undefined);
+  assert.equal(migratedMessage.mediaUnavailable, true);
+  const migratedReply = values.get("organizations/org_123/quickReplies/reply_1");
+  assert.equal(migratedReply.imageStoragePath, undefined);
+  assert.equal(migratedReply.imageUnavailable, true);
+  assert.equal(values.get("organizations/org_123/settings/legacyMigration").status, "completed");
+  const repeated = await runLegacyMigration(db, { organizationId: "org_123", ownerUid: "uid_123", execute: true });
+  assert.equal(repeated.alreadyCompleted, true);
+});
