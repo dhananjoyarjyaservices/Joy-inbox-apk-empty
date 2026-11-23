@@ -5,6 +5,7 @@ const { verifyMetaSignature, getRawBody } = require("./security");
 const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
 const { sendTenantIncomingTextNotification } = require("./push");
+const { matchesAutomationRule } = require("./automationRules");
 
 function getVerifyToken() {
   return (
@@ -129,6 +130,79 @@ async function saveTenantIncomingMessage(db, organization, message, contactName,
     }, { merge: true });
     return true;
   });
+}
+
+async function maybeRunTenantKeywordAutomation(db, organization, credentials, phone, inboundMessage) {
+  if (inboundMessage.type !== "text" || typeof inboundMessage.text?.body !== "string") return;
+  const body = inboundMessage.text.body.trim().slice(0, 4096);
+  if (!body) return;
+  const rulesSnapshot = await organization.ref.collection("automationRules").limit(100).get();
+  const rules = rulesSnapshot.docs
+    .map((document) => ({ id: document.id, ...document.data() }))
+    .filter((rule) => rule.enabled === true && typeof rule.keyword === "string" && typeof rule.response === "string")
+    .sort((a, b) => Number(a.priority || 100) - Number(b.priority || 100));
+  const rule = rules.find((item) => matchesAutomationRule(item, body));
+  if (!rule) return;
+
+  const inboundTimestamp = Number(inboundMessage.timestamp)
+    ? new Date(Number(inboundMessage.timestamp) * 1000) : new Date();
+  const withinWindow = inboundTimestamp.getTime() <= Date.now() + 5 * 60 * 1000 &&
+    Date.now() - inboundTimestamp.getTime() < 24 * 60 * 60 * 1000;
+  const runId = crypto.createHash("sha256").update(String(inboundMessage.id || "") + ":" + rule.id).digest("hex");
+  const runRef = organization.ref.collection("automationRuns").doc(runId);
+  const claimed = await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(runRef);
+    if (existing.exists) return false;
+    transaction.create(runRef, {
+      ruleId: rule.id,
+      ruleName: String(rule.name || "Automation").slice(0, 80),
+      inboundMessageId: String(inboundMessage.id || "").slice(0, 256),
+      customerPhone: phone,
+      status: withinWindow ? "sending" : "skipped",
+      reason: withinWindow ? null : "outside_whatsapp_service_window",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    return true;
+  });
+  if (!claimed || !withinWindow) return;
+
+  try {
+    const result = await sendWhatsAppText(phone, rule.response, undefined, credentials);
+    const timestamp = new Date();
+    const chatRef = organization.ref.collection("chats").doc(phone);
+    const batch = db.batch();
+    batch.set(chatRef.collection("messages").doc(result.messageId), {
+      messageId: result.messageId,
+      chatId: phone,
+      organizationId: organization.id,
+      direction: "outgoing",
+      type: "text",
+      text: rule.response,
+      timestamp,
+      status: "sent",
+      source: "automation",
+      automationRuleId: rule.id,
+      phoneNumberId: credentials.phoneNumberId || null,
+      sender: "system"
+    });
+    batch.set(chatRef, {
+      lastMessage: rule.response,
+      lastMessageAt: timestamp,
+      lastMessageDirection: "outgoing",
+      ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
+      updatedAt: timestamp
+    }, { merge: true });
+    batch.set(runRef, { status: "sent", responseMessageId: result.messageId, sentAt: timestamp, updatedAt: timestamp }, { merge: true });
+    await batch.commit();
+  } catch (error) {
+    await runRef.set({
+      status: "failed",
+      error: String(error?.message || "Automation reply failed.").slice(0, 300),
+      updatedAt: new Date()
+    }, { merge: true });
+    console.error("Tenant keyword automation failed:", error);
+  }
 }
 
 async function maybeSendTenantGreeting(db, organization, credentials, phone, inboundMessage) {
@@ -282,6 +356,7 @@ async function processWebhookPayload(payload) {
         if (created) {
           const phone = normalizePhoneNumber(message.from);
           await maybeSendTenantGreeting(db, organization, credentials, phone, message);
+          await maybeRunTenantKeywordAutomation(db, organization, credentials, phone, message);
           try {
             await sendTenantIncomingTextNotification(
               organization.id,
