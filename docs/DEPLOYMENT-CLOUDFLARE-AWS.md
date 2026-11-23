@@ -144,3 +144,5 @@ The team analytics endpoint also accepts optional inclusive `from=YYYY-MM-DD` an
 
 Team delivery analytics also groups the sampled delivery records by notification type (for example, incoming message and SLA push), both per active member and across the displayed team. The CSV export includes per-member message and SLA delivered/failed counts. Unknown future notification types remain available in the type breakdown rather than being discarded.
 
+Workspace owners and admins can inspect an individual active or existing member's notification delivery report with `GET /organizations/notifications/member-deliveries?organizationId=...&uid=...`. Optional `from` and `to` date filters use inclusive calendar dates. The response includes aggregate delivery rate, delivered/failed/retried counts, notification-type breakdown, and up to 200 recent delivery records (type, status, attempts, error code, timestamp). Access is restricted to owners/admins with `chats:read`; the member must belong to the selected workspace. No FCM tokens are returned. A `capped` flag indicates when the latest-200 limit was reached.
+
