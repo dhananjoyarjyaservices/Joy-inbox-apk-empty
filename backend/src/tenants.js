@@ -899,6 +899,97 @@ async function cancelOrganisationCampaign(db, user, orgId, campaignId) {
 }
 
 
+async function prepareOrganisationCampaignQueue(db, user, orgId, campaignId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  if (!/^[A-Za-z0-9_-]{10,40}$/.test(campaignId)) fail("A valid campaign ID is required.");
+  const orgRef = db.collection("organisations").doc(orgId);
+  const campaignRef = orgRef.collection("campaigns").doc(campaignId);
+  const campaignSnap = await campaignRef.get();
+  if (!campaignSnap.exists) fail("Campaign was not found.", 404);
+  const campaign = campaignSnap.data();
+  if (campaign.status !== "scheduled") fail("Only scheduled campaigns can be added to the delivery queue.", 409);
+  const scheduledAt = campaign.scheduledAt?.toDate ? campaign.scheduledAt.toDate() : new Date(campaign.scheduledAt);
+  if (!campaign.scheduledAt || Number.isNaN(scheduledAt.getTime())) fail("Campaign schedule is invalid.", 409);
+  const contacts = await orgRef.collection("contacts").limit(5000).get();
+  const requiredTags = Array.isArray(campaign.audience?.tags) ? campaign.audience.tags : [];
+  const eligible = contacts.docs.filter((doc) => {
+    const contact = doc.data();
+    if (contact.whatsappOptIn !== true || !contact.whatsappOptInAt || contact.whatsappOptOut === true) return false;
+    const tags = Array.isArray(contact.tags) ? contact.tags : [];
+    return requiredTags.every((tag) => tags.includes(tag));
+  });
+  const queueRef = campaignRef.collection("recipients");
+  let queuedCount = 0;
+  let existingCount = 0;
+  for (let offset = 0; offset < eligible.length; offset += 300) {
+    const slice = eligible.slice(offset, offset + 300);
+    const refs = slice.map((doc) => queueRef.doc(crypto.createHash("sha256").update(doc.id).digest("hex").slice(0, 40)));
+    const existing = await db.getAll(...refs);
+    const batch = db.batch();
+    let writes = 0;
+    for (let i = 0; i < slice.length; i += 1) {
+      if (existing[i].exists) { existingCount += 1; continue; }
+      const contact = slice[i].data();
+      batch.create(refs[i], {
+        phone: "+" + normalizePhoneNumber(slice[i].id),
+        status: "queued",
+        templateName: campaign.templateName,
+        language: campaign.language,
+        bodyParameters: Array.isArray(campaign.bodyParameters) ? campaign.bodyParameters : [],
+        scheduledAt,
+        consentCheckedAt: new Date(),
+        consentSnapshot: "opted_in",
+        createdAt: new Date(),
+        attemptCount: 0
+      });
+      writes += 1;
+    }
+    if (writes) { await batch.commit(); queuedCount += writes; }
+  }
+  const now = new Date();
+  await campaignRef.set({
+    queuePreparedAt: now,
+    queuePreparedBy: user.uid,
+    queueEligibleCount: eligible.length,
+    queueCreatedCount: queuedCount,
+    queueExistingCount: existingCount,
+    queueStatus: "ready",
+    deliveryEnabled: false,
+    updatedAt: now
+  }, { merge: true });
+  return {
+    campaignId, eligibleCount: eligible.length, queuedCount, existingCount,
+    excludedCount: contacts.size - eligible.length, queueStatus: "ready",
+    deliveryEnabled: false,
+    message: "Recipients queued with consent snapshots. No WhatsApp messages were sent."
+  };
+}
+
+async function getOrganisationCampaignReport(db, user, orgId, campaignId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  if (!/^[A-Za-z0-9_-]{10,40}$/.test(campaignId)) fail("A valid campaign ID is required.");
+  const campaignRef = db.collection("organisations").doc(orgId).collection("campaigns").doc(campaignId);
+  const campaignSnap = await campaignRef.get();
+  if (!campaignSnap.exists) fail("Campaign was not found.", 404);
+  const campaign = campaignSnap.data();
+  const snapshot = await campaignRef.collection("recipients").limit(5000).get();
+  const counts = { queued: 0, sending: 0, sent: 0, delivered: 0, read: 0, failed: 0, cancelled: 0 };
+  snapshot.docs.forEach((doc) => {
+    const status = doc.data().status;
+    if (Object.prototype.hasOwnProperty.call(counts, status)) counts[status] += 1;
+  });
+  return {
+    campaignId, title: campaign.title, status: campaign.status,
+    scheduledAt: campaign.scheduledAt || null,
+    queueStatus: campaign.queueStatus || "not_prepared",
+    deliveryEnabled: false,
+    counts,
+    totalTracked: snapshot.size,
+    message: "Queue and status report only. Automatic delivery is not enabled."
+  };
+}
+
+
 async function getOrganisationAutomation(db, user, orgId) {
   await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
   const snapshot = await db.collection("organisations").doc(orgId)
@@ -986,7 +1077,7 @@ async function handleTenantRoute(event) {
   const orgMediaMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/media$/);
   const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
-  const campaignsMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/campaigns(?:\/([A-Za-z0-9_-]{10,40})\/(preview|schedule|cancel))?$/);
+  const campaignsMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/campaigns(?:\/([A-Za-z0-9_-]{10,40})\/(preview|schedule|cancel|prepare|report))?$/);
   const consentMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/contacts\/(\d{6,20})\/consent$/);
   const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);
   const auditMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/audit-logs$/);
@@ -1048,6 +1139,14 @@ async function handleTenantRoute(event) {
     if (campaignsMatch && method === "POST" && !campaignsMatch[2]) {
       const campaign = await createOrganisationCampaign(db, user, campaignsMatch[1], parseBody(event));
       return jsonResponse(event, 201, { success: true, campaign });
+    }
+    if (campaignsMatch && method === "POST" && campaignsMatch[2] && campaignsMatch[3] === "prepare") {
+      const result = await prepareOrganisationCampaignQueue(db, user, campaignsMatch[1], campaignsMatch[2]);
+      return jsonResponse(event, 200, { success: true, queue: result });
+    }
+    if (campaignsMatch && method === "GET" && campaignsMatch[2] && campaignsMatch[3] === "report") {
+      const report = await getOrganisationCampaignReport(db, user, campaignsMatch[1], campaignsMatch[2]);
+      return jsonResponse(event, 200, { report });
     }
     if (campaignsMatch && method === "POST" && campaignsMatch[2] && campaignsMatch[3] === "schedule") {
       const result = await scheduleOrganisationCampaign(db, user, campaignsMatch[1], campaignsMatch[2], parseBody(event));
