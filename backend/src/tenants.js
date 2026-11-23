@@ -800,7 +800,10 @@ async function handleTenantRoute(event) {
     }
 
 
-    if (consentMatch && method === "PUT") {\n      const result = await updateOrganisationContactConsent(db, user, consentMatch[1], consentMatch[2], parseBody(event));\n      return jsonResponse(event, 200, { success: true, consent: result });\n    }\n    if (automationMatch && method === "GET") {
+    if (consentMatch && method === "PUT") {
+      const result = await updateOrganisationContactConsent(db, user, consentMatch[1], consentMatch[2], parseBody(event));
+      return jsonResponse(event, 200, { success: true, consent: result });
+    }\n    if (automationMatch && method === "GET") {
       const settings = await getOrganisationAutomation(db, user, automationMatch[1]);
       return jsonResponse(event, 200, { settings });
     }
