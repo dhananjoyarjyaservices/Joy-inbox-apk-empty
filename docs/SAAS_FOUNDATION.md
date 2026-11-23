@@ -109,3 +109,14 @@ The organisation inbox now also supports:
 - A server API for updating conversation state to open, pending or resolved while assigning.
 
 The basic UI exposes internal notes and "Assign to me". Manager assignment to another agent, status controls and tag editing still need UI controls. All these API actions validate active organisation membership; agents cannot assign conversations to other agents.
+
+
+## Structured WhatsApp messaging
+
+The organisation inbox now exposes tenant-scoped endpoints for:
+- Approved WhatsApp template sends: template name, language code and ordered text body parameters. Templates must already be approved in WhatsApp Manager; the API does not create or approve templates.
+- Interactive reply-button sends (1–3 buttons).
+- Interactive list sends (up to 10 rows total across 1–10 sections).
+- Team directory lookup for active organisation members and conversation assignment. Agents may assign only to themselves; managers/admins/owners may assign to any active member.
+
+Structured outgoing message metadata is stored in the organisation chat history. Template and interactive messages are submitted through the connected organisation's encrypted WhatsApp Cloud API credentials. These endpoints have CI syntax/build coverage; real delivery still requires Meta configuration and end-to-end testing.
