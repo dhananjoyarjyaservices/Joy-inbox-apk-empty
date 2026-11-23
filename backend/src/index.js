@@ -747,7 +747,7 @@ async function handleOrganizationNotifications(event) {
     if (body.markAllRead === true) {
       const [history, audit] = await Promise.all([
         organization.ref.collection("members").doc(decoded.uid).collection("notifications").limit(450).get(),
-        organization.ref.collection("auditLogs").orderBy("createdAt", "desc").limit(100).get()
+        organization.ref.collection("auditLogs").orderBy("createdAt", "desc").limit(50).get()
       ]);
       const batch = db.batch();
       for (const doc of history.docs) batch.set(doc.ref, { read: true, readAt: now }, { merge: true });
