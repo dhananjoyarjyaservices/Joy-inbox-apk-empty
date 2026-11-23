@@ -364,9 +364,9 @@ async function maybeRunOrganisationAutomation(orgId, phone, message, contactName
   if (!settingsSnapshot.exists || !connectionSnapshot.exists) return;
   const settings = settingsSnapshot.data() || {};
   const connection = connectionSnapshot.data() || {};
-  if (!connection.encryptedAccessToken || !connection.phoneNumberId) return;
+  if (!connection.accessTokenEncrypted || !connection.phoneNumberId) return;
   const credentials = {
-    accessToken: decryptOrganisationWhatsAppToken(connection.encryptedAccessToken),
+    accessToken: decryptOrganisationWhatsAppToken(connection.accessTokenEncrypted),
     phoneNumberId: connection.phoneNumberId
   };
   const priorContact = contactSnapshot.exists ? contactSnapshot.data() : {};
