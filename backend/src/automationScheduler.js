@@ -2,6 +2,10 @@ const { getFirebaseAdmin, getDb } = require("./firebase");
 const { getWhatsAppCredentials } = require("./tenancy");
 const { sendWhatsAppText } = require("./whatsapp");
 
+function isValidScheduledStepIndex(value) {
+  return Number.isInteger(value) && value >= 0 && value <= 4;
+}
+
 async function runScheduledAutomationSteps(options = {}) {
   const admin = getFirebaseAdmin();
   const db = getDb();
@@ -38,7 +42,7 @@ async function runScheduledAutomationSteps(options = {}) {
     const stepIndex = Number(queued.stepIndex);
     const text = String(queued.text || "");
     try {
-      if (!organizationId || !phone || !text || !Number.isInteger(stepIndex) || stepIndex < 1 || stepIndex > 4) {
+      if (!organizationId || !phone || !text || !isValidScheduledStepIndex(stepIndex)) {
         throw new Error("Queued automation step has invalid details.");
       }
       const runSnapshot = await runRef.get();
@@ -107,4 +111,4 @@ async function runScheduledAutomationSteps(options = {}) {
   return { scanned: due.size, sent, failed, skipped };
 }
 
-module.exports = { runScheduledAutomationSteps };
+module.exports = { isValidScheduledStepIndex, runScheduledAutomationSteps };
