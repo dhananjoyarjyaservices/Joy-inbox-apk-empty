@@ -635,6 +635,61 @@ async function sendOrganisationInteractive(db, user, orgId, body) {
   return { messageId: sent.messageId, chatId: to, status: "sent" };
 }
 
+
+async function listOrganisationCampaigns(db, user, orgId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager", "agent"]);
+  const snapshot = await db.collection("organisations").doc(orgId)
+    .collection("campaigns").orderBy("updatedAt", "desc").limit(100).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+async function createOrganisationCampaign(db, user, orgId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  const title = String(body.title || "").trim();
+  const templateName = String(body.templateName || "").trim();
+  const language = String(body.language || "en_US").trim();
+  const parameters = body.bodyParameters === undefined ? [] : body.bodyParameters;
+  if (!title || title.length > 100 || !/^[a-zA-Z0-9_]{1,512}$/.test(templateName) ||
+      !/^[a-z]{2,3}_[A-Z]{2}$/.test(language) || !Array.isArray(parameters) ||
+      parameters.length > 20 || parameters.some((value) => typeof value !== "string" || value.length > 1024)) {
+    fail("Provide a campaign title, approved template name, language and up to 20 text parameters.");
+  }
+  const ref = db.collection("organisations").doc(orgId).collection("campaigns").doc();
+  const now = new Date();
+  const campaign = {
+    title, templateName, language, bodyParameters: parameters,
+    audience: { consentRequired: true, tags: Array.isArray(body.tags) ? body.tags.slice(0, 20) : [] },
+    status: "draft", createdBy: user.uid, createdAt: now, updatedAt: now
+  };
+  await ref.create(campaign);
+  return { id: ref.id, ...campaign };
+}
+
+async function previewOrganisationCampaign(db, user, orgId, campaignId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  if (!/^[A-Za-z0-9_-]{10,40}$/.test(campaignId)) fail("A valid campaign ID is required.");
+  const campaignRef = db.collection("organisations").doc(orgId).collection("campaigns").doc(campaignId);
+  const campaignSnapshot = await campaignRef.get();
+  if (!campaignSnapshot.exists) fail("Campaign was not found.", 404);
+  const campaign = campaignSnapshot.data();
+  const contacts = await db.collection("organisations").doc(orgId).collection("contacts").limit(5000).get();
+  const requiredTags = Array.isArray(campaign.audience?.tags) ? campaign.audience.tags : [];
+  const eligible = contacts.docs.filter((doc) => {
+    const contact = doc.data();
+    if (contact.whatsappOptIn !== true || !contact.whatsappOptInAt) return false;
+    const tags = Array.isArray(contact.tags) ? contact.tags : [];
+    return requiredTags.every((tag) => tags.includes(tag));
+  });
+  return {
+    campaignId,
+    eligibleCount: eligible.length,
+    excludedCount: contacts.size - eligible.length,
+    requiresExplicitConsent: true,
+    sendingEnabled: false,
+    message: "Preview only. Campaign delivery is not enabled yet; no WhatsApp messages were sent."
+  };
+}
+
 async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
@@ -649,7 +704,7 @@ async function handleTenantRoute(event) {
   const orgMediaMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/media$/);
   const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -672,6 +727,18 @@ async function handleTenantRoute(event) {
     }
 
 
+    if (campaignsMatch && method === "GET" && !campaignsMatch[2]) {
+      const campaigns = await listOrganisationCampaigns(db, user, campaignsMatch[1]);
+      return jsonResponse(event, 200, { campaigns });
+    }
+    if (campaignsMatch && method === "POST" && !campaignsMatch[2]) {
+      const campaign = await createOrganisationCampaign(db, user, campaignsMatch[1], parseBody(event));
+      return jsonResponse(event, 201, { success: true, campaign });
+    }
+    if (campaignsMatch && method === "GET" && campaignsMatch[2]) {
+      const preview = await previewOrganisationCampaign(db, user, campaignsMatch[1], campaignsMatch[2]);
+      return jsonResponse(event, 200, { preview });
+    }
     if (quickRepliesMatch && method === "GET" && !quickRepliesMatch[2]) {
       const quickReplies = await listOrganisationQuickReplies(db, user, quickRepliesMatch[1]);
       return jsonResponse(event, 200, { quickReplies });
