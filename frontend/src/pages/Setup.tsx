@@ -1,0 +1,243 @@
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { Building2, Users, Plus, LogOut, RefreshCw, Copy, ShieldCheck } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { logout } from "../services/auth";
+import {
+  acceptInvitation,
+  createInvitation,
+  createOrganisation,
+  listMembers,
+  listOrganisations,
+  type Organisation,
+  type OrganisationMember,
+} from "../services/organisations";
+
+export default function Setup() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [organisations, setOrganisations] = useState<Organisation[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [members, setMembers] = useState<OrganisationMember[]>([]);
+  const [orgName, setOrgName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"admin" | "manager" | "agent">("agent");
+  const [joinOrgId, setJoinOrgId] = useState("");
+  const [invitationId, setInvitationId] = useState("");
+  const [verified, setVerified] = useState(Boolean(user?.emailVerified));
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [createdInvite, setCreatedInvite] = useState("");
+
+  const selected = useMemo(
+    () => organisations.find((org) => org.id === selectedId) || null,
+    [organisations, selectedId],
+  );
+
+  async function refresh() {
+    setError("");
+    const rows = await listOrganisations();
+    setOrganisations(rows);
+    setSelectedId((current) => rows.some((org) => org.id === current) ? current : (rows[0]?.id || ""));
+  }
+
+  useEffect(() => {
+    let active = true;
+    listOrganisations()
+      .then((rows) => {
+        if (!active) return;
+        setOrganisations(rows);
+        setSelectedId(rows[0]?.id || "");
+      })
+      .catch((reason) => {
+        if (active) setError(reason instanceof Error ? reason.message : "Could not load organisations.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!selected || !["owner", "admin", "manager"].includes(selected.role)) {
+      setMembers([]);
+      return;
+    }
+    let active = true;
+    listMembers(selected.id)
+      .then((rows) => { if (active) setMembers(rows); })
+      .catch(() => { if (active) setMembers([]); });
+    return () => { active = false; };
+  }, [selected?.id, selected?.role]);
+
+  async function verifyEmail() {
+    setBusy(true);
+    setError("");
+    try {
+      await user?.reload();
+      const isVerified = Boolean(user?.emailVerified);
+      setVerified(isVerified);
+      if (!isVerified) setError("Email abhi verify nahi hua. Inbox ya Spam folder check karo.");
+      else setNotice("Email verified. Ab organisation create ya join kar sakte ho.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Verification status check nahi hua.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const org = await createOrganisation(orgName.trim());
+      setOrganisations((rows) => [...rows, org]);
+      setSelectedId(org.id);
+      setOrgName("");
+      setNotice(`Organisation "${org.name}" create ho gayi.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Organisation create nahi hui.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleJoin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await acceptInvitation(joinOrgId.trim(), invitationId.trim());
+      await refresh();
+      setNotice("Invitation accept ho gayi. Organisation membership active hai.");
+      setJoinOrgId("");
+      setInvitationId("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Invitation accept nahi hui.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await createInvitation(selected.id, inviteEmail.trim(), inviteRole);
+      setCreatedInvite(result.invitation.invitationId);
+      setNotice("Invitation create ho gayi. Ab invitation ID aur organisation ID invited person ko securely bhejo.");
+      setInviteEmail("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Invitation create nahi hui.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f0f2f5] px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold tracking-[0.18em] text-[#075e54]">JOY INBOX</p>
+            <h1 className="mt-1 text-2xl font-bold text-gray-900">Business setup</h1>
+            <p className="mt-1 text-sm text-gray-500">{user?.email || "Signed-in account"}</p>
+          </div>
+          <button onClick={handleLogout} className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <LogOut size={16} /> Sign out
+          </button>
+        </header>
+
+        {error && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+        {notice && <div role="status" className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{notice}</div>}
+
+        {!verified && (
+          <section className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-1 text-amber-700" />
+              <div className="flex-1">
+                <h2 className="font-semibold text-amber-900">Verify your email first</h2>
+                <p className="mt-1 text-sm text-amber-800">Registration ke waqt bheja gaya verification email open karo. Verify karne ke baad yahan button dabao.</p>
+                <button onClick={verifyEmail} disabled={busy} className="mt-3 rounded-lg bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                  {busy ? "Checking..." : "I've verified my email"}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className="rounded-2xl bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-xl bg-[#e6f4f1] p-2 text-[#075e54]"><Building2 size={21} /></div>
+              <div><h2 className="font-semibold text-gray-900">Create a business</h2><p className="text-xs text-gray-500">Aap apne business ke owner banoge.</p></div>
+            </div>
+            <form onSubmit={handleCreate} className="space-y-3">
+              <input value={orgName} onChange={(event) => setOrgName(event.target.value)} maxLength={80} required placeholder="Business / organisation name" className="h-12 w-full rounded-xl border border-gray-200 px-4 text-sm outline-none focus:border-[#075e54]" />
+              <button disabled={busy || !verified} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#075e54] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"><Plus size={17} /> Create organisation</button>
+            </form>
+          </section>
+
+          <section className="rounded-2xl bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-xl bg-blue-50 p-2 text-blue-700"><Users size={21} /></div>
+              <div><h2 className="font-semibold text-gray-900">Join a business</h2><p className="text-xs text-gray-500">Admin se organisation ID aur invitation ID lo.</p></div>
+            </div>
+            <form onSubmit={handleJoin} className="space-y-3">
+              <input value={joinOrgId} onChange={(event) => setJoinOrgId(event.target.value)} required placeholder="Organisation ID" className="h-11 w-full rounded-xl border border-gray-200 px-4 text-sm outline-none focus:border-[#075e54]" />
+              <input value={invitationId} onChange={(event) => setInvitationId(event.target.value)} required placeholder="Invitation ID" className="h-11 w-full rounded-xl border border-gray-200 px-4 text-sm outline-none focus:border-[#075e54]" />
+              <button disabled={busy || !verified} className="w-full rounded-xl border border-[#075e54] px-4 py-3 text-sm font-semibold text-[#075e54] disabled:opacity-50">Accept invitation</button>
+            </form>
+          </section>
+        </div>
+
+        <section className="mt-5 rounded-2xl bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="font-semibold text-gray-900">Your organisations</h2><p className="text-xs text-gray-500">Jin businesses mein aap active member ho.</p></div>
+            <button onClick={() => refresh().catch((reason) => setError(reason.message))} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600"><RefreshCw size={14} /> Refresh</button>
+          </div>
+          {loading ? <p className="text-sm text-gray-500">Loading organisations...</p> : organisations.length === 0 ? <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">Abhi koi organisation nahi hai. Upar se create karo ya invitation accept karo.</p> : (
+            <div className="flex flex-wrap gap-2">
+              {organisations.map((org) => <button key={org.id} onClick={() => setSelectedId(org.id)} className={`rounded-xl border px-4 py-3 text-left ${selectedId === org.id ? "border-[#075e54] bg-[#eff8f5]" : "border-gray-200 bg-white"}`}><span className="block text-sm font-semibold text-gray-900">{org.name}</span><span className="mt-1 block text-xs capitalize text-gray-500">{org.role} · {org.plan || "free"} plan</span></button>)}
+            </div>
+          )}
+        </section>
+
+        {selected && (
+          <section className="mt-5 rounded-2xl bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><h2 className="font-semibold text-gray-900">{selected.name}</h2><p className="text-xs text-gray-500">Organisation ID: {selected.id}</p></div>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-700">{selected.role}</span>
+            </div>
+            {["owner", "admin"].includes(selected.role) && (
+              <form onSubmit={handleInvite} className="mt-5 grid gap-3 sm:grid-cols-[1fr_140px_auto]">
+                <input type="email" required value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="Team member email" className="h-11 rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-[#075e54]" />
+                <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as typeof inviteRole)} className="h-11 rounded-xl border border-gray-200 px-3 text-sm"><option value="agent">Agent</option><option value="manager">Manager</option><option value="admin">Admin</option></select>
+                <button disabled={busy} className="rounded-xl bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Create invite</button>
+              </form>
+            )}
+            {createdInvite && <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-700"><p className="font-semibold">Share these IDs securely with the invited email owner:</p><p className="mt-2 break-all">Organisation: {selected.id}</p><p className="mt-1 break-all">Invitation: {createdInvite}</p><button onClick={() => navigator.clipboard?.writeText(`Organisation ID: ${selected.id}\nInvitation ID: ${createdInvite}`)} className="mt-2 inline-flex items-center gap-2 font-semibold text-[#075e54]"><Copy size={13} /> Copy IDs</button><p className="mt-2 text-amber-700">Email delivery is not configured yet; send these IDs through a trusted channel only to the invited email address.</p></div>}
+            <div className="mt-5"><h3 className="mb-2 text-sm font-semibold text-gray-800">Team members</h3>{members.length ? <div className="divide-y divide-gray-100">{members.map((member) => <div key={member.uid} className="flex items-center justify-between py-2 text-sm"><span className="text-gray-700">{member.email || member.uid}</span><span className="rounded-full bg-gray-100 px-2 py-1 text-xs capitalize text-gray-600">{member.role}</span></div>)}</div> : <p className="text-xs text-gray-500">Member list unavailable for your role or no members found.</p>}</div>
+          </section>
+        )}
+
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
+          <strong>Development status:</strong> Organisation signup and membership setup are connected. The existing WhatsApp inbox is still on the old single-owner data model. Do not connect live customer numbers or use this as a production shared inbox until conversations, contacts, messages, webhook routing and WhatsApp credentials are tenant-scoped and security-tested.
+        </div>
+      </div>
+    </main>
+  );
+}
