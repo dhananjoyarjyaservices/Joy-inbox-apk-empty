@@ -45,6 +45,11 @@ service cloud.firestore {
       match /contacts/{contactId} {
         allow read: if isOrgMember(orgId);
         allow write: if false;
+
+        match /consentEvents/{eventId} {
+          allow read: if hasOrgManagementRole(orgId);
+          allow write: if false;
+        }
       }
 
       match /quickReplies/{quickReplyId} {
