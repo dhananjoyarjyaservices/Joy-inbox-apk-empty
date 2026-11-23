@@ -155,6 +155,7 @@ export interface OrganizationAutomationRule {
   keyword: string;
   matchType: "contains" | "exact" | "starts_with";
   response: string;
+  steps: string[];
   enabled: boolean;
   priority: number;
   createdAt?: string | null;
