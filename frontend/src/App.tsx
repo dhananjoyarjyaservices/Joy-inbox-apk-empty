@@ -6,7 +6,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Setup from "./pages/Setup";
-import OrganisationInbox from "./pages/OrganisationInbox";
+import OrganisationInbox from "./pages/OrganisationInbox";\nimport Campaigns from "./pages/Campaigns";
 
 const LEGACY_INBOX_OWNER_UID = "Vy49nGnw74gR5SFHmjN0DOQ2QFE3";
 
@@ -37,7 +37,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/setup" element={<Setup />} />
-            <Route path="/org/:orgId/inbox" element={<OrganisationInbox />} />
+            <Route path="/org/:orgId/inbox" element={<OrganisationInbox />} />\n            <Route path="/org/:orgId/campaigns" element={<Campaigns />} />
             <Route element={<LegacyInboxRoute />}>
               <Route path="/" element={<Dashboard />} />
             </Route>
