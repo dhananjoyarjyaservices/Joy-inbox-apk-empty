@@ -210,8 +210,8 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
         phoneNumberId: credentials.phoneNumberId || null, stepIndex: index,
         totalSteps: steps.length, text: steps[index].message,
         delaySeconds: steps[index].delaySeconds,
-        dueAt: admin.firestore.Timestamp.fromDate(new Date(dueAt)),
-        windowExpiresAt: admin.firestore.Timestamp.fromDate(new Date(inboundTimestamp.getTime() + 24 * 60 * 60 * 1000)),
+        dueAt: new Date(dueAt),
+        windowExpiresAt: new Date(inboundTimestamp.getTime() + 24 * 60 * 60 * 1000),
         status: "queued", attempts: 0, createdAt: timestamp, updatedAt: timestamp
       });
     }
