@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { handler } = require("../src/index");
 const crypto = require("node:crypto");
 const {
   EVENT_LEASE_MS,
@@ -254,4 +255,25 @@ test("checkout completion webhook stores subscription state in the correct organ
   assert.equal(subscriptionRecord.stripeCustomerId, "cus_123");
   assert.equal(subscriptionRecord.stripeSubscriptionId, "sub_123");
   assert.equal(eventRecord.status, "processed");
+});
+
+
+test("HTTP Stripe webhook route rejects missing or invalid signatures before processing", async (t) => {
+  const previousSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (previousSecret === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
+  else process.env.STRIPE_WEBHOOK_SECRET = previousSecret;
+  t.after(() => {
+    if (previousSecret === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
+    else process.env.STRIPE_WEBHOOK_SECRET = previousSecret;
+  });
+
+  const payload = JSON.stringify({ id: "evt_route_test", type: "customer.subscription.updated", data: { object: {} } });
+  const response = await handler({
+    httpMethod: "POST",
+    path: "/billing/stripe-webhook",
+    headers: { "stripe-signature": "t=1800000000,v1=invalid" },
+    body: payload
+  });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body, /invalid stripe signature/i);
 });
