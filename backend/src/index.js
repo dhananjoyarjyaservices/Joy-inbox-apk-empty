@@ -754,15 +754,17 @@ async function sendTenantTemplate(event) {
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   const template = { name: templateName, language: { code: language } };
   const components = [];
+  let uploadedHeaderMediaId = "";
   if (headerMedia) {
     const expectedMime = mediaHeaderFormat === "IMAGE" ? ["image/jpeg", "image/png"] : mediaHeaderFormat === "VIDEO" ? ["video/mp4"] : ["application/pdf"];
     const mimeType = String(headerMedia.mimeType).split(";")[0].trim().toLowerCase();
-    if (!expectedMime.includes(mimeType)) return jsonResponse(event, 400, { error: `This template requires a ${mediaHeaderFormat.toLowerCase()} header file.` });
+    if (!expectedMime.includes(mimeType)) { const error = new Error(`This template requires a ${mediaHeaderFormat.toLowerCase()} header file.`); error.statusCode = 400; await markTenantSendRequestFailed(claim.ref, error); return jsonResponse(event, 400, { error: error.message }); }
     let buffer;
     try { buffer = Buffer.from(headerMedia.base64, "base64"); } catch { return jsonResponse(event, 400, { error: "The template header file is invalid." }); }
     let uploaded;
     try { uploaded = await uploadWhatsAppMedia(buffer, mimeType, headerMedia.filename, credentials); }
     catch (error) { await markTenantSendRequestFailed(claim.ref, error); throw error; }
+    uploadedHeaderMediaId = uploaded.mediaId;
     const mediaType = mediaHeaderFormat.toLowerCase();
     components.push({ type: "header", parameters: [{ type: mediaType, [mediaType]: { id: uploaded.mediaId } }] });
   }
