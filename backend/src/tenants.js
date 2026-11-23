@@ -233,7 +233,7 @@ async function saveWhatsAppConnection(db, user, orgId, body) {
     tx.set(ref, {
       phoneNumberId,
       wabaId,
-      accessTokenEncrypted: encrypted,
+      accessTokenEncrypted: encrypted,\n      webhookVerifyTokenHash,
       displayPhoneNumber: String(result.display_phone_number || ""),
       verifiedName: String(result.verified_name || ""),
       status: "credentials_verified",
