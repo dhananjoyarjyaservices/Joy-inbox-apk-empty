@@ -53,7 +53,12 @@ export default function OrganisationInbox() {
   const [notes, setNotes] = useState<OrganisationNote[]>([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [savingNote, setSavingNote] = useState(false);
-  const [assigning, setAssigning] = useState(false);\n  const [quickReplies, setQuickReplies] = useState<OrganisationQuickReply[]>([]);\n  const [showQuickReplyForm, setShowQuickReplyForm] = useState(false);\n  const [quickReplyTitle, setQuickReplyTitle] = useState("");\n  const [quickReplyShortcut, setQuickReplyShortcut] = useState("");\n  const [savingQuickReply, setSavingQuickReply] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [quickReplies, setQuickReplies] = useState<OrganisationQuickReply[]>([]);
+  const [showQuickReplyForm, setShowQuickReplyForm] = useState(false);
+  const [quickReplyTitle, setQuickReplyTitle] = useState("");
+  const [quickReplyShortcut, setQuickReplyShortcut] = useState("");
+  const [savingQuickReply, setSavingQuickReply] = useState(false);
 
   const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
 
