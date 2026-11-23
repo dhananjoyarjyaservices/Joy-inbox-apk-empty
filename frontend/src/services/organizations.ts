@@ -270,3 +270,33 @@ export async function updateOrganizationCampaign(
     ...(scheduledAt ? { scheduledAt } : {})
   });
 }
+
+
+export interface OrganizationBillingPlan {
+  key: string;
+  name: string;
+}
+export interface OrganizationBillingState {
+  billingEnabled: boolean;
+  plans: OrganizationBillingPlan[];
+  subscription: {
+    plan: string;
+    status: string;
+    currentPeriodEnd: string | null;
+    trialEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+  } | null;
+}
+export async function getOrganizationBilling(organizationId: string): Promise<OrganizationBillingState> {
+  return request(`/organizations/billing?organizationId=${encodeURIComponent(organizationId)}`);
+}
+export async function createOrganizationBillingCheckout(organizationId: string, plan: string): Promise<string> {
+  const result = await request("/organizations/billing", "POST", { organizationId, action: "checkout", plan });
+  if (typeof result.checkout?.url !== "string") throw new Error("Stripe checkout URL was not returned.");
+  return result.checkout.url;
+}
+export async function openOrganizationBillingPortal(organizationId: string): Promise<string> {
+  const result = await request("/organizations/billing", "POST", { organizationId, action: "portal" });
+  if (typeof result.portal?.url !== "string") throw new Error("Stripe billing portal URL was not returned.");
+  return result.portal.url;
+}
