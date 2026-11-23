@@ -161,6 +161,115 @@ async function acceptInvitation(db, user, orgId, body) {
   return { organisationId: orgId, role, status: "active" };
 }
 
+
+function getEncryptionKey() {
+  const value = String(process.env.WHATSAPP_CREDENTIALS_ENCRYPTION_KEY || "");
+  if (!/^[a-f0-9]{64}$/i.test(value)) {
+    fail("WhatsApp credential encryption is not configured on the server.", 503);
+  }
+  return Buffer.from(value, "hex");
+}
+
+function encryptSecret(secret) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
+  return {
+    ciphertext: encrypted.toString("base64"),
+    iv: iv.toString("base64"),
+    authTag: cipher.getAuthTag().toString("base64")
+  };
+}
+
+function decryptSecret(record) {
+  const decipher = crypto.createDecipheriv(
+    "aes-256-gcm",
+    getEncryptionKey(),
+    Buffer.from(record.iv, "base64")
+  );
+  decipher.setAuthTag(Buffer.from(record.authTag, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(record.ciphertext, "base64")),
+    decipher.final()
+  ]).toString("utf8");
+}
+
+async function saveWhatsAppConnection(db, user, orgId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin"]);
+  const phoneNumberId = String(body.phoneNumberId || "").trim();
+  const wabaId = String(body.wabaId || "").trim();
+  const accessToken = String(body.accessToken || "").trim();
+  if (!/^\d{5,30}$/.test(phoneNumberId) || !/^\d{5,30}$/.test(wabaId)) {
+    fail("Valid WhatsApp Phone Number ID and WhatsApp Business Account ID are required.");
+  }
+  if (accessToken.length < 40 || accessToken.length > 4096 || /\s/.test(accessToken)) {
+    fail("A valid permanent or system-user access token is required.");
+  }
+
+  const graphVersion = process.env.GRAPH_API_VERSION || "v26.0";
+  const response = await fetch(
+    `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number,verified_name`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || String(result.id) !== phoneNumberId) {
+    fail(String(result?.error?.message || "Meta could not verify this WhatsApp number and token.").slice(0, 300), 400);
+  }
+
+  const encrypted = encryptSecret(accessToken);
+  const now = new Date();
+  const ref = db.collection("organisations").doc(orgId).collection("whatsappConnections").doc("primary");
+  await db.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    const oldPhoneId = current.exists ? current.data().phoneNumberId : null;
+    const phoneRef = db.collection("whatsappPhoneNumbers").doc(phoneNumberId);
+    const phoneSnapshot = await tx.get(phoneRef);
+    if (phoneSnapshot.exists && phoneSnapshot.data().orgId !== orgId) {
+      fail("This WhatsApp number is already connected to another organisation.", 409);
+    }
+    if (oldPhoneId && oldPhoneId !== phoneNumberId) {
+      tx.delete(db.collection("whatsappPhoneNumbers").doc(oldPhoneId));
+    }
+    tx.set(ref, {
+      phoneNumberId,
+      wabaId,
+      accessTokenEncrypted: encrypted,
+      displayPhoneNumber: String(result.display_phone_number || ""),
+      verifiedName: String(result.verified_name || ""),
+      status: "credentials_verified",
+      updatedAt: now,
+      updatedBy: user.uid,
+      ...(current.exists ? {} : { createdAt: now })
+    }, { merge: true });
+    tx.set(phoneRef, { orgId, connectionId: "primary", updatedAt: now });
+  });
+  return {
+    organisationId: orgId,
+    phoneNumberId,
+    wabaId,
+    displayPhoneNumber: String(result.display_phone_number || ""),
+    verifiedName: String(result.verified_name || ""),
+    status: "credentials_verified"
+  };
+}
+
+async function getWhatsAppConnection(db, user, orgId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  const snapshot = await db.collection("organisations").doc(orgId)
+    .collection("whatsappConnections").doc("primary").get();
+  if (!snapshot.exists) return { connected: false };
+  const data = snapshot.data();
+  return {
+    connected: data.status === "credentials_verified",
+    phoneNumberId: data.phoneNumberId,
+    wabaId: data.wabaId,
+    displayPhoneNumber: data.displayPhoneNumber || "",
+    verifiedName: data.verifiedName || "",
+    status: data.status,
+    updatedAt: data.updatedAt || null
+  };
+}
+
 async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
@@ -168,7 +277,7 @@ async function handleTenantRoute(event) {
   const inviteMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations$/);
   const acceptMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/accept$/);
   const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -189,7 +298,7 @@ async function handleTenantRoute(event) {
       const result = await acceptInvitation(db, user, acceptMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, membership: result });
     }
-    if (membersMatch && method === "GET") {
+    if (whatsappMatch && method === "GET") {\n      const result = await getWhatsAppConnection(db, user, whatsappMatch[1]);\n      return jsonResponse(event, 200, result);\n    }\n    if (whatsappMatch && method === "POST") {\n      const result = await saveWhatsAppConnection(db, user, whatsappMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, connection: result });\n    }\n    if (membersMatch && method === "GET") {
       await requireMembership(db, membersMatch[1], user.uid, ["owner", "admin", "manager"]);
       const snapshot = await db.collection("organisations").doc(membersMatch[1]).collection("members").where("status", "==", "active").get();
       const members = snapshot.docs.map((doc) => ({
