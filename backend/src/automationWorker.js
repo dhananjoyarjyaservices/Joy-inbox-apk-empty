@@ -132,6 +132,31 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
   }
 }
 
+async function markExpiredQueueJobUncertain(db, stale, now) {
+  const data = stale.data();
+  const organizationRef = stale.ref.parent.parent;
+  if (!organizationRef || !data.runId) return false;
+  const runRef = organizationRef.collection("automationRuns").doc(data.runId);
+  return db.runTransaction(async (transaction) => {
+    const current = await transaction.get(stale.ref);
+    if (!current.exists || current.data().status !== "sending" ||
+        timestampMillis(current.data().leaseUntil) > now.getTime()) return false;
+    transaction.update(stale.ref, {
+      status: "uncertain",
+      leaseUntil: null,
+      error: "Worker lease expired during send. Delivery outcome needs manual review; automatic resend was prevented.",
+      updatedAt: now
+    });
+    transaction.set(runRef, {
+      status: "partially_failed",
+      error: "A queued step has an uncertain delivery outcome and needs manual review.",
+      failedStep: Number(data.stepIndex || 0) + 1,
+      updatedAt: now
+    }, { merge: true });
+    return true;
+  });
+}
+
 async function processAutomationQueue(options = {}) {
   const db = options.db || getDb();
   const now = options.now || new Date();
@@ -142,28 +167,9 @@ async function processAutomationQueue(options = {}) {
     .orderBy("leaseUntil", "asc")
     .limit(limit * 4)
     .get();
+  let uncertain = 0;
   for (const stale of staleSnapshot.docs) {
-    const data = stale.data();
-    const organizationRef = stale.ref.parent.parent;
-    if (!organizationRef || !data.runId) continue;
-    const runRef = organizationRef.collection("automationRuns").doc(data.runId);
-    await db.runTransaction(async (transaction) => {
-      const current = await transaction.get(stale.ref);
-      if (!current.exists || current.data().status !== "sending" ||
-          timestampMillis(current.data().leaseUntil) > now.getTime()) return;
-      transaction.update(stale.ref, {
-        status: "uncertain",
-        leaseUntil: null,
-        error: "Worker lease expired during send. Delivery outcome needs manual review; automatic resend was prevented.",
-        updatedAt: now
-      });
-      transaction.set(runRef, {
-        status: "partially_failed",
-        error: "A queued step has an uncertain delivery outcome and needs manual review.",
-        failedStep: Number(data.stepIndex || 0) + 1,
-        updatedAt: now
-      }, { merge: true });
-    });
+    if (await markExpiredQueueJobUncertain(db, stale, now)) uncertain += 1;
   }
   const snapshot = await db.collectionGroup("automationQueue")
     .where("status", "==", "queued")
@@ -172,7 +178,7 @@ async function processAutomationQueue(options = {}) {
     .limit(limit)
     .get();
   const dueJobs = snapshot.docs;
-  const results = { scanned: snapshot.size, due: dueJobs.length, sent: 0, failed: 0, skipped: 0, deferred: 0, retried: 0, claimed: 0 };
+  const results = { scanned: snapshot.size, due: dueJobs.length, sent: 0, failed: 0, skipped: 0, deferred: 0, retried: 0, claimed: 0, uncertain };
   for (const document of dueJobs) {
     const organizationRef = document.ref.parent.parent;
     const data = document.data();
@@ -205,6 +211,7 @@ module.exports = {
   retryDelayMs,
   timestampMillis,
   claimQueueJob,
+  markExpiredQueueJobUncertain,
   processClaimedJob,
   processAutomationQueue,
   handler
