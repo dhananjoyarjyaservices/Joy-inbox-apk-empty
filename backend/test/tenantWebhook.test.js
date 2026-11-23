@@ -107,3 +107,23 @@ test("incoming webhook text, contact names and media metadata are bounded", asyn
   assert.equal(saved.mediaSize, null);
   assert.equal(chat.customerName.length, 100);
 });
+
+test("incoming interactive button and list replies are stored as searchable text and IDs", async () => {
+  const db = fakeDb();
+  const organization = {
+    id: "org_alpha",
+    ref: db.collection("organizations").doc("org_alpha")
+  };
+  await saveTenantIncomingMessage(db, organization, {
+    id: "wamid.interactive.1",
+    from: "15551234567",
+    timestamp: "1795000000",
+    type: "interactive",
+    interactive: { button_reply: { id: "track_order", title: "Track order" } }
+  }, "Customer");
+  const saved = db.docs.get("organizations/org_alpha/chats/15551234567/messages/wamid.interactive.1");
+  assert.equal(saved.type, "interactive");
+  assert.equal(saved.text, "Track order");
+  assert.equal(saved.interactiveReplyId, "track_order");
+  assert.equal(saved.interactiveReplyTitle, "Track order");
+});
