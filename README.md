@@ -62,3 +62,8 @@ The tenant webhook path now resolves inbound WhatsApp events through Meta's phon
 Campaign creation validates Meta-approved templates and recorded opt-in evidence, then saves a draft. Owners/admins can explicitly start or schedule a campaign, pause/resume it, or cancel it. A separate EventBridge-triggered Lambda worker revalidates template approval, checks opt-in evidence and re-checks STOP suppression immediately before each send. It uses recipient leases, bounded batches, 429 backoff, and uncertain-delivery handling to avoid automatic duplicate sends. Meta delivery status webhooks update campaign recipient status and delivered/read/failed counters; this reconciliation must still be validated end-to-end in staging.
 
 These improvements do not change the overall release gate: all legacy routes, tenant frontend actions, billing, migration/rollback, staging Meta/Firebase tests, and production deployment configuration still require completion and review.
+
+
+## Subscription billing foundation
+
+The tenant inbox includes a Workspace Billing screen and a Stripe integration foundation for Checkout, Billing Portal and signed subscription webhooks. Configure real Stripe test-mode secrets and recurring Price IDs before enabling checkout. No pricing, entitlements or payment configuration is assumed; see [docs/BILLING-STRIPE.md](docs/BILLING-STRIPE.md). Billing is not enabled until Stripe credentials and Price IDs are configured and staging checks pass.
