@@ -218,6 +218,10 @@ export default function TenantInbox() {
   }, [navigate]);
 
   useEffect(() => {
+    if (view === "campaigns" && organization && !campaigns.length) void loadCampaignDrafts();
+  }, [view, organization?.id]);
+
+  useEffect(() => {
     if (!organization) { setTeamMembers([]); return; }
     let active = true;
     listOrganizationMembers(organization.id, { limit: 100 })
