@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { shouldApplyMessageStatus } = require("../src/webhook");
+const { shouldApplyMessageStatus, getCampaignDeliveryCounterPatch } = require("../src/webhook");
 
 test("WhatsApp message status can advance from sent to delivered and read", () => {
   assert.equal(shouldApplyMessageStatus("sent", "delivered"), true);
@@ -119,5 +119,28 @@ test("missing outgoing message causes a retryable webhook error instead of dropp
       status: "delivered"
     }),
     (error) => error.statusCode === 503 && error.retryable === true
+  );
+});
+
+test("campaign delivery counters advance monotonically with Meta delivery statuses", () => {
+  assert.deepEqual(
+    getCampaignDeliveryCounterPatch({ deliveredCount: 2, readCount: 1 }, "sent", "delivered"),
+    { deliveredCount: 3 }
+  );
+  assert.deepEqual(
+    getCampaignDeliveryCounterPatch({ deliveredCount: 2, readCount: 1 }, "delivered", "read"),
+    { readCount: 2 }
+  );
+  assert.deepEqual(
+    getCampaignDeliveryCounterPatch({ deliveredCount: 2, readCount: 1 }, "sent", "read"),
+    { deliveredCount: 3, readCount: 2 }
+  );
+  assert.deepEqual(
+    getCampaignDeliveryCounterPatch({ deliveryFailedCount: 4 }, "sent", "failed"),
+    { deliveryFailedCount: 5 }
+  );
+  assert.deepEqual(
+    getCampaignDeliveryCounterPatch({ deliveredCount: 2 }, "delivered", "failed"),
+    {}
   );
 });
