@@ -32,7 +32,8 @@ export default function OrganizationInvitations({ organizationId, actorRole }: P
       const result = await createOrganizationInvitation(organizationId, email.trim(), role);
       setEmail("");
       const shareUrl = result.inviteUrl || (() => {
-        const url = new URL("/setup", window.location.origin);
+        const basePath = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + "/";
+        const url = new URL(`${basePath}setup`, window.location.origin);
         const fragment = new URLSearchParams();
         fragment.set("organizationId", organizationId);
         fragment.set("invite", result.token);
