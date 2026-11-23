@@ -19,7 +19,7 @@ async function runScheduledAutomationSteps(options = {}) {
     const left = a.get("dueAt"); const right = b.get("dueAt");
     const leftMs = left?.toMillis ? left.toMillis() : new Date(left).getTime();
     const rightMs = right?.toMillis ? right.toMillis() : new Date(right).getTime();
-    return leftMs - rightMs;
+    return leftMs - rightMs || Number(a.get("stepIndex") || 0) - Number(b.get("stepIndex") || 0);
   }).slice(0, limit), get size() { return this.docs.length; } };
   let sent = 0;
   let failed = 0;
@@ -48,6 +48,16 @@ async function runScheduledAutomationSteps(options = {}) {
     try {
       if (!organizationId || !phone || !text || !Number.isInteger(stepIndex) || stepIndex < 1 || stepIndex > 4) {
         throw new Error("Queued automation step has invalid details.");
+      }
+      if (stepIndex > 1) {
+        const previousRef = organizationRef.collection("automationQueue").doc(`${queued.runId}_${stepIndex}`);
+        const previous = await previousRef.get();
+        if (!previous.exists || previous.get("status") !== "sent") {
+          await queueRef.set({ status: "skipped", reason: "previous_step_not_sent", claimedUntil: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          await runRef.set({ status: "partially_failed", reason: "previous_step_not_sent", updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          skipped += 1;
+          continue;
+        }
       }
       const windowExpiresAt = queued.windowExpiresAt && typeof queued.windowExpiresAt.toMillis === "function"
         ? queued.windowExpiresAt.toMillis() : 0;
