@@ -103,7 +103,16 @@ test("legacy migration dry-run validates organization ownership and performs no 
         assert.equal(id, "org_123");
         return organizationRef;
       } };
-      if (name === "chats") return { async get() { return { size: 2, docs: [] }; } };
+      if (name === "chats") return { async get() {
+        const docs = ["chat_a", "chat_b"].map((id, index) => ({
+          id,
+          ref: { collection(child) {
+            assert.equal(child, "messages");
+            return { async get() { return { size: index === 0 ? 2 : 1, docs: [] }; } };
+          } }
+        }));
+        return { size: 2, docs };
+      } };
       if (name === "users") return { doc(uid) {
         assert.equal(uid, "uid_123");
         return { collection(child) {
@@ -122,7 +131,7 @@ test("legacy migration dry-run validates organization ownership and performs no 
   };
   const result = await runLegacyMigration(db, { organizationId: "org_123", ownerUid: "uid_123" });
   assert.equal(result.execute, false);
-  assert.deepEqual(result.source, { chats: 2, messages: 0, contacts: 3, quickReplies: 4, greetingSettings: 1 });
+  assert.deepEqual(result.source, { chats: 2, messages: 3, contacts: 3, quickReplies: 4, greetingSettings: 1 });
   assert.equal(writes, 0);
 });
 
