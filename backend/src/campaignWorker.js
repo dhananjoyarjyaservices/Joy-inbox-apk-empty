@@ -92,7 +92,8 @@ async function finishRecipient(db, campaignRef, recipientRef, recipient, outcome
       updatedAt: now,
       ...details
     };
-    if (outcome === "sent") { patch.sentAt = now; patch.deliveryStatus = "sent"; }
+    if (outcome === "sent") patch.sentAt = now;
+    if (outcome === "sent" || (outcome === "uncertain" && details.messageId)) patch.deliveryStatus = "sent";
     if (outcome === "failed" || outcome === "uncertain") patch.finishedAt = now;
     transaction.update(recipientRef, patch);
     const counters = {
@@ -106,7 +107,7 @@ async function finishRecipient(db, campaignRef, recipientRef, recipient, outcome
       [counter]: Number(campaign[counter] || 0) + 1,
       updatedAt: now
     });
-    if (outcome === "sent" && details.messageId) {
+    if ((outcome === "sent" || outcome === "uncertain") && details.messageId) {
       const chatRef = organizationRef.collection("chats").doc(recipientPhone);
       const messageRef = chatRef.collection("messages").doc(details.messageId);
       transaction.set(messageRef, {
@@ -121,6 +122,7 @@ async function finishRecipient(db, campaignRef, recipientRef, recipient, outcome
         templateVariables: { body: Array.isArray(recipient.variables) ? recipient.variables : [] },
         timestamp: now,
         status: "sent",
+        ...(outcome === "uncertain" ? { persistenceUncertain: true } : {}),
         source: "campaign",
         campaignId: campaignRef.id,
         phoneNumberId: campaign.phoneNumberId,
@@ -280,6 +282,7 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
     const recipient = await claimCampaignRecipient(db, campaignRef, document.ref, now);
     if (!recipient) continue;
 
+    let acceptedMessageId = "";
     try {
       if (recipient.optedIn !== true || !recipient.consentSource ||
           !Number.isFinite(Date.parse(String(recipient.consentAt || "")))) {
@@ -348,7 +351,8 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
     } catch (error) {
       const disposition = classifyCampaignSendError(error, Number(recipient.attempts || 1));
       const details = {
-        error: String(error.message || "Campaign send failed.").slice(0, 300)
+        error: String(error.message || "Campaign send failed.").slice(0, 300),
+        ...(acceptedMessageId ? { messageId: acceptedMessageId } : {})
       };
       if (disposition === "retry") {
         details.status = "pending";
