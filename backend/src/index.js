@@ -58,6 +58,7 @@ const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
+const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -2578,6 +2579,41 @@ async function saveGreetingSettings(event) {
   });
 }
 
+async function handleTenantInvitations(event) {
+  const method = getMethod(event);
+  if (!["GET", "POST", "DELETE"].includes(method)) return jsonResponse(event, 405, { error: "Method not allowed." });
+  const decoded = await authenticateUser(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const params = event.queryStringParameters || {};
+  const organizationId = method === "GET" ? params.organizationId : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "members:manage");
+  if (method === "GET") {
+    const invitations = await listTenantInvitations(getDb(), organization.id);
+    return jsonResponse(event, 200, { invitations });
+  }
+  if (method === "POST") {
+    const invitation = await createTenantInvitation(getDb(), organization.id, decoded, {
+      email: body.email,
+      role: body.role
+    });
+    return jsonResponse(event, 201, { invitation });
+  }
+  const result = await revokeTenantInvitation(getDb(), organization.id, body.email, decoded.uid);
+  return jsonResponse(event, 200, { invitation: result });
+}
+
+async function handleAcceptTenantInvitation(event) {
+  const body = parseBody(event);
+  const decoded = await authenticateUser(event);
+  const result = await acceptTenantInvitation(getDb(), body.organizationId, body.token, decoded);
+  return jsonResponse(event, 200, { success: true, membership: result });
+}
+
 async function handleTenantInternalNotes(event) {
   const method = getMethod(event);
   if (!["GET", "POST"].includes(method)) return jsonResponse(event, 405, { error: "Method not allowed." });
@@ -3030,6 +3066,26 @@ exports.handler = async (event) => {
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/automation-rules")) {
     try { return await handleTenantAutomationRules(event); }
     catch (error) { console.error("Tenant automation rules request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Automation rules request could not be completed." }); }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/invitations/accept")) {
+    try { return await handleAcceptTenantInvitation(event); }
+    catch (error) {
+      console.error("Workspace invitation acceptance failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Workspace invitation could not be accepted."
+      });
+    }
+  }
+
+  if (["GET", "POST", "DELETE"].includes(method) && path.endsWith("/organizations/invitations")) {
+    try { return await handleTenantInvitations(event); }
+    catch (error) {
+      console.error("Workspace invitation request failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Workspace invitations could not be managed."
+      });
+    }
   }
 
   if (["GET", "POST"].includes(method) && path.endsWith("/organizations/internal-notes")) {
