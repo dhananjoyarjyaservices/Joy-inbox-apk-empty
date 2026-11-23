@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { encryptSecret, decryptSecret, requireOrganization, requirePermission, ROLE_PERMISSIONS, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections, resolvePhoneNumberOrganization } = require("../src/tenancy");
+const { encryptSecret, decryptSecret, rotateEncryptedSecret, parseEncryptionKeyring, requireOrganization, requirePermission, ROLE_PERMISSIONS, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections, resolvePhoneNumberOrganization } = require("../src/tenancy");
 
 test("tenant WhatsApp credentials encrypt and decrypt with authenticated encryption", () => {
   const key = Buffer.alloc(32, 7).toString("base64");
@@ -283,4 +283,56 @@ test("tenant authentication rejects organization IDs containing path traversal o
     () => requireOrganization(db, { uid: "shared_user" }, "org alpha"),
     { statusCode: 400 }
   );
+});
+
+
+test("legacy version 1 tenant secrets remain readable during key rotation", () => {
+  const oldKey = Buffer.alloc(32, 21).toString("base64");
+  const current = encryptSecret("EAA_legacy_token", oldKey);
+  const legacyRecord = { ...current, version: 1 };
+  delete legacyRecord.keyId;
+  assert.equal(decryptSecret(legacyRecord, oldKey), "EAA_legacy_token");
+});
+
+test("keyring encryption uses the active key ID and can decrypt retained old keys", () => {
+  const oldKey = Buffer.alloc(32, 22).toString("base64");
+  const newKey = Buffer.alloc(32, 23).toString("base64");
+  process.env.TENANT_SECRET_ENCRYPTION_KEYRING = JSON.stringify({
+    activeKeyId: "key_2026",
+    keys: { key_2025: oldKey, key_2026: newKey }
+  });
+  const encrypted = encryptSecret("EAA_keyring_token");
+  assert.equal(encrypted.version, 2);
+  assert.equal(encrypted.keyId, "key_2026");
+  assert.equal(decryptSecret(encrypted), "EAA_keyring_token");
+  const oldEncrypted = encryptSecret("EAA_old_key_token", oldKey);
+  oldEncrypted.version = 2;
+  oldEncrypted.keyId = "key_2025";
+  assert.equal(decryptSecret(oldEncrypted), "EAA_old_key_token");
+  delete process.env.TENANT_SECRET_ENCRYPTION_KEYRING;
+});
+
+test("rotation helper re-encrypts a legacy secret with the target active key", () => {
+  const oldKey = Buffer.alloc(32, 24).toString("base64");
+  const newKey = Buffer.alloc(32, 25).toString("base64");
+  const encrypted = encryptSecret("EAA_rotate_me", oldKey);
+  const rotated = rotateEncryptedSecret(encrypted, {
+    sourceKeyValue: oldKey,
+    targetKeyring: {
+      activeKeyId: "key_next",
+      keys: { key_next: newKey }
+    }
+  });
+  assert.equal(rotated.version, 2);
+  assert.equal(rotated.keyId, "key_next");
+  assert.equal(decryptSecret(rotated, newKey), "EAA_rotate_me");
+  assert.notEqual(rotated.ciphertext, encrypted.ciphertext);
+});
+
+test("invalid keyrings and missing rotation keys fail closed", () => {
+  assert.throws(() => parseEncryptionKeyring("{bad json"));
+  assert.throws(() => parseEncryptionKeyring(JSON.stringify({
+    activeKeyId: "missing", keys: { other: Buffer.alloc(32, 1).toString("base64") }
+  })));
+  assert.throws(() => rotateEncryptedSecret({}, { targetKeyring: {} }));
 });
