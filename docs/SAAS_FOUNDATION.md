@@ -156,3 +156,8 @@ The Business setup page now provides role management and member removal controls
 - The backend enforces these permissions independently of the UI. Managers and agents cannot change roles or remove members.
 
 Role changes and removals are committed by the backend using the Firebase Admin SDK. Invitation email delivery and pending-invitation cancellation are not implemented yet.
+
+
+## Team activity audit log
+
+The organisation setup page displays the latest 100 team events to owners and admins. The server records invitation creation, invitation acceptance, member role changes and member removal in the organisation-scoped `auditLogs` subcollection. Role changes and removals write the membership update and audit event in the same Firestore batch; invitation acceptance writes its membership, invitation status and audit event in one transaction. The API checks owner/admin membership before returning logs. Client writes are denied by Firestore rules.
