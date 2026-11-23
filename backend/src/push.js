@@ -46,6 +46,7 @@ async function sendToDeviceCollection(admin, collection, data) {
     deviceId: document.id,
     token: document.get("token")
   })).filter((device) => typeof device.token === "string" && device.token.length > 0);
+  let delivered = 0;
   for (let offset = 0; offset < devices.length; offset += MAX_MULTICAST_SIZE) {
     const group = devices.slice(offset, offset + MAX_MULTICAST_SIZE);
     const result = await admin.messaging().sendEachForMulticast({
@@ -53,11 +54,13 @@ async function sendToDeviceCollection(admin, collection, data) {
       data,
       webpush: { headers: { Urgency: "high", TTL: "86400" } }
     });
+    delivered += result.responses.filter(response => response.success).length;
     await removeInvalidTokens(collection, result.responses.map((response, index) => ({
       ...response,
       deviceId: group[index].deviceId
     })));
   }
+  return delivered;
 }
 
 async function sendIncomingTextNotification(phone, senderName, text, messageId) {
@@ -76,7 +79,7 @@ async function sendTenantSlaOverdueNotification(organizationId, uid, phone, send
   const admin = getFirebaseAdmin();
   const title = "First reply SLA overdue";
   const body = `Customer ${String(senderName || `+${phone}`).slice(0, 90)} is waiting for your reply.`;
-  await sendToDeviceCollection(admin, getTenantDeviceCollection(db, organizationId, uid), {
+  return sendToDeviceCollection(admin, getTenantDeviceCollection(db, organizationId, uid), {
     type: "tenant_sla_overdue",
     title,
     body,
