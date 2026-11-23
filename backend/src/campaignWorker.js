@@ -326,6 +326,20 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
         continue;
       }
 
+      const finalCampaignState = await campaignRef.get();
+      const finalCampaignStatus = finalCampaignState.exists ? finalCampaignState.get("status") : "cancelled";
+      if (!["queued", "sending"].includes(finalCampaignStatus)) {
+        if (finalCampaignStatus === "cancelled") {
+          await finishRecipient(db, campaignRef, document.ref, recipient, "skipped", {
+            reason: "campaign_cancelled_before_send"
+          }, dependencies);
+          skipped += 1;
+        } else {
+          await document.ref.update({ status: "pending", leaseUntil: null, updatedAt: now });
+        }
+        break;
+      }
+
       const result = await (dependencies.sendRecipient || sendCampaignRecipient)(campaign, recipient, credentials, fetchImpl);
       await finishRecipient(db, campaignRef, document.ref, recipient, "sent", {
         messageId: result.messageId
