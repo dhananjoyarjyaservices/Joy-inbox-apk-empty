@@ -52,6 +52,7 @@ const { runScheduledAutomationSteps } = require("./automationScheduler");
 const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_SLA_MINUTES } = require("./slaSettings");
 const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
 const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = require("./automationRules");
+const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -2471,6 +2472,133 @@ async function saveGreetingSettings(event) {
   });
 }
 
+async function handleTenantCampaigns(event) {
+  const method = getMethod(event);
+  const decoded = await authenticateUser(event);
+  let body = {};
+  if (method === "POST") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "settings:manage");
+  const campaigns = organization.ref.collection("campaigns");
+
+  if (method === "GET") {
+    const snapshot = await campaigns.orderBy("createdAt", "desc").limit(50).get();
+    return jsonResponse(event, 200, {
+      campaigns: snapshot.docs.map(document => {
+        const value = document.data() || {};
+        return {
+          id: document.id,
+          name: String(value.name || ""),
+          templateName: String(value.templateName || ""),
+          language: String(value.language || ""),
+          category: String(value.category || ""),
+          phoneNumberId: String(value.phoneNumberId || ""),
+          status: String(value.status || "draft"),
+          recipientCount: Number(value.recipientCount || 0),
+          skippedRecipients: Number(value.skippedRecipients || 0),
+          createdAt: value.createdAt?.toDate ? value.createdAt.toDate().toISOString() : null
+        };
+      })
+    });
+  }
+  if (method !== "POST") return jsonResponse(event, 405, { error: "Method not allowed." });
+
+  const definition = normalizeCampaignDefinition(body);
+  const normalized = normalizeCampaignRecipients(body.recipients);
+  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  if (!connections.some(item => item.phoneNumberId === definition.phoneNumberId && item.connected)) {
+    return jsonResponse(event, 404, { error: "The selected WhatsApp number is not connected to this workspace." });
+  }
+  const credentials = await getWhatsAppCredentials(getDb(), organization.id, definition.phoneNumberId);
+  const version = process.env.GRAPH_API_VERSION || "v26.0";
+  const templateUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(definition.wabaId)}/message_templates`);
+  templateUrl.searchParams.set("fields", "name,status,language,category,components");
+  templateUrl.searchParams.set("name", definition.templateName);
+  templateUrl.searchParams.set("limit", "100");
+  const templateResponse = await fetch(templateUrl.toString(), {
+    headers: { Authorization: `Bearer ${credentials.accessToken}` }
+  });
+  const templatePayload = await templateResponse.json().catch(() => ({}));
+  if (!templateResponse.ok) return jsonResponse(event, 502, {
+    error: templatePayload.error?.message || "Meta could not verify this WhatsApp template."
+  });
+  const approved = (Array.isArray(templatePayload.data) ? templatePayload.data : []).find(item =>
+    item.name === definition.templateName && item.language === definition.language &&
+    item.status === "APPROVED" && String(item.category || "").toUpperCase() === definition.category
+  );
+  if (!approved) return jsonResponse(event, 400, {
+    error: "The selected template must be approved in the selected language and category."
+  });
+  const components = Array.isArray(approved.components) ? approved.components : [];
+  const bodyText = components.find(item => item.type === "BODY")?.text || "";
+  const placeholders = [...String(bodyText).matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
+  const requiredVariables = placeholders.length ? Math.max(...placeholders) : 0;
+  if (components.some(item => item.type === "HEADER" && item.format !== "TEXT") ||
+      components.some(item => item.type === "BUTTONS" && Array.isArray(item.buttons) &&
+        item.buttons.some(button => button.type === "URL" && String(button.url || "").includes("{{")))) {
+    return jsonResponse(event, 400, {
+      error: "This campaign builder currently supports body-text variables only. Use a template without media headers or dynamic URL buttons."
+    });
+  }
+  const invalidVariables = normalized.recipients.find(recipient =>
+    (recipient.variables.length || definition.variables.length) !== requiredVariables
+  );
+  if (invalidVariables) return jsonResponse(event, 400, {
+    error: `Every recipient must have exactly ${requiredVariables} body variable(s), using recipient-specific values or campaign defaults.`
+  });
+
+  const db = getDb();
+  const campaignRef = campaigns.doc();
+  const now = new Date();
+  const batch = db.batch();
+  batch.set(campaignRef, {
+    ...definition,
+    status: "draft",
+    recipientCount: normalized.recipients.length,
+    skippedRecipients: normalized.skipped,
+    sentCount: 0,
+    failedCount: 0,
+    createdBy: decoded.uid,
+    createdAt: now,
+    updatedAt: now
+  });
+  await batch.commit();
+
+  for (let offset = 0; offset < normalized.recipients.length; offset += 400) {
+    const recipientBatch = db.batch();
+    for (const recipient of normalized.recipients.slice(offset, offset + 400)) {
+      const recipientId = crypto.createHash("sha256").update(recipient.phone).digest("hex");
+      recipientBatch.set(campaignRef.collection("recipients").doc(recipientId), {
+        phone: recipient.phone,
+        optedIn: true,
+        consentAt: recipient.consentAt,
+        consentSource: recipient.consentSource,
+        variables: recipient.variables.length ? recipient.variables : definition.variables,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+    await recipientBatch.commit();
+  }
+  return jsonResponse(event, 201, {
+    campaign: {
+      id: campaignRef.id,
+      name: definition.name,
+      status: "draft",
+      recipientCount: normalized.recipients.length,
+      skippedRecipients: normalized.skipped,
+      templateName: definition.templateName,
+      language: definition.language,
+      category: definition.category
+    }
+  });
+}
+
 // EventBridge Scheduler invokes this handler through Lambda's IAM permissions.
 // Set the configured handler name to "src/index.slaScheduledHandler".
 exports.slaScheduledHandler = async () => {
@@ -2582,6 +2710,16 @@ exports.handler = async (event) => {
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/automation-rules")) {
     try { return await handleTenantAutomationRules(event); }
     catch (error) { console.error("Tenant automation rules request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Automation rules request could not be completed." }); }
+  }
+
+  if (["GET", "POST"].includes(method) && path.endsWith("/organizations/campaigns")) {
+    try { return await handleTenantCampaigns(event); }
+    catch (error) {
+      console.error("Tenant campaign request failed:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Campaign request could not be completed."
+      });
+    }
   }
 
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/contacts")) {
