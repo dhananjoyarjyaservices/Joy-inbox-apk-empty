@@ -7,25 +7,27 @@ function httpError(message, statusCode) {
 }
 
 function normalizeAutomationRule(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw httpError("Automation rule details are required.", 400);
-  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Automation rule details are required.", 400);
   const allowed = ["name", "keyword", "matchType", "response", "steps", "enabled", "priority"];
-  if (Object.keys(input).some((key) => !allowed.includes(key))) {
-    throw httpError("Automation rule contains unsupported fields.", 400);
-  }
+  if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Automation rule contains unsupported fields.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const keyword = typeof input.keyword === "string" ? input.keyword.trim().slice(0, 80) : "";
   const matchType = ["contains", "exact", "starts_with"].includes(input.matchType) ? input.matchType : "contains";
   const priority = Number.isInteger(input.priority) ? Math.max(0, Math.min(1000, input.priority)) : 100;
   const rawSteps = Array.isArray(input.steps) ? input.steps : [input.response];
   if (rawSteps.length < 1 || rawSteps.length > 5) throw httpError("An automation flow must contain between 1 and 5 reply steps.", 400);
-  const steps = rawSteps.map((step) => typeof step === "string" ? step.trim() : "");
-  if (steps.some((step) => !step || step.length > 1024)) throw httpError("Each reply step is required and must be 1,024 characters or fewer.", 400);
+  const steps = rawSteps.map((step) => {
+    if (typeof step === "string") return { message: step.trim(), delaySeconds: 0 };
+    if (!step || typeof step !== "object" || Array.isArray(step)) return { message: "", delaySeconds: 0 };
+    const delaySeconds = step.delaySeconds === undefined ? 0 : step.delaySeconds;
+    if (!Number.isInteger(delaySeconds) || delaySeconds < 0 || delaySeconds > 86400) throw httpError("Each step delay must be between 0 and 86,400 seconds.", 400);
+    return { message: typeof step.message === "string" ? step.message.trim() : "", delaySeconds };
+  });
+  if (steps.some((step) => !step.message || step.message.length > 1024)) throw httpError("Each reply step is required and must be 1,024 characters or fewer.", 400);
   if (!name || name.length > 80) throw httpError("Rule name is required (maximum 80 characters).", 400);
   if (!keyword || keyword.length > 80 || [...keyword].some((character) => character.charCodeAt(0) < 32)) throw httpError("Keyword is required (maximum 80 characters).", 400);
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw httpError("Enabled must be true or false.", 400);
-  return { name, keyword, matchType, response: steps[0], steps, enabled: input.enabled !== false, priority };
+  return { name, keyword, matchType, response: steps[0].message, steps, enabled: input.enabled !== false, priority };
 }
 
 function matchesAutomationRule(rule, messageText) {
