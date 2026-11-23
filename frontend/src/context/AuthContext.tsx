@@ -7,7 +7,7 @@ import {
 } from "react";
 
 import type { User } from "firebase/auth";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase/config";
 
 const OWNER_UID = "Vy49nGnw74gR5SFHmjN0DOQ2QFE3";
@@ -24,14 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser && currentUser.uid !== OWNER_UID) {
-        await signOut(auth);
-        setUser(null);
-      } else {
-        setUser(currentUser);
-      }
-
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
       setLoading(false);
     });
 
