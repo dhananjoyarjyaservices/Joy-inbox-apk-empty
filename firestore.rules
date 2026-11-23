@@ -27,7 +27,7 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      match /invitations/{invitationId} {
+      match /whatsappConnections/{connectionId} {\n        allow read, write: if false;\n      }\n\n      match /invitations/{invitationId} {
         allow read: if request.auth != null
           && (request.auth.token.email == resource.data.email || hasOrgManagementRole(orgId));
         allow write: if false;
@@ -42,7 +42,7 @@ service cloud.firestore {
     // FCM tokens are only accessed by the authenticated Lambda API.
     // The top-level collection check keeps device credentials private from all clients.
     match /{collection}/{document=**} {
-      allow read: if isOwner() && collection != "fcmTokens" && collection != "organisations";
+      allow read: if isOwner() && collection != "fcmTokens" && collection != "organisations" && collection != "whatsappPhoneNumbers";
       allow write: if false;
     }
 
