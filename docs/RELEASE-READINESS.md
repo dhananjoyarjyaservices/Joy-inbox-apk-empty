@@ -29,7 +29,8 @@ This checklist separates code already present from work that requires real servi
 - [ ] Run webhook signature, retry, duplicate delivery and tenant-isolation integration tests with Meta test assets; committed unit tests do not replace this staging exercise.
 - [ ] Complete Stripe test checkout, portal, subscription update/cancel and failed-invoice webhook tests.
 - [ ] Exercise campaign STOP/START, suppression re-check, throttling, pause/cancel and uncertain-delivery reconciliation end-to-end.
-- [ ] Implement and validate a complete invitation lifecycle (pending invite, secure acceptance, expiry/revocation and email/link delivery); current member management can add only existing Joy Inbox accounts.
+- [x] Implement invitation lifecycle in code: pending invitations, hashed one-time tokens, verified-email acceptance, seven-day expiry, revocation, audit-safe tenant membership creation and copyable invitation links in the team UI.
+- [ ] Configure a transactional email provider and verify delivery/retry/bounce handling; until then, workspace owners/admins must distribute the generated invitation links through a trusted channel.
 - [ ] Run load tests, concurrency tests and security review for all legacy routes.
 - [ ] Review data retention, privacy notice, consent language, WhatsApp template policy and billing/tax requirements.
 
