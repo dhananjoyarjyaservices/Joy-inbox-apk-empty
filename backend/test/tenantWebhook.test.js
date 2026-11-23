@@ -75,3 +75,35 @@ test("incoming tenant media persists metadata only, never a storage path or medi
     image: { id: "meta-media-id-1" }
   }, "Customer"), false);
 });
+
+
+test("incoming webhook text, contact names and media metadata are bounded", async () => {
+  const db = fakeDb();
+  const organization = {
+    id: "org_alpha",
+    ref: db.collection("organizations").doc("org_alpha")
+  };
+  await saveTenantIncomingMessage(db, organization, {
+    id: "wamid.incoming.bounds",
+    from: "15551234567",
+    timestamp: "1795000000",
+    type: "image",
+    image: {
+      id: "m".repeat(400),
+      mime_type: "x".repeat(200),
+      file_size: Number.MAX_SAFE_INTEGER + 1,
+      filename: "f".repeat(300),
+      sha256: "s".repeat(200),
+      caption: "c".repeat(6000)
+    }
+  }, "N".repeat(200), "123456789012345");
+  const saved = db.docs.get("organizations/org_alpha/chats/15551234567/messages/wamid.incoming.bounds");
+  const chat = db.docs.get("organizations/org_alpha/chats/15551234567");
+  assert.equal(saved.text.length, 4096);
+  assert.equal(saved.mediaId.length, 256);
+  assert.equal(saved.mediaMimeType.length, 128);
+  assert.equal(saved.mediaFilename.length, 180);
+  assert.equal(saved.mediaSha256.length, 128);
+  assert.equal(saved.mediaSize, null);
+  assert.equal(chat.customerName.length, 100);
+});
