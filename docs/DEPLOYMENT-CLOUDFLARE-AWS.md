@@ -59,6 +59,7 @@ Lambda must use Node.js 22 and the deployment package must include the backend d
 - `WHATSAPP_VERIFY_TOKEN`
 - `GRAPH_API_VERSION`
 - `CORS_ORIGINS=https://final-joy-inbox.pages.dev`
+- `FRONTEND_BASE_URL=https://YOUR_FRONTEND_DOMAIN` (include any deployment base path; used to generate workspace invitation links)
 
 Legacy `PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN` are only for legacy owner-only routes. New tenant connections should use organization-encrypted credentials.
 
