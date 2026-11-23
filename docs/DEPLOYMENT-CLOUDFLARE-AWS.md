@@ -117,3 +117,7 @@ Workspace owners and admins can open Inbox → Settings → SLA alerts to enable
 **Not deployed:** adding this code does not create the EventBridge schedule, change Lambda runtime settings, or deploy AWS resources. Until the schedule and dedicated scheduled Lambda target are configured, background SLA alerts will not run when all clients are closed.
 
 Notification delivery controls are stored per organization member at `organizations/{orgId}/members/{uid}/settings/notifications`. `soundEnabled` controls the foreground inbox chime; `desktopEnabled` controls browser notification display when browser permission is granted. FCM data messages carry these per-recipient flags so the service worker can suppress desktop notifications or mark them silent. Browser/OS permission settings remain authoritative.
+
+### Registered push devices and delivery retries
+
+Each member can view and revoke up to 50 recently active browser/device registrations in Notification Center. Device records are scoped to that member and organization; the API returns device label, platform, user agent summary, and timestamps, never the FCM token. Removing a device deletes its token registration. Re-registering a browser refreshes its last-active timestamp and metadata. FCM multicast delivery retries once after a short delay for transient server/internal/unknown errors; invalid or unregistered tokens are removed automatically. Persistent failures are not reported as delivered.
