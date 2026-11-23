@@ -27,7 +27,7 @@ type ChatRow = {
   unreadCount?: number;
   status?: "open" | "pending" | "resolved";
   tags?: string[];
-  assignedToEmail?: string | null;
+  assignedToEmail?: string | null;\n  assignedToUid?: string | null;
 };
 
 type MessageRow = {
@@ -72,7 +72,7 @@ export default function OrganisationInbox() {
   const [tagDraft, setTagDraft] = useState("");
   const [savingTags, setSavingTags] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);\n  const [teamMembers, setTeamMembers] = useState<OrganisationMember[]>([]);\n  const [templateName, setTemplateName] = useState("");\n  const [templateLanguage, setTemplateLanguage] = useState("en_US");\n  const [templateParameters, setTemplateParameters] = useState("");\n  const [interactiveKind, setInteractiveKind] = useState<"button" | "list">("button");\n  const [interactiveBody, setInteractiveBody] = useState("");\n  const [interactiveButton1, setInteractiveButton1] = useState("Yes");\n  const [interactiveButton2, setInteractiveButton2] = useState("No");\n  const [interactiveList1, setInteractiveList1] = useState("Option 1");\n  const [interactiveList2, setInteractiveList2] = useState("Option 2");\n  const [structuredMode, setStructuredMode] = useState<"template" | "interactive" | "">("");\n  const [sendingStructured, setSendingStructured] = useState(false);
 
   const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
   const filteredChats = useMemo(() => { const term = chatSearch.trim().toLowerCase(); return term ? chats.filter((chat) => [chat.customerName, chat.customerPhone, chat.lastMessage, ...(chat.tags || [])].some((value) => String(value || "").toLowerCase().includes(term))) : chats; }, [chats, chatSearch]);
@@ -96,6 +96,14 @@ export default function OrganisationInbox() {
         : reason.message || "Inbox load nahi hua.");
       setLoading(false);
     });
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId) { setTeamMembers([]); return; }
+    let active = true;
+    listMembers(orgId).then((rows) => { if (active) setTeamMembers(rows); })
+      .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Team members load nahi hue."); });
+    return () => { active = false; };
   }, [orgId]);
 
   useEffect(() => {
@@ -159,6 +167,60 @@ export default function OrganisationInbox() {
     try { await updateOrganisationChatTags(orgId, selectedChat.id, tags); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Tags save nahi hue. Manager permission required ho sakti hai."); }
     finally { setSavingTags(false); }
+  }
+
+
+  async function handleSendTemplate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedChat) return;
+    setSendingStructured(true); setError("");
+    try {
+      await sendOrganisationWhatsAppTemplate(orgId, {
+        to: selectedChat.customerPhone || selectedChat.id,
+        name: templateName.trim(),
+        language: templateLanguage.trim(),
+        bodyParameters: templateParameters.split("|").map((value) => value.trim()).filter(Boolean),
+      });
+      setStructuredMode(""); setTemplateName(""); setTemplateParameters("");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Template send nahi hua."); }
+    finally { setSendingStructured(false); }
+  }
+
+  async function handleSendInteractive(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedChat) return;
+    setSendingStructured(true); setError("");
+    try {
+      const details = interactiveKind === "button" ? {
+        to: selectedChat.customerPhone || selectedChat.id,
+        kind: "button" as const,
+        body: interactiveBody.trim(),
+        buttons: [
+          { id: "choice_yes", title: interactiveButton1.trim() },
+          { id: "choice_no", title: interactiveButton2.trim() },
+        ],
+      } : {
+        to: selectedChat.customerPhone || selectedChat.id,
+        kind: "list" as const,
+        body: interactiveBody.trim(),
+        buttonText: "View options",
+        sections: [{ title: "Options", rows: [
+          { id: "option_one", title: interactiveList1.trim() },
+          { id: "option_two", title: interactiveList2.trim() },
+        ] }],
+      };
+      await sendOrganisationInteractive(orgId, details);
+      setStructuredMode(""); setInteractiveBody("");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Interactive message send nahi hua."); }
+    finally { setSendingStructured(false); }
+  }
+
+  async function handleAssignMember(uid: string) {
+    if (!selectedChat) return;
+    setAssigning(true);
+    try { await assignOrganisationChat(orgId, selectedChat.id, uid || null); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Team assignment update nahi hua."); }
+    finally { setAssigning(false); }
   }
 
   async function handleAssignToMe() {
@@ -280,6 +342,7 @@ export default function OrganisationInbox() {
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d9fdd3] font-semibold text-[#075e54]">{(selectedChat.customerName || selectedChat.customerPhone || "?").slice(0, 1).toUpperCase()}</div>
               <div className="min-w-0 flex-1"><h2 className="truncate font-semibold text-gray-900">{selectedChat.customerName || selectedChat.customerPhone}</h2><p className="text-xs text-gray-500">{selectedChat.customerPhone}</p></div>
               <button type="button" onClick={handleAssignToMe} disabled={assigning || !user} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-2 text-xs font-medium text-gray-600 disabled:opacity-50"><UserRoundCheck size={14} /> {assigning ? "Assigning" : "Assign to me"}</button>
+              <select aria-label="Assign conversation to team member" value={selectedChat.assignedToUid || ""} disabled={assigning} onChange={(event) => handleAssignMember(event.target.value)} className="max-w-[140px] rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-700"><option value="">Unassigned</option>{teamMembers.map((member) => <option key={member.uid} value={member.uid}>{member.email || member.uid}</option>)}</select>
               <select aria-label="Conversation status" value={selectedChat.status || "open"} disabled={changingStatus} onChange={(event) => handleStatusChange(event.target.value as "open" | "pending" | "resolved")} className="max-w-[112px] rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-700">
                 <option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option>
               </select>
@@ -292,6 +355,29 @@ export default function OrganisationInbox() {
                 </div>
               </div>)}
             </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 bg-white px-3 py-2">
+              <button type="button" onClick={() => setStructuredMode(structuredMode === "template" ? "" : "template")} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700">Approved template</button>
+              <button type="button" onClick={() => setStructuredMode(structuredMode === "interactive" ? "" : "interactive")} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700">Buttons / list</button>
+            </div>
+            {structuredMode === "template" && <form onSubmit={handleSendTemplate} className="grid grid-cols-1 gap-2 border-t border-gray-200 bg-white p-3 sm:grid-cols-4">
+              <input required value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Approved template name" className="h-9 rounded-lg border border-gray-200 px-3 text-xs" />
+              <input required value={templateLanguage} onChange={(event) => setTemplateLanguage(event.target.value)} placeholder="Language e.g. en_US" className="h-9 rounded-lg border border-gray-200 px-3 text-xs" />
+              <input value={templateParameters} onChange={(event) => setTemplateParameters(event.target.value)} placeholder="Body variables separated by |" className="h-9 rounded-lg border border-gray-200 px-3 text-xs" />
+              <button disabled={sendingStructured} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{sendingStructured ? "Sending..." : "Send template"}</button>
+              <p className="text-[11px] text-gray-400 sm:col-span-4">Use only a template already approved in WhatsApp Manager. Enter body variables in order, separated by |.</p>
+            </form>}
+            {structuredMode === "interactive" && <form onSubmit={handleSendInteractive} className="grid grid-cols-1 gap-2 border-t border-gray-200 bg-white p-3 sm:grid-cols-3">
+              <select value={interactiveKind} onChange={(event) => setInteractiveKind(event.target.value as "button" | "list")} className="h-9 rounded-lg border border-gray-200 px-3 text-xs"><option value="button">Reply buttons (max 3)</option><option value="list">List menu (max 10 rows)</option></select>
+              <input required value={interactiveBody} onChange={(event) => setInteractiveBody(event.target.value)} maxLength={1024} placeholder="Message body" className="h-9 rounded-lg border border-gray-200 px-3 text-xs sm:col-span-2" />
+              {interactiveKind === "button" ? <>
+                <input required value={interactiveButton1} onChange={(event) => setInteractiveButton1(event.target.value)} maxLength={20} placeholder="Button 1 title" className="h-9 rounded-lg border border-gray-200 px-3 text-xs" />
+                <input required value={interactiveButton2} onChange={(event) => setInteractiveButton2(event.target.value)} maxLength={20} placeholder="Button 2 title" className="h-9 rounded-lg border border-gray-200 px-3 text-xs" />
+              </> : <>
+                <input required value={interactiveList1} onChange={(event) => setInteractiveList1(event.target.value)} maxLength={24} placeholder="List option 1" className="h-9 rounded-lg border border-gray-200 px-3 text-xs" />
+                <input required value={interactiveList2} onChange={(event) => setInteractiveList2(event.target.value)} maxLength={24} placeholder="List option 2" className="h-9 rounded-lg border border-gray-200 px-3 text-xs" />
+              </>}
+              <button disabled={sendingStructured} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{sendingStructured ? "Sending..." : "Send interactive"}</button>
+            </form>}
             <div className="flex items-center gap-2 border-t border-gray-200 bg-white px-3 py-2">
               <input value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="Tags separated by commas" className="h-8 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-xs" />
               <button type="button" onClick={handleSaveTags} disabled={savingTags} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 disabled:opacity-50">{savingTags ? "Saving" : "Save tags"}</button>
