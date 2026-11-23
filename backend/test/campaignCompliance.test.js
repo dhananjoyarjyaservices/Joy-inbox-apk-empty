@@ -4,6 +4,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   suppressionDocumentId,
+  isWhatsAppOptInMessage,
+  recordCampaignOptIn,
   isWhatsAppOptOutMessage,
   recordCampaignOptOut,
   filterSuppressedCampaignRecipients
