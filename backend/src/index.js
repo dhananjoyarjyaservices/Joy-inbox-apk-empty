@@ -712,6 +712,26 @@ async function removeFcmToken(event) {
   return jsonResponse(event, 200, { success: true });
 }
 
+async function listTenantFcmDevices(event) {
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, event.queryStringParameters?.organizationId);
+  requirePermission(organization, "chats:read");
+  const snapshot = await organization.ref.collection("members").doc(decoded.uid)
+    .collection("devices").orderBy("updatedAt", "desc").limit(50).get();
+  const devices = snapshot.docs.map(document => {
+    const value = document.data() || {};
+    return {
+      installationId: String(value.installationId || ""),
+      deviceName: String(value.deviceName || "Unknown device").slice(0, 80),
+      platform: String(value.platform || "web").slice(0, 30),
+      userAgent: String(value.userAgent || "").slice(0, 200),
+      createdAt: value.createdAt?.toDate ? value.createdAt.toDate().toISOString() : null,
+      updatedAt: value.updatedAt?.toDate ? value.updatedAt.toDate().toISOString() : null
+    };
+  }).filter(device => isValidInstallationId(device.installationId));
+  return jsonResponse(event, 200, { devices });
+}
+
 async function registerTenantFcmToken(event) {
   const decoded = await authenticateUser(event);
   let body;
@@ -723,8 +743,15 @@ async function registerTenantFcmToken(event) {
   }
   const organization = await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "chats:read");
-  await getTenantDeviceDocument(getDb(), organization.id, decoded.uid, body.installationId).set({
+  const ref = getTenantDeviceDocument(getDb(), organization.id, decoded.uid, body.installationId);
+  const existing = await ref.get();
+  await ref.set({
     token: body.token,
+    installationId: body.installationId,
+    deviceName: String(body.deviceName || "Web browser").slice(0, 80),
+    platform: String(body.platform || "web").slice(0, 30),
+    userAgent: String(body.userAgent || "").slice(0, 200),
+    ...(existing.exists ? {} : { createdAt: new Date() }),
     updatedAt: new Date()
   }, { merge: true });
   return jsonResponse(event, 200, { success: true });
@@ -2377,6 +2404,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Tenant SLA alert check failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "SLA alerts could not be checked." });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/fcm-tokens/devices")) {
+    try { return await listTenantFcmDevices(event); }
+    catch (error) {
+      console.error("Tenant FCM device list failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Registered devices could not be loaded." });
     }
   }
 
