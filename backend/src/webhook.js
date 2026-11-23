@@ -448,7 +448,9 @@ async function processWebhookPayload(payload) {
         const name = contact?.profile?.name || message.from;
         const created = await saveTenantIncomingMessage(db, organization, message, name, String(phoneNumberId));
         const phone = normalizePhoneNumber(message.from);
-        const inboundText = message.type === "text" ? String(message.text?.body || "") : "";
+        const inboundText = message.type === "text" ? String(message.text?.body || "")
+          : message.type === "interactive" ? String(message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "")
+            : message.type === "button" ? String(message.button?.text || "") : "";
         if (isWhatsAppOptOutMessage(inboundText)) {
           // Re-apply suppression on webhook retries even when the inbound
           // message was already persisted before a previous suppression write failed.
@@ -474,7 +476,7 @@ async function processWebhookPayload(payload) {
               organization.id,
               phone,
               name,
-              message.type === "text" ? String(message.text?.body || "") : `New ${message.type || "WhatsApp"} message`,
+              inboundText || `New ${message.type || "WhatsApp"} message`,
               String(message.id || "")
             );
           } catch (error) {
