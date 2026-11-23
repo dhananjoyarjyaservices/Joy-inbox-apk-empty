@@ -256,6 +256,10 @@ export interface OrganisationCampaign {
   status: "draft" | string;
   createdAt?: { toDate?: () => Date } | Date;
   updatedAt?: { toDate?: () => Date } | Date;
+  scheduledAt?: { toDate?: () => Date } | Date;
+  queueStatus?: string;
+  queueEligibleCount?: number;
+  queueCreatedCount?: number;
 }
 
 export async function listOrganisationCampaigns(orgId: string) {
