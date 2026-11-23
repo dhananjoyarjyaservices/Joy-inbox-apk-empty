@@ -110,9 +110,9 @@ test("every unscoped HTTP route is either explicitly public/system or covered by
   const fs = require("node:fs");
   const path = require("node:path");
   const source = fs.readFileSync(path.join(__dirname, "../src/index.js"), "utf8");
-  const routeSuffixes = [...source.matchAll(/path\\.endsWith\\(["']([^"']+)["']\\)/g)]
+  const routeSuffixes = [...source.matchAll(/path\.endsWith\(["']([^"']+)["']\)/g)]
     .map((match) => match[1]);
-  const legacyBlock = source.match(/const LEGACY_OWNER_API_ROUTE_SUFFIXES = Object\\.freeze\\(\\[([\\s\\S]*?)\\]\\);/);
+  const legacyBlock = source.match(/const LEGACY_OWNER_API_ROUTE_SUFFIXES = Object\.freeze\(\[([\s\S]*?)\]\);/);
   assert.ok(legacyBlock, "legacy route kill-switch inventory must exist");
   const protectedSuffixes = new Set(
     [...legacyBlock[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1])
