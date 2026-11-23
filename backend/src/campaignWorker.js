@@ -285,7 +285,8 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
     let acceptedMessageId = "";
     try {
       if (recipient.optedIn !== true || !recipient.consentSource ||
-          !Number.isFinite(Date.parse(String(recipient.consentAt || "")))) {
+          !Number.isFinite(Date.parse(String(recipient.consentAt || ""))) ||
+          Date.parse(String(recipient.consentAt || "")) > now.getTime()) {
         await finishRecipient(db, campaignRef, document.ref, recipient, "skipped", {
           reason: "missing_or_invalid_opt_in_evidence"
         }, dependencies);
