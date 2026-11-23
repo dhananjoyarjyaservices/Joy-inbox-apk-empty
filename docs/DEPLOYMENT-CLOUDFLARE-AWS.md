@@ -85,3 +85,19 @@ Legacy `PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN` are only for legacy owner-o
 ## Current status
 
 Preparation changes on the feature branch configure the Vite root path, Cloudflare Pages SPA fallback, and safe environment-variable examples. This is not a production deployment and the SaaS branch is not certified production-ready.
+
+
+## Scheduled SLA push alerts (AWS EventBridge)
+
+The backend now exports a separate Lambda entry point for scheduled checks. This lets overdue alerts run even when every agent has closed Joy Inbox.
+
+1. Deploy the backend package to the same Node.js 22 Lambda that has Firebase Admin credentials and FCM service-account permissions.
+2. Create an EventBridge Scheduler schedule, for example `rate(1 minute)`, with flexible time window disabled.
+3. Choose the target Lambda function and set the target invocation payload to an empty JSON object: `{}`.
+4. In the Lambda runtime configuration, set the handler to `src/index.slaScheduledHandler`. If the same Lambda must also serve HTTP Function URL requests, deploy a second Lambda function from the same code and configure its handler as `src/index.slaScheduledHandler`; keep the HTTP function on `src/index.handler`.
+5. Allow EventBridge Scheduler's execution role to invoke only that scheduled Lambda using `lambda:InvokeFunction`. Do not expose the scheduled handler through a public Function URL or HTTP route.
+6. Set a timeout appropriate to organization volume (start with 60 seconds) and monitor CloudWatch logs and Lambda errors/throttles.
+
+The scheduled runner scans organizations in pages and checks up to 1,000 overdue chats per organization per invocation. It uses the same per-chat transactional claim fields as the interactive checker to avoid duplicate notifications when both paths run. A chat is marked notified only after FCM reports at least one successful device delivery; failed/no-device deliveries remain eligible for a later check.
+
+**Not deployed:** adding this code does not create the EventBridge schedule, change Lambda runtime settings, or deploy AWS resources. Until the schedule and dedicated scheduled Lambda target are configured, background SLA alerts will not run when all clients are closed.
