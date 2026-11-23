@@ -11,7 +11,7 @@ import { listOrganizationMembers, updateOrganizationChatAssignment, listChatAssi
 import { listenToTenantChats, listenToTenantMessages, loadOlderTenantMessages } from "../services/tenantChats";
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
 import { enablePushNotifications, syncPushToken, listenForForegroundPush, playNotificationSound, listRegisteredPushDevices, revokePushDevice, listNotificationDeliveries, listTeamNotificationDeliveryAnalytics, getMemberNotificationDeliveryReport, type TeamNotificationDeliveryAnalytics, type MemberNotificationDeliveryReport, type NotificationDelivery, type RegisteredPushDevice } from "../services/pushNotifications";
-import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, listTenantInternalNotes, addTenantInternalNote, type TenantContact, type TenantQuickReply, type TenantInternalNote } from "../services/tenantResources";
+import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, listTenantInternalNotes, addTenantInternalNote, sendTenantInteractiveMessage, type TenantInteractiveMessageInput, type TenantContact, type TenantQuickReply, type TenantInternalNote } from "../services/tenantResources";
 
 type TenantChat = {
   id: string;
@@ -150,6 +150,13 @@ export default function TenantInbox() {
   const [internalNoteDraft, setInternalNoteDraft] = useState("");
   const [internalNotesLoading, setInternalNotesLoading] = useState(false);
   const [internalNoteSaving, setInternalNoteSaving] = useState(false);
+  const [interactiveBuilderOpen, setInteractiveBuilderOpen] = useState(false);
+  const [interactiveType, setInteractiveType] = useState<"button" | "list">("button");
+  const [interactiveBody, setInteractiveBody] = useState("");
+  const [interactiveHeader, setInteractiveHeader] = useState("");
+  const [interactiveFooter, setInteractiveFooter] = useState("");
+  const [interactiveOptions, setInteractiveOptions] = useState("");
+  const [interactiveSending, setInteractiveSending] = useState(false);
   const [customerSaving, setCustomerSaving] = useState(false);
   const [contacts, setContacts] = useState<TenantContact[]>([]);
   const [replies, setReplies] = useState<TenantQuickReply[]>([]);
@@ -588,6 +595,50 @@ export default function TenantInbox() {
     catch (error) { setError(error instanceof Error ? error.message : "Campaigns could not be loaded."); }
     finally { setCampaignLoading(false); }
   }
+  async function sendInteractiveMessage() {
+    if (!organization || !selected || interactiveSending) return;
+    const optionLines = interactiveOptions.split("\\n").map(line => line.trim()).filter(Boolean);
+    let interactive: TenantInteractiveMessageInput;
+    if (interactiveType === "button") {
+      interactive = {
+        type: "button",
+        body: interactiveBody,
+        ...(interactiveHeader.trim() ? { header: interactiveHeader } : {}),
+        ...(interactiveFooter.trim() ? { footer: interactiveFooter } : {}),
+        buttons: optionLines.map((title, index) => ({ id: `option_${index + 1}`, title }))
+      };
+    } else {
+      interactive = {
+        type: "list",
+        body: interactiveBody,
+        ...(interactiveHeader.trim() ? { header: interactiveHeader } : {}),
+        ...(interactiveFooter.trim() ? { footer: interactiveFooter } : {}),
+        buttonTitle: "Choose",
+        sections: [{
+          title: "Options",
+          rows: optionLines.map((line, index) => {
+            const [title, ...description] = line.split("|");
+            return { id: `option_${index + 1}`, title: title.trim(), ...(description.join("|").trim() ? { description: description.join("|").trim() } : {}) };
+          })
+        }]
+      };
+    }
+    setInteractiveSending(true);
+    setError("");
+    try {
+      await sendTenantInteractiveMessage(organization.id, selected, interactive, currentChat?.phoneNumberId);
+      setInteractiveBody("");
+      setInteractiveHeader("");
+      setInteractiveFooter("");
+      setInteractiveOptions("");
+      setInteractiveBuilderOpen(false);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Interactive message could not be sent.");
+    } finally {
+      setInteractiveSending(false);
+    }
+  }
+
   async function saveInternalNote(event: FormEvent) {
     event.preventDefault();
     if (!organization || !selected || internalNoteSaving || !internalNoteDraft.trim()) return;
