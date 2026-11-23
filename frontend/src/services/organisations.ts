@@ -336,6 +336,31 @@ export async function removeOrganisationMember(orgId: string, uid: string) {
 }
 
 
+
+export interface OrganisationInvitation {
+  id: string;
+  email: string;
+  role: "admin" | "manager" | "agent" | string;
+  status: "pending" | "expired" | "revoked" | "accepted" | string;
+  createdAt?: { toDate?: () => Date } | Date | string | null;
+  expiresAt?: { toDate?: () => Date } | Date | string | null;
+  createdBy?: string;
+}
+
+export async function listOrganisationInvitations(orgId: string) {
+  const result = await request<{ invitations: OrganisationInvitation[] }>(
+    `/organisations/${encodeURIComponent(orgId)}/invitations`,
+  );
+  return result.invitations || [];
+}
+
+export async function revokeOrganisationInvitation(orgId: string, invitationId: string) {
+  return request<{ success: boolean; invitation: { invitationId: string; status: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(invitationId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export interface OrganisationAuditLog {
   id: string;
   action: string;
