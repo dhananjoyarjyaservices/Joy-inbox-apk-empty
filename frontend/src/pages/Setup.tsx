@@ -252,7 +252,10 @@ export default function Setup() {
           <section className="mt-5 rounded-2xl bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div><h2 className="font-semibold text-gray-900">{selected.name}</h2><p className="text-xs text-gray-500">Organisation ID: {selected.id}</p></div>
-              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-700">{selected.role}</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-700">{selected.role}</span>
+                <button type="button" onClick={() => navigate(`/org/${selected.id}/inbox`)} className="rounded-xl bg-[#075e54] px-4 py-2 text-sm font-semibold text-white">Open shared inbox</button>
+              </div>
             </div>
             <div className="mt-5 rounded-xl border border-gray-200 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
