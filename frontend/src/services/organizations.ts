@@ -327,3 +327,6 @@ export async function getOrganizationCampaignReportRecipients(
     nextCursor: typeof result.nextCursor === "string" ? result.nextCursor : null
   };
 }
+
+// Backward-compatible name used by the tenant inbox report panel.
+export const getOrganizationCampaignRecipients = getOrganizationCampaignReportRecipients;
