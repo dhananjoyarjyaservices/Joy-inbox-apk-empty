@@ -111,3 +111,22 @@ export async function addTenantInternalNote(org: string, chatId: string, text: s
   if (!result.note?.id) throw new Error("Internal note could not be saved.");
   return result.note;
 }
+
+
+export type TenantInteractiveMessageInput =
+  | { type: "button"; body: string; header?: string; footer?: string; buttons: Array<{ id: string; title: string }> }
+  | { type: "list"; body: string; header?: string; footer?: string; buttonTitle: string; sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }> };
+export async function sendTenantInteractiveMessage(
+  org: string,
+  chatId: string,
+  interactive: TenantInteractiveMessageInput,
+  phoneNumberId?: string
+) {
+  return call("/organizations/send-interactive", "POST", {
+    organizationId: org,
+    chatId,
+    to: chatId,
+    interactive,
+    ...(phoneNumberId ? { phoneNumberId } : {})
+  });
+}
