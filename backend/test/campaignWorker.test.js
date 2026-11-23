@@ -319,3 +319,22 @@ test("persists a known Meta message ID when Firestore delivery persistence is un
   assert.equal(messageWrite.value.messageId, "wamid.accepted");
   assert.equal(messageWrite.value.persistenceUncertain, true);
 });
+
+test("campaign worker skips recipients whose consent timestamp is in the future", async () => {
+  const harness = createCampaignHarness(null);
+  harness.recipient.consentAt = "2026-11-24T10:00:00.000Z";
+  let sendCalls = 0;
+  const result = await processCampaign(harness.db, harness.campaignRef, {
+    now: () => new Date("2026-11-23T12:00:00.000Z"),
+    getCredentials: async () => ({ accessToken: "server-secret", phoneNumberId: "123456789" }),
+    fetch: async () => ({ ok: true, async json() { return { data: [{
+      name: "order_update", language: "en", status: "APPROVED", category: "UTILITY",
+      components: [{ type: "BODY", text: "Order {{1}}" }]
+    }] }; } }),
+    sendRecipient: async () => { sendCalls += 1; return { messageId: "wamid.future-consent" }; }
+  });
+  assert.equal(sendCalls, 0);
+  assert.equal(result.skipped, 1);
+  assert.equal(harness.recipient.status, "skipped");
+  assert.equal(harness.recipient.reason, "missing_or_invalid_opt_in_evidence");
+});
