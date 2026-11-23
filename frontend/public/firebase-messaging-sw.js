@@ -11,6 +11,7 @@ messaging.onBackgroundMessage(async (payload) => {
   const isIncoming = data.type === "incoming_whatsapp_text" && data.chatId && data.messageId;
   const isSlaAlert = data.type === "tenant_sla_overdue" && data.chatId && data.organizationId;
   if (!isIncoming && !isSlaAlert) return;
+  if (data.desktopEnabled === "false") return;
 
   const windows = await self.clients.matchAll({
     type: "window",
@@ -28,6 +29,7 @@ messaging.onBackgroundMessage(async (payload) => {
       body: data.body || (isSlaAlert ? "A customer is waiting for your reply." : "You have a new message."),
       tag: isSlaAlert ? `sla-${data.organizationId}-${data.chatId}` : `whatsapp-${data.messageId}`,
       renotify: isSlaAlert,
+      silent: data.soundEnabled === "false",
       data: { url: target.href },
     },
   );
