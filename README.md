@@ -67,3 +67,8 @@ These improvements do not change the overall release gate: all legacy routes, te
 ## Subscription billing foundation
 
 The tenant inbox includes a Workspace Billing screen and a Stripe integration foundation for Checkout, Billing Portal and signed subscription webhooks. Configure real Stripe test-mode secrets and recurring Price IDs before enabling checkout. No pricing, entitlements or payment configuration is assumed; see [docs/BILLING-STRIPE.md](docs/BILLING-STRIPE.md). Billing is not enabled until Stripe credentials and Price IDs are configured and staging checks pass.
+
+
+## Additional tenant inbox features
+
+The tenant inbox now includes private conversation internal notes, interactive WhatsApp reply buttons/list menus, searchable incoming interactive selections, and workspace-scoped billing controls. A dry-run-first legacy migration utility is available; it is never run automatically and strips old customer media storage paths and URLs.
