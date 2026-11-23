@@ -24,7 +24,20 @@ function suppressionDocumentId(phone) {
   if (!/^[1-9][0-9]{7,14}$/.test(normalized)) {
     throw new Error("A valid international phone number is required for suppression.");
   }
-  return crypto.createHash("sha256").update(normalized).digest("hex");
+  const configuredKey = process.env.CAMPAIGN_SUPPRESSION_HASH_KEY;
+  if (!configuredKey) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("CAMPAIGN_SUPPRESSION_HASH_KEY must be configured in production.");
+    }
+    // Development/test fallback only. Production must use a keyed HMAC because
+    // plain hashes of phone numbers can be enumerated from the small phone space.
+    return crypto.createHash("sha256").update(normalized).digest("hex");
+  }
+  const key = Buffer.from(configuredKey, "base64");
+  if (key.length !== 32 || key.toString("base64") !== configuredKey) {
+    throw new Error("CAMPAIGN_SUPPRESSION_HASH_KEY must be a base64-encoded 32-byte key.");
+  }
+  return crypto.createHmac("sha256", key).update(normalized).digest("hex");
 }
 
 function isWhatsAppOptOutMessage(value) {
