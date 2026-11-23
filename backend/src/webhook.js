@@ -365,10 +365,6 @@ async function maybeRunOrganisationAutomation(orgId, phone, message, contactName
   const settings = settingsSnapshot.data() || {};
   const connection = connectionSnapshot.data() || {};
   if (!connection.accessTokenEncrypted || !connection.phoneNumberId) return;
-  const credentials = {
-    accessToken: decryptOrganisationWhatsAppToken(connection.accessTokenEncrypted),
-    phoneNumberId: connection.phoneNumberId
-  };
   const priorContact = contactSnapshot.exists ? contactSnapshot.data() : {};
   const body = message.type === "text" ? String(message.text?.body || "").trim() : "";
   let action = null;
