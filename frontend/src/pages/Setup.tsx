@@ -6,6 +6,8 @@ import { logout } from "../services/auth";
 import {
   acceptInvitation,
   createInvitation,
+  listOrganisationInvitations,
+  revokeOrganisationInvitation,
   createOrganisation,
   listMembers,
   listOrganisations,
@@ -15,6 +17,7 @@ import {
   type OrganisationAuditLog,
   type Organisation,
   type OrganisationMember,
+  type OrganisationInvitation,
   getOrganisationWhatsAppConnection,
   saveOrganisationWhatsAppConnection,
   type WhatsAppConnection,
@@ -26,6 +29,7 @@ export default function Setup() {
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [members, setMembers] = useState<OrganisationMember[]>([]);
+  const [invitations, setInvitations] = useState<OrganisationInvitation[]>([]);
   const [auditLogs, setAuditLogs] = useState<OrganisationAuditLog[]>([]);
   const [orgName, setOrgName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -82,6 +86,18 @@ export default function Setup() {
     listMembers(selected.id)
       .then((rows) => { if (active) setMembers(rows); })
       .catch(() => { if (active) setMembers([]); });
+    return () => { active = false; };
+  }, [selected?.id, selected?.role]);
+
+  useEffect(() => {
+    if (!selected || !["owner", "admin"].includes(selected.role)) {
+      setInvitations([]);
+      return;
+    }
+    let active = true;
+    listOrganisationInvitations(selected.id)
+      .then((rows) => { if (active) setInvitations(rows); })
+      .catch(() => { if (active) setInvitations([]); });
     return () => { active = false; };
   }, [selected?.id, selected?.role]);
 
@@ -205,6 +221,40 @@ export default function Setup() {
     }
   }
 
+  async function handleRevokeInvitation(invitation: OrganisationInvitation) {
+    if (!selected || invitation.status !== "pending") return;
+    if (!window.confirm("Revoke invitation for " + invitation.email + "?")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await revokeOrganisationInvitation(selected.id, invitation.id);
+      setInvitations((rows) => rows.map((row) => row.id === invitation.id ? { ...row, status: "revoked" } : row));
+      setNotice("Invitation revoke kar di gayi.");
+      getOrganisationAuditLogs(selected.id).then(setAuditLogs).catch(() => undefined);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Invitation revoke nahi hui.");
+    } finally { setBusy(false); }
+  }
+
+  async function handleReinvite(invitation: OrganisationInvitation) {
+    if (!selected || !["expired", "revoked"].includes(invitation.status)) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await createInvitation(selected.id, invitation.email, invitation.role as "admin" | "manager" | "agent");
+      setInvitations((rows) => [({
+        id: result.invitation.invitationId,
+        email: result.invitation.email,
+        role: result.invitation.role,
+        status: "pending",
+        expiresAt: result.invitation.expiresAt,
+        createdAt: new Date().toISOString(),
+      }), ...rows]);
+      setCreatedInvite(result.invitation.invitationId);
+      setNotice("Naya invitation create ho gaya. Naya invitation ID securely share karo.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Naya invitation create nahi hua.");
+    } finally { setBusy(false); }
+  }
+
   async function handleLogout() {
     await logout();
     navigate("/login", { replace: true });
@@ -312,6 +362,32 @@ export default function Setup() {
                 <button disabled={busy} className="rounded-xl bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Create invite</button>
               </form>
             )}
+            {["owner", "admin"].includes(selected.role) && (
+              <div className="mt-5 rounded-xl border border-gray-200 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div><h3 className="font-semibold text-gray-900">Team invitations</h3><p className="text-xs text-gray-500">Pending, expired, revoked aur accepted invites manage karo.</p></div>
+                  <button type="button" disabled={busy} onClick={() => listOrganisationInvitations(selected.id).then(setInvitations).catch((reason) => setError(reason.message))} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600">Refresh</button>
+                </div>
+                {invitations.length === 0 ? <p className="text-xs text-gray-500">Abhi koi invitation record nahi hai.</p> : <div className="divide-y divide-gray-100">
+                  {invitations.map((invitation) => {
+                    const dateLabel = (value: OrganisationInvitation["expiresAt"]) => {
+                      if (!value) return "—";
+                      const date = value && typeof value === "object" && "toDate" in value && typeof value.toDate === "function" ? value.toDate() : new Date(value as string | Date);
+                      return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+                    };
+                    return <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                      <div className="min-w-0"><p className="truncate text-sm font-medium text-gray-800">{invitation.email}</p><p className="mt-1 text-xs capitalize text-gray-500">{invitation.role} · <span className={invitation.status === "pending" ? "font-semibold text-amber-700" : "text-gray-500"}>{invitation.status}</span></p><p className="mt-1 text-xs text-gray-400">Expires: {dateLabel(invitation.expiresAt)}</p><p className="break-all text-[10px] text-gray-400">ID: {invitation.id}</p></div>
+                      <div className="flex gap-2">
+                        {invitation.status === "pending" && <button type="button" disabled={busy} onClick={() => handleRevokeInvitation(invitation)} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-50">Revoke</button>}
+                        {["expired", "revoked"].includes(invitation.status) && <button type="button" disabled={busy} onClick={() => handleReinvite(invitation)} className="rounded-lg border border-[#075e54] px-3 py-1.5 text-xs font-semibold text-[#075e54] disabled:opacity-50">Create new invite</button>}
+                      </div>
+                    </div>;
+                  })}
+                </div>}
+                <p className="mt-3 text-xs text-amber-700">Invitation email abhi automatically send nahi hota. Revoke ya expiry ke baad naya invite banega; uska naya ID invited email owner ko securely bhejna hoga.</p>
+              </div>
+            )}
+
             {createdInvite && <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-700"><p className="font-semibold">Share these IDs securely with the invited email owner:</p><p className="mt-2 break-all">Organisation: {selected.id}</p><p className="mt-1 break-all">Invitation: {createdInvite}</p><button onClick={() => navigator.clipboard?.writeText(`Organisation ID: ${selected.id}
 Invitation ID: ${createdInvite}`)} className="mt-2 inline-flex items-center gap-2 font-semibold text-[#075e54]"><Copy size={13} /> Copy IDs</button><p className="mt-2 text-amber-700">Email delivery is not configured yet; send these IDs through a trusted channel only to the invited email address.</p></div>}
 
