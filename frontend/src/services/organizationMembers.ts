@@ -90,3 +90,21 @@ export async function updateOrganizationChatAssignment(
 ) {
   return request("/organizations/chat-assignment", "POST", { organizationId, ...input });
 }
+
+export interface ChatAssignmentAuditEvent {
+  id: string;
+  action: "chat.assigned" | "chat.status_changed";
+  actorUid: string;
+  actorEmail: string;
+  actorRole: string;
+  targetUid?: string;
+  targetEmail?: string;
+  details: { chatId?: string; assignedTo?: string | null; status?: "open" | "pending" | "resolved" };
+  createdAt?: unknown;
+}
+
+export async function listChatAssignmentAudit(organizationId: string, chatId: string): Promise<ChatAssignmentAuditEvent[]> {
+  const params = new URLSearchParams({ organizationId, chatId });
+  const result = await request(`/organizations/chat-assignment-audit?${params.toString()}`);
+  return Array.isArray(result.events) ? result.events as ChatAssignmentAuditEvent[] : [];
+}
