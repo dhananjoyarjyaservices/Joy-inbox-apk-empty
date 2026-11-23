@@ -11,6 +11,12 @@ function invitationError(message, statusCode = 400) {
   return error;
 }
 
+function validateOrganizationId(value) {
+  const id = String(value || "");
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw invitationError("A valid organization ID is required.");
+  return id;
+}
+
 function normalizeInvitationEmail(value) {
   const email = String(value || "").trim().toLowerCase();
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -43,6 +49,7 @@ function createInvitationUrl(baseUrl, organizationId, token) {
 }
 
 async function createTenantInvitation(db, organizationId, actor, input, options = {}) {
+  organizationId = validateOrganizationId(organizationId);
   const email = normalizeInvitationEmail(input?.email);
   const role = String(input?.role || "agent").toLowerCase();
   if (!INVITABLE_ROLES.has(role)) throw invitationError("Only admin or agent roles can be invited.", 400);
@@ -82,6 +89,7 @@ async function createTenantInvitation(db, organizationId, actor, input, options 
 }
 
 async function listTenantInvitations(db, organizationId, limit = 50) {
+  organizationId = validateOrganizationId(organizationId);
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
   const snapshot = await db.collection("organizations").doc(organizationId)
     .collection("invitations").orderBy("createdAt", "desc").limit(safeLimit).get();
@@ -100,6 +108,7 @@ async function listTenantInvitations(db, organizationId, limit = 50) {
 }
 
 async function revokeTenantInvitation(db, organizationId, email, actorUid) {
+  organizationId = validateOrganizationId(organizationId);
   const normalizedEmail = normalizeInvitationEmail(email);
   const ref = db.collection("organizations").doc(organizationId)
     .collection("invitations").doc(invitationDocumentId(normalizedEmail));
@@ -115,6 +124,7 @@ async function revokeTenantInvitation(db, organizationId, email, actorUid) {
 }
 
 async function acceptTenantInvitation(db, organizationId, token, decoded, options = {}) {
+  organizationId = validateOrganizationId(organizationId);
   if (!decoded?.uid || decoded.email_verified !== true) {
     throw invitationError("Sign in with a verified email address before accepting an invitation.", 403);
   }
@@ -183,6 +193,7 @@ async function acceptTenantInvitation(db, organizationId, token, decoded, option
 
 module.exports = {
   INVITATION_TTL_MS,
+  validateOrganizationId,
   normalizeInvitationEmail,
   invitationDocumentId,
   createInvitationUrl,
