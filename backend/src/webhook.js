@@ -4,6 +4,7 @@ const { getDb } = require("./firebase");
 const { verifyMetaSignature, getRawBody } = require("./security");
 const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
+const { isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
 const { matchesAutomationRule } = require("./automationRules");
 
