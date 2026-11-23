@@ -21,18 +21,25 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   async function handleEmailLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setNotice("");
     setLoading(true);
 
     try {
-      if (isRegister) await registerWithEmail(email, password);
-      else await loginWithEmail(email, password);
+      if (isRegister) {
+        await registerWithEmail(email, password);
+        setPassword("");
+        setNotice("Account created. Verification email bheja gaya hai. Email verify karke isi invitation link se sign in karo.");
+        return;
+      }
+      await loginWithEmail(email, password);
       navigate(destination, { replace: true });
     } catch {
-      setError(isRegister ? "Account create nahi hua. Email check karo aur password kam se kam 6 characters ka rakho." : "Login failed. Email aur password check karo.");
+      setError(isRegister ? "Account create ya verification email send nahi hua. Email check karke dobara try karo." : "Login failed. Email aur password check karo.");
     } finally {
       setLoading(false);
     }
@@ -106,6 +113,8 @@ export default function Login() {
             </div>
           </div>
 
+          {notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-700">{notice}</p>}
+
           {error && (
             <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
               {error}
@@ -121,7 +130,7 @@ export default function Login() {
           </button>
         </form>
 
-        <button type="button" onClick={() => { setIsRegister((value) => !value); setError(""); }} className="mt-3 w-full py-2 text-sm font-medium text-[#075e54]">{isRegister ? "Already have an account? Sign in" : "New to Joy Inbox? Create account"}</button>
+        <button type="button" onClick={() => { setIsRegister((value) => !value); setError(""); setNotice(""); }} className="mt-3 w-full py-2 text-sm font-medium text-[#075e54]">{isRegister ? "Already have an account? Sign in" : "New to Joy Inbox? Create account"}</button>
 
         <div className="my-5 flex items-center gap-3">
           <div className="h-px flex-1 bg-gray-200" />
