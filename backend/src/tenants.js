@@ -690,7 +690,45 @@ async function previewOrganisationCampaign(db, user, orgId, campaignId) {
   };
 }
 
-async function handleTenantRoute(event) {
+
+
+async function getOrganisationAutomation(db, user, orgId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  const snapshot = await db.collection("organisations").doc(orgId)
+    .collection("automation").doc("settings").get();
+  return snapshot.exists ? snapshot.data() : {
+    greetingEnabled: false, greetingText: "", awayEnabled: false, awayText: "", keywordRules: []
+  };
+}
+
+async function saveOrganisationAutomation(db, user, orgId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  const greetingEnabled = body.greetingEnabled === true;
+  const awayEnabled = body.awayEnabled === true;
+  const greetingText = String(body.greetingText || "").trim();
+  const awayText = String(body.awayText || "").trim();
+  const rules = Array.isArray(body.keywordRules) ? body.keywordRules : [];
+  if (greetingText.length > 1024 || awayText.length > 1024 || rules.length > 20) {
+    fail("Automation messages must be at most 1,024 characters and there can be at most 20 keyword rules.");
+  }
+  const keywordRules = rules.map((rule) => ({
+    keyword: String(rule.keyword || "").trim().toLowerCase().slice(0, 60),
+    reply: String(rule.reply || "").trim().slice(0, 1024),
+    enabled: rule.enabled !== false
+  }));
+  if (keywordRules.some((rule) => !rule.keyword || !rule.reply)) {
+    fail("Each keyword rule needs a keyword and a reply.");
+  }
+  if (greetingEnabled && !greetingText) fail("Enter a greeting message or turn the greeting off.");
+  if (awayEnabled && !awayText) fail("Enter an away message or turn the away message off.");
+  const settings = {
+    greetingEnabled, greetingText, awayEnabled, awayText, keywordRules,
+    updatedAt: new Date(), updatedBy: user.uid
+  };
+  await db.collection("organisations").doc(orgId).collection("automation").doc("settings").set(settings, { merge: true });
+  return settings;
+}
+\nasync function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
   const isCollection = path === "/organisations";
@@ -705,7 +743,7 @@ async function handleTenantRoute(event) {
   const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
   const campaignsMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/campaigns(?:\/([A-Za-z0-9_-]{10,40})\/preview)?$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -728,7 +766,7 @@ async function handleTenantRoute(event) {
     }
 
 
-    if (campaignsMatch && method === "GET" && !campaignsMatch[2]) {
+    if (automationMatch && method === "GET") {\n      const settings = await getOrganisationAutomation(db, user, automationMatch[1]);\n      return jsonResponse(event, 200, { settings });\n    }\n    if (automationMatch && method === "PUT") {\n      const settings = await saveOrganisationAutomation(db, user, automationMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, settings });\n    }\n    if (campaignsMatch && method === "GET" && !campaignsMatch[2]) {
       const campaigns = await listOrganisationCampaigns(db, user, campaignsMatch[1]);
       return jsonResponse(event, 200, { campaigns });
     }
