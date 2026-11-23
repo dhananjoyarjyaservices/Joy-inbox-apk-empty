@@ -45,6 +45,10 @@ export async function registerWithEmail(
   return result.user;
 }
 
+export async function resendVerificationEmail(user: User): Promise<void> {
+  await sendEmailVerification(user);
+}
+
 export async function loginWithGoogle(): Promise<User> {
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
