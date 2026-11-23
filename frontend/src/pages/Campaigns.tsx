@@ -23,7 +23,7 @@ export default function Campaigns() {
   const [consentEvidence, setConsentEvidence] = useState("");
   const [consentStatus, setConsentStatus] = useState<"opted_in" | "opted_out">("opted_in");
   const [preview, setPreview] = useState<Record<string, { eligibleCount: number; excludedCount: number; message: string }> >({});
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false);\n  const [scheduleAt, setScheduleAt] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -63,6 +63,30 @@ export default function Campaigns() {
         : "Opt-out recorded. This contact will be excluded from campaign previews.");
       setConsentPhone(""); setConsentSource(""); setConsentEvidence("");
     } catch (e) { setError(e instanceof Error ? e.message : "Consent could not be saved."); }
+    finally { setBusy(false); }
+  }
+
+  async function scheduleCampaign(id: string) {
+    const value = scheduleAt[id];
+    if (!value) { setError("Choose a date and time first."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await scheduleOrganisationCampaign(orgId, id, new Date(value).toISOString());
+      await refresh();
+      setNotice(result.deliveryEnabled
+        ? "Campaign scheduled."
+        : "Schedule saved. Automatic WhatsApp delivery is not enabled yet; no messages were sent.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Campaign could not be scheduled."); }
+    finally { setBusy(false); }
+  }
+
+  async function cancelCampaign(id: string) {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await cancelOrganisationCampaign(orgId, id);
+      await refresh();
+      setNotice("Scheduled campaign cancelled. No messages were sent.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Campaign could not be cancelled."); }
     finally { setBusy(false); }
   }
 
@@ -111,7 +135,10 @@ export default function Campaigns() {
         <section className="rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Saved campaigns</h2><button onClick={()=>refresh().catch(e=>setError(e.message))} className="inline-flex items-center gap-2 text-sm text-[#075e54]"><RefreshCw size={15}/> Refresh</button></div>
           {campaigns.length === 0 ? <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">No campaigns yet. Create your first draft above.</p> : <div className="space-y-3">{campaigns.map(c => <article key={c.id} className="rounded-xl border border-gray-200 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{c.title}</h3><p className="mt-1 text-xs text-gray-500">{c.templateName} · {c.language} · {c.status}</p><p className="mt-1 text-xs text-gray-500">Required tags: {c.audience?.tags?.join(", ") || "None"}</p></div><button disabled={busy} onClick={()=>runPreview(c.id)} className="rounded-lg border border-[#075e54] px-3 py-2 text-xs font-semibold text-[#075e54] disabled:opacity-50"><Users size={14} className="mr-1 inline"/> Preview audience</button></div>
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{c.title}</h3><p className="mt-1 text-xs text-gray-500">{c.templateName} · {c.language} · {c.status}</p><p className="mt-1 text-xs text-gray-500">Required tags: {c.audience?.tags?.join(", ") || "None"}</p>{c.scheduledAt && <p className="mt-1 text-xs text-gray-500">Scheduled for: {new Date((c.scheduledAt as any)?.toDate?.() || c.scheduledAt as any).toLocaleString()}</p>}</div><div className="flex flex-wrap gap-2">
+              <button disabled={busy} onClick={()=>runPreview(c.id)} className="rounded-lg border border-[#075e54] px-3 py-2 text-xs font-semibold text-[#075e54] disabled:opacity-50"><Users size={14} className="mr-1 inline"/> Preview audience</button>
+              {c.status === "scheduled" ? <button disabled={busy} onClick={()=>cancelCampaign(c.id)} className="rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50">Cancel schedule</button> : c.status === "draft" ? <div className="flex flex-wrap gap-2"><input type="datetime-local" value={scheduleAt[c.id] || ""} onChange={e=>setScheduleAt(old=>({...old,[c.id]:e.target.value}))} className="rounded-lg border border-gray-200 px-2 py-2 text-xs"/><button disabled={busy} onClick={()=>scheduleCampaign(c.id)} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Schedule</button></div> : null}
+            </div></div>
             {preview[c.id] && <div className="mt-3 rounded-lg bg-[#f0f7f4] p-3 text-sm"><p><strong>{preview[c.id].eligibleCount}</strong> eligible · <strong>{preview[c.id].excludedCount}</strong> excluded</p><p className="mt-1 text-xs text-gray-600">{preview[c.id].message}</p><p className="mt-1 text-xs font-semibold text-amber-700">Sending is disabled. This preview did not send messages.</p></div>}
           </article>)}</div>}
         </section>
