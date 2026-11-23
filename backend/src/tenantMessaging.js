@@ -28,6 +28,7 @@ async function claimTenantSendRequest(db, organizationId, chatId, clientMessageI
         throw error;
       }
       if (request.status === "completed") return { state: "completed", messageId: request.messageId };
+      if (request.status === "unknown") return { state: "unknown" };
       if (request.status !== "failed") return { state: "pending" };
       transaction.set(ref, {
         status: "processing",
@@ -107,10 +108,11 @@ function getTenantReplyMessageFields(replyContext) {
 }
 
 async function markTenantSendRequestFailed(ref, error) {
-  if (!error?.definitive) return;
+  const definitive = Boolean(error?.definitive);
   await ref.set({
-    status: "failed",
-    error: String(error.message || "Message could not be sent.").slice(0, 300),
+    status: definitive ? "failed" : "unknown",
+    error: String(error?.message || "Message delivery could not be confirmed.").slice(0, 300),
+    deliveryMayHaveSucceeded: !definitive,
     updatedAt: new Date()
   }, { merge: true });
 }
