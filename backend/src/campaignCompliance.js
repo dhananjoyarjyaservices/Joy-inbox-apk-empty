@@ -123,6 +123,8 @@ async function filterSuppressedCampaignRecipients(db, organizationId, recipients
 module.exports = {
   normalizePhone,
   suppressionDocumentId,
+  isWhatsAppOptInMessage,
+  recordCampaignOptIn,
   isWhatsAppOptOutMessage,
   recordCampaignOptOut,
   filterSuppressedCampaignRecipients
