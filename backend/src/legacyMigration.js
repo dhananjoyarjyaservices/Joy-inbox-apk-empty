@@ -102,6 +102,7 @@ async function runLegacyMigration(db, options = {}) {
     execute,
     source: {
       chats: chatsSnapshot.size,
+      messages: 0,
       contacts: contactsSnapshot.size,
       quickReplies: repliesSnapshot.size,
       greetingSettings: greetingSnapshot.exists ? 1 : 0
@@ -109,7 +110,13 @@ async function runLegacyMigration(db, options = {}) {
     migrated: { chats: 0, messages: 0, contacts: 0, quickReplies: 0, settings: 0 },
     skippedExisting: { chats: 0, messages: 0, contacts: 0, quickReplies: 0, settings: 0 }
   };
-  if (!execute) return summary;
+  if (!execute) {
+    for (const chatDocument of chatsSnapshot.docs) {
+      const messages = await chatDocument.ref.collection("messages").get();
+      summary.source.messages += messages.size;
+    }
+    return summary;
+  }
 
   const writes = [];
   for (const chatDocument of chatsSnapshot.docs) {
