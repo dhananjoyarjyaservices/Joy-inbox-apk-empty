@@ -18,11 +18,23 @@ function normalizeInteractiveMessage(input) {
     throw httpError("Interactive message details are required.");
   }
   const type = input.type;
-  if (!["button", "list"].includes(type)) throw httpError("Interactive message type must be button or list.");
+  if (!["button", "list", "cta_url"].includes(type)) throw httpError("Interactive message type must be button, list or cta_url.");
   const body = cleanText(input.body, "Message body", 1024);
   const header = cleanText(input.header, "Header", 60, false);
   const footer = cleanText(input.footer, "Footer", 60, false);
   const normalized = { type, body, ...(header ? { header } : {}), ...(footer ? { footer } : {}) };
+
+  if (type === "cta_url") {
+    normalized.displayText = cleanText(input.displayText, "Link button text", 20);
+    const url = cleanText(input.url, "HTTPS link", 2000);
+    let parsed;
+    try { parsed = new URL(url); } catch { throw httpError("A valid HTTPS link is required."); }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      throw httpError("Interactive payment/catalog links must use HTTPS and cannot contain credentials.");
+    }
+    normalized.url = parsed.toString();
+    return normalized;
+  }
 
   if (type === "button") {
     if (!Array.isArray(input.buttons) || input.buttons.length < 1 || input.buttons.length > 3) {
@@ -73,7 +85,12 @@ function buildWhatsAppInteractivePayload(to, input) {
   };
   if (message.header) interactive.header = { type: "text", text: message.header };
   if (message.footer) interactive.footer = { text: message.footer };
-  if (message.type === "button") {
+  if (message.type === "cta_url") {
+    interactive.action = {
+      name: "cta_url",
+      parameters: { display_text: message.displayText, url: message.url }
+    };
+  } else if (message.type === "button") {
     interactive.action = {
       buttons: message.buttons.map(button => ({
         type: "reply",
@@ -96,7 +113,7 @@ function buildWhatsAppInteractivePayload(to, input) {
 }
 
 function getInteractivePreview(message) {
-  const count = message.type === "button"
+  const count = message.type === "cta_url" ? 1 : message.type === "button"
     ? message.buttons.length
     : message.sections.reduce((total, section) => total + section.rows.length, 0);
   return `Interactive ${message.type} message · ${count} option(s): ${message.body}`.slice(0, 1024);
