@@ -1,7 +1,7 @@
 const MAX_CAMPAIGN_RECIPIENTS = 5000;
 const MAX_TEMPLATE_VARIABLES = 20;
 const CAMPAIGN_CATEGORIES = new Set(["MARKETING", "UTILITY", "AUTHENTICATION"]);
-const CAMPAIGN_STATUSES = new Set(["draft", "scheduled", "queued", "sending", "paused", "completed", "failed", "cancelled"]);
+const CAMPAIGN_STATUSES = new Set(["preparing", "draft", "scheduled", "queued", "sending", "paused", "completed", "failed", "cancelled"]);
 
 function campaignError(message, statusCode = 400) {
   const error = new Error(message);
@@ -88,6 +88,7 @@ function normalizeCampaignRecipients(input) {
 function canTransitionCampaign(from, to) {
   if (!CAMPAIGN_STATUSES.has(from) || !CAMPAIGN_STATUSES.has(to)) return false;
   const transitions = {
+    preparing: ["draft", "failed"],
     draft: ["scheduled", "queued", "cancelled"],
     scheduled: ["queued", "paused", "cancelled"],
     queued: ["sending", "paused", "cancelled"],
