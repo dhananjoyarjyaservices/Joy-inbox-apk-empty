@@ -2561,7 +2561,7 @@ async function handleTenantCampaigns(event) {
   const batch = db.batch();
   batch.set(campaignRef, {
     ...definition,
-    status: "draft",
+    status: "preparing",
     recipientCount: normalized.recipients.length,
     skippedRecipients: normalized.skipped,
     sentCount: 0,
@@ -2572,23 +2572,33 @@ async function handleTenantCampaigns(event) {
   });
   await batch.commit();
 
-  for (let offset = 0; offset < normalized.recipients.length; offset += 400) {
-    const recipientBatch = db.batch();
-    for (const recipient of normalized.recipients.slice(offset, offset + 400)) {
-      const recipientId = crypto.createHash("sha256").update(recipient.phone).digest("hex");
-      recipientBatch.set(campaignRef.collection("recipients").doc(recipientId), {
-        phone: recipient.phone,
-        optedIn: true,
-        consentAt: recipient.consentAt,
-        consentSource: recipient.consentSource,
-        variables: recipient.variables.length ? recipient.variables : definition.variables,
-        status: "pending",
-        createdAt: now,
-        updatedAt: now
-      });
+  try {
+    for (let offset = 0; offset < normalized.recipients.length; offset += 400) {
+      const recipientBatch = db.batch();
+      for (const recipient of normalized.recipients.slice(offset, offset + 400)) {
+        const recipientId = crypto.createHash("sha256").update(recipient.phone).digest("hex");
+        recipientBatch.set(campaignRef.collection("recipients").doc(recipientId), {
+          phone: recipient.phone,
+          optedIn: true,
+          consentAt: recipient.consentAt,
+          consentSource: recipient.consentSource,
+          variables: recipient.variables.length ? recipient.variables : definition.variables,
+          status: "pending",
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+      await recipientBatch.commit();
     }
-    await recipientBatch.commit();
+    } catch (error) {
+    await campaignRef.set({
+      status: "failed",
+      preparationError: String(error?.message || "Campaign recipient preparation failed.").slice(0, 300),
+      updatedAt: new Date()
+    }, { merge: true });
+    throw error;
   }
+  await campaignRef.set({ status: "draft", updatedAt: new Date() }, { merge: true });
   return jsonResponse(event, 201, {
     campaign: {
       id: campaignRef.id,
