@@ -752,6 +752,46 @@ async function listTenantNotificationDeliveries(event) {
   return jsonResponse(event, 200, { deliveries });
 }
 
+async function listTenantTeamNotificationDeliveries(event) {
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, event.queryStringParameters?.organizationId);
+  requirePermission(organization, "chats:read");
+  if (!["owner", "admin"].includes(organization.role)) {
+    const error = new Error("Only workspace owners and admins can view team delivery analytics.");
+    error.statusCode = 403;
+    throw error;
+  }
+  const membersSnapshot = await organization.ref.collection("members").limit(50).get();
+  const memberRows = await Promise.all(membersSnapshot.docs.map(async memberDoc => {
+    const member = memberDoc.data() || {};
+    if (member.status && member.status !== "active") return null;
+    const snapshot = await memberDoc.ref.collection("notificationDeliveries")
+      .orderBy("createdAt", "desc").limit(100).get();
+    const deliveries = snapshot.docs.map(doc => doc.data() || {});
+    const total = deliveries.length;
+    const delivered = deliveries.filter(item => item.status === "delivered").length;
+    const failed = total - delivered;
+    const retried = deliveries.filter(item => Number(item.attempts || 1) > 1).length;
+    const attempts = deliveries.reduce((sum, item) => sum + Math.max(1, Number(item.attempts || 1)), 0);
+    const latest = deliveries[0]?.createdAt;
+    return {
+      uid: memberDoc.id,
+      name: String(member.displayName || member.name || member.email || "Team member").slice(0, 100),
+      role: String(member.role || "agent"),
+      total, delivered, failed, retried, attempts,
+      rate: total ? Math.round(delivered / total * 100) : 0,
+      lastActivityAt: latest?.toDate ? latest.toDate().toISOString() : null
+    };
+  }));
+  const agents = memberRows.filter(Boolean).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  return jsonResponse(event, 200, {
+    agents,
+    sampledMembers: membersSnapshot.size,
+    capped: membersSnapshot.size >= 50,
+    perMemberLimit: 100
+  });
+}
+
 async function registerTenantFcmToken(event) {
   const decoded = await authenticateUser(event);
   let body;
@@ -2424,6 +2464,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Tenant SLA alert check failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "SLA alerts could not be checked." });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/notifications/team-deliveries")) {
+    try { return await listTenantTeamNotificationDeliveries(event); }
+    catch (error) {
+      console.error("Team notification delivery analytics failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Team delivery analytics could not be loaded." });
     }
   }
 
