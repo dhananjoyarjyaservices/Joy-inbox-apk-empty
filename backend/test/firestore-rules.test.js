@@ -43,7 +43,7 @@ test("tenant writes are denied for organization metadata, chats, messages, conta
     rules.indexOf("// Legacy single-owner data")
   );
   assert.ok(tenantBlock.length > 0);
-  assert.equal((tenantBlock.match(/allow write: if false;/g) || []).length, 6);
+  assert.equal((tenantBlock.match(/allow write: if false;/g) || []).length, 7);
   assert.doesNotMatch(tenantBlock, /allow (?:create|update|delete|write): if true/);
 });
 
@@ -67,4 +67,12 @@ test("workspace switcher index reads also require active membership in that work
   const block = rules.slice(rules.indexOf("match /users/{userId}/organizations/{organizationId}"), rules.indexOf("// Organization metadata"));
   assert.match(block, /request\.auth\.uid == userId/);
   assert.match(block, /isActiveOrganizationMember\(organizationId\)/);
+});
+
+test("workspace invitation tokens are explicitly server-only", () => {
+  const invitationBlock = rules.slice(
+    rules.indexOf("match /invitations/{invitationId}"),
+    rules.indexOf("\n      }", rules.indexOf("match /invitations/{invitationId}")) + 8
+  );
+  assert.match(invitationBlock, /allow read, write: if false;/);
 });
