@@ -1482,7 +1482,22 @@ async function sendTenantInteractiveMessage(event) {
     updatedAt: timestamp
   }, { merge: true });
   batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
-  await batch.commit();
+  try {
+    await batch.commit();
+  } catch (error) {
+    // Meta has already accepted this message. Never let a retry send it twice.
+    try {
+      await claim.ref.set({
+        status: "unknown",
+        messageId: result.messageId,
+        persistenceError: String(error.message || "Message persistence failed.").slice(0, 300),
+        updatedAt: new Date()
+      }, { merge: true });
+    } catch (claimError) {
+      console.error("Could not mark interactive send request uncertain:", claimError);
+    }
+    throw error;
+  }
   await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
