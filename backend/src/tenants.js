@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const { getHeader, jsonResponse } = require("./security");
 const { normalizePhoneNumber, sendWhatsAppText, sendWhatsAppMedia, sendWhatsAppPayload } = require("./whatsapp");
+const { sendOrganisationInvitationEmail } = require("./email");
 
 function getMethod(event) {
   return (event.requestContext?.http?.method || event.httpMethod || "GET").toUpperCase();
@@ -143,7 +144,62 @@ async function createInvitation(db, user, orgId, body) {
     targetUid: "", targetEmail: email, details: { role, invitationId }, createdAt: now
   });
   await batch.commit();
-  return { invitationId, email, role, expiresAt: expiresAt.toISOString() };
+  const orgSnapshot = await orgRef.get();
+  let delivery = { sent: false, reason: "not_configured" };
+  try {
+    delivery = await sendOrganisationInvitationEmail({
+      to: email,
+      organisationName: orgSnapshot.exists ? orgSnapshot.data().name : "your organisation",
+      role,
+      orgId,
+      invitationId,
+      expiresAt
+    });
+  } catch (error) {
+    console.error("Invitation email delivery failed:", String(error.message || error).slice(0, 240));
+    delivery = { sent: false, reason: "provider_error" };
+  }
+  await orgRef.collection("invitations").doc(invitationId).set({
+    emailDelivery: delivery.sent ? "sent" : "failed",
+    emailProvider: delivery.provider || null,
+    emailProviderMessageId: delivery.providerMessageId || null,
+    emailLastAttemptAt: new Date()
+  }, { merge: true });
+  return { invitationId, email, role, expiresAt: expiresAt.toISOString(), emailSent: delivery.sent };
+}
+
+async function resendOrganisationInvitationEmail(db, user, orgId, invitationId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin"]);
+  if (!/^[0-9a-f-]{36}$/i.test(invitationId)) fail("A valid invitation ID is required.");
+  const orgRef = db.collection("organisations").doc(orgId);
+  const inviteRef = orgRef.collection("invitations").doc(invitationId);
+  const [orgSnapshot, inviteSnapshot] = await Promise.all([orgRef.get(), inviteRef.get()]);
+  if (!orgSnapshot.exists || !inviteSnapshot.exists) fail("Organisation or invitation was not found.", 404);
+  const invitation = inviteSnapshot.data();
+  if (invitation.status !== "pending") fail("Only pending invitations can be emailed.", 409);
+  const expiresAt = invitation.expiresAt?.toDate ? invitation.expiresAt.toDate() : new Date(invitation.expiresAt);
+  if (!(expiresAt > new Date())) fail("This invitation has expired. Create a new invitation first.", 410);
+  let delivery;
+  try {
+    delivery = await sendOrganisationInvitationEmail({
+      to: invitation.email,
+      organisationName: orgSnapshot.data().name,
+      role: invitation.role,
+      orgId,
+      invitationId,
+      expiresAt
+    });
+  } catch (error) {
+    console.error("Invitation email resend failed:", String(error.message || error).slice(0, 240));
+    delivery = { sent: false, reason: "provider_error" };
+  }
+  await inviteRef.set({
+    emailDelivery: delivery.sent ? "sent" : "failed",
+    emailProvider: delivery.provider || null,
+    emailProviderMessageId: delivery.providerMessageId || null,
+    emailLastAttemptAt: new Date()
+  }, { merge: true });
+  return { invitationId, email: invitation.email, emailSent: delivery.sent, reason: delivery.reason || null };
 }
 
 async function listOrganisationInvitations(db, user, orgId) {
@@ -876,6 +932,7 @@ async function handleTenantRoute(event) {
   const inviteMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations$/);
   const acceptMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/accept$/);
   const invitationActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/([0-9a-f-]{36})$/i);
+  const invitationSendMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/([0-9a-f-]{36})\/send$/i);
   const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
   const memberActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members\/([A-Za-z0-9_-]{1,128})$/);
   const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
@@ -889,7 +946,7 @@ async function handleTenantRoute(event) {
   const consentMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/contacts\/(\d{6,20})\/consent$/);
   const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);
   const auditMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/audit-logs$/);
-  if (!(isCollection || inviteMatch || acceptMatch || invitationActionMatch || membersMatch || memberActionMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch || auditMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || invitationActionMatch || invitationSendMatch || membersMatch || memberActionMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch || auditMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -916,6 +973,10 @@ async function handleTenantRoute(event) {
     }
     if (invitationActionMatch && method === "DELETE") {
       const result = await revokeOrganisationInvitation(db, user, invitationActionMatch[1], invitationActionMatch[2]);
+      return jsonResponse(event, 200, { success: true, invitation: result });
+    }
+    if (invitationSendMatch && method === "POST") {
+      const result = await resendOrganisationInvitationEmail(db, user, invitationSendMatch[1], invitationSendMatch[2]);
       return jsonResponse(event, 200, { success: true, invitation: result });
     }
 
