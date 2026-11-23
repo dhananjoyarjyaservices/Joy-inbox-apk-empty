@@ -2594,7 +2594,9 @@ async function handleTenantCampaigns(event) {
       skippedRecipients: normalized.skipped,
       templateName: definition.templateName,
       language: definition.language,
-      category: definition.category
+      category: definition.category,
+      phoneNumberId: definition.phoneNumberId,
+      createdAt: now.toISOString()
     }
   });
 }
