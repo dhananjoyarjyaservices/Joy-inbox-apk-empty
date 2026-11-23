@@ -68,6 +68,25 @@ test("every legacy owner API route still requires the verified owner when migrat
   });
 });
 
+test("legacy owner API aliases remain disabled behind API Gateway stage and version prefixes", async () => {
+  const paths = [
+    "/prod/send",
+    "/v1/send",
+    "/api/v1/chat-state",
+    "/prod/media",
+    "/api/v1/greeting-settings",
+    "/prod/fcm-tokens/register"
+  ];
+
+  await withLegacyFlag(undefined, async () => {
+    for (const path of paths) {
+      const response = await handler(request(path.endsWith("/media") ? "GET" : "POST", path));
+      assert.equal(response.statusCode, 410, `prefixed legacy route ${path} must be disabled`);
+      assert.match(response.body, /legacy endpoint is disabled/i);
+    }
+  });
+});
+
 test("legacy owner API can only be enabled through the explicit migration flag", async () => {
   await withLegacyFlag("true", async () => {
     const response = await handler(request("POST", "/send"));
