@@ -705,7 +705,7 @@ async function sendTenantTemplate(event) {
   const organization = await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "messages:send");
   const to = normalizePhoneNumber(body.to);
-  if (typeof body.to !== "string" || !/^\\+?\\d{6,20}$/.test(body.to) || !to) {
+  if (typeof body.to !== "string" || !/^\+?\d{6,20}$/.test(body.to) || !to) {
     return jsonResponse(event, 400, { error: "A valid customer phone number is required." });
   }
   const templateName = String(body.templateName || "").trim();
@@ -718,7 +718,7 @@ async function sendTenantTemplate(event) {
   }
   const db = getDb();
   const wabaId = String(body.wabaId || "").trim();
-  if (!/^\\d{5,32}$/.test(wabaId)) return jsonResponse(event, 400, { error: "A valid WhatsApp Business Account ID is required." });
+  if (!/^\d{5,32}$/.test(wabaId)) return jsonResponse(event, 400, { error: "A valid WhatsApp Business Account ID is required." });
   const credentials = await getWhatsAppCredentials(db, organization.id, body.phoneNumberId);
   const version = process.env.GRAPH_API_VERSION || "v26.0";
   const templateUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
