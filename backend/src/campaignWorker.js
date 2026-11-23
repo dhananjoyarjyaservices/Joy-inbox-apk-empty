@@ -344,8 +344,9 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
       }
 
       const result = await (dependencies.sendRecipient || sendCampaignRecipient)(campaign, recipient, credentials, fetchImpl);
+      acceptedMessageId = String(result.messageId || "");
       await finishRecipient(db, campaignRef, document.ref, recipient, "sent", {
-        messageId: result.messageId
+        messageId: acceptedMessageId
       }, dependencies);
       sent += 1;
     } catch (error) {
