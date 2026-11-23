@@ -27,8 +27,8 @@ function normalizeAutomationRule(input) {
 }
 
 function matchesAutomationRule(rule, messageText) {
-  const message = String(messageText || "").trim().toLocaleLowerCase();
-  const keyword = String(rule.keyword || "").trim().toLocaleLowerCase();
+  const message = String(messageText || "").trim().toLowerCase();
+  const keyword = String(rule.keyword || "").trim().toLowerCase();
   if (!message || !keyword) return false;
   if (rule.matchType === "exact") return message === keyword;
   if (rule.matchType === "starts_with") return message.startsWith(keyword);
