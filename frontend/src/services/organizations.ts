@@ -13,10 +13,11 @@ async function request(path: string, method = "GET", body?: unknown) {
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (result.deliveryUnknown === true) {
-      throw new Error("Delivery status is unknown. Do not resend this message yet. Check the WhatsApp conversation first.");
-    }
-    throw new Error(result.error || "Organization request failed.");
+    const error = new Error(result.deliveryUnknown === true
+      ? "Delivery status is unknown. Do not resend this message yet. Check the WhatsApp conversation first."
+      : result.error || "Organization request failed.");
+    Object.assign(error, { deliveryUnknown: result.deliveryUnknown === true });
+    throw error;
   }
   return result;
 }
