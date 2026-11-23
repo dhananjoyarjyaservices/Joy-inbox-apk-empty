@@ -117,6 +117,9 @@ export interface HistoricalAgentPerformance {
   resolvedCount: number;
   responseCount?: number;
   averageResponseMs?: number | null;
+  slaMetCount?: number;
+  slaBreachCount?: number;
+  slaMetPercent?: number | null;
   lastActivityAt?: unknown;
 }
 
