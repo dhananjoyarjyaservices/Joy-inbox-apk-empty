@@ -164,3 +164,29 @@ test("Stripe webhook processor ignores an already processed event", async () => 
   assert.equal(result.duplicate, true);
   assert.equal(result.inProgress, false);
 });
+
+test("checkout cannot create a duplicate subscription for an active workspace", async () => {
+  const organization = {
+    id: "org_active",
+    ref: { collection() {
+      return { doc() {
+        return { async get() {
+          return { exists: true, get: key => key === "status" ? "active" : "cus_existing" };
+        } };
+      } };
+    } }
+  };
+  await assert.rejects(
+    createCheckoutSession({
+      organization,
+      decoded: { email: "owner@example.com" },
+      planKey: "starter",
+      env: {
+        STRIPE_PRICE_STARTER: "price_starter",
+        BILLING_SUCCESS_URL: "https://app.example.com/success",
+        BILLING_CANCEL_URL: "https://app.example.com/cancel"
+      }
+    }),
+    error => error.statusCode === 409 && /Billing Portal/.test(error.message)
+  );
+});
