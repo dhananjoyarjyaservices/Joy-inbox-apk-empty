@@ -237,6 +237,8 @@ test("a workspace cannot disconnect another workspace's WhatsApp number", async 
 test("a disconnected WhatsApp number can be connected to a different organization", async () => {
   const db = fakeTenantDb();
   process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 12).toString("base64");
+  db.docs.set("organizations/org_first", { status: "active" });
+  db.docs.set("organizations/org_second", { status: "active" });
   const first = { id: "org_first", ref: db.collection("organizations").doc("org_first") };
   const second = { id: "org_second", ref: db.collection("organizations").doc("org_second") };
   await saveWhatsAppConnection(db, first, {
