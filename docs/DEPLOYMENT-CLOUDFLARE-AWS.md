@@ -66,7 +66,7 @@ Legacy `PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN` are only for legacy owner-o
 ## Current deployment blockers
 
 1. No AWS deployment connector/credentials or deployment workflow is available in this repository session. The existing Lambda cannot safely be updated from here.
-2. `backend/package-lock.json` is absent. Generate and commit a real lockfile before producing a reproducible Lambda package; do not hand-write one.
+2. `backend/package-lock.json` is now generated and committed by the repository's Node.js 22 lockfile workflow. CI uses `npm ci` against that lockfile; regenerate it when `backend/package.json` changes and review the resulting dependency diff before release; do not hand-write one.
 3. The actual Cloudflare Pages project settings and its currently deployed commit have not been verified. The supplied URL alone does not prove that this GitHub repository/branch is connected.
 4. The current Lambda Function URL in the old frontend example was not validated as the correct deployed SaaS API. Set `VITE_API_BASE_URL` only after confirming the intended Lambda Function URL.
 5. Firebase project values and the VAPID public key must be copied from the correct Firebase Web App configuration. The example file intentionally uses placeholders.
