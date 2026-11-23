@@ -41,6 +41,9 @@ type TenantMessage = {
   mediaMimeType?: string | null;
   mediaFilename?: string | null;
   phoneNumberId?: string | null;
+  interactive?: TenantInteractiveMessageInput;
+  interactiveReplyId?: string;
+  interactiveReplyTitle?: string;
 };
 
 function asDate(value: TenantChat["lastMessageAt"] | TenantMessage["timestamp"]): Date | null {
