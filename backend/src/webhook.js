@@ -343,7 +343,66 @@ async function updateMessageStatus(status) {
 }
 
 
-async function processOrganisationWebhookChange(orgId, value) {
+
+function decryptOrganisationWhatsAppToken(record) {
+  const keyHex = process.env.WHATSAPP_CREDENTIALS_ENCRYPTION_KEY || "";
+  if (!/^[a-f0-9]{64}$/i.test(keyHex)) throw new Error("WhatsApp credential encryption key is not configured.");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(keyHex, "hex"), Buffer.from(record.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(record.authTag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(record.ciphertext, "base64")), decipher.final()]).toString("utf8");
+}
+
+async function maybeRunOrganisationAutomation(orgId, phone, message, contactName) {
+  if (!message || !message.id || !phone) return;
+  const db = getDb();
+  const orgRef = db.collection("organisations").doc(orgId);
+  const [settingsSnapshot, connectionSnapshot, contactSnapshot] = await Promise.all([
+    orgRef.collection("automation").doc("settings").get(),
+    orgRef.collection("whatsappConnections").doc("primary").get(),
+    orgRef.collection("contacts").doc(phone).get()
+  ]);
+  if (!settingsSnapshot.exists || !connectionSnapshot.exists) return;
+  const settings = settingsSnapshot.data() || {};
+  const connection = connectionSnapshot.data() || {};
+  if (!connection.encryptedAccessToken || !connection.phoneNumberId) return;
+  const credentials = {
+    accessToken: decryptOrganisationWhatsAppToken(connection.encryptedAccessToken),
+    phoneNumberId: connection.phoneNumberId
+  };
+  const priorContact = contactSnapshot.exists ? contactSnapshot.data() : {};
+  const body = message.type === "text" ? String(message.text?.body || "").trim() : "";
+  let action = null;
+  if (settings.awayEnabled && settings.awayText) {
+    action = { kind: "away", text: settings.awayText };
+  } else if (!priorContact.greetingSentAt && settings.greetingEnabled && settings.greetingText) {
+    action = { kind: "greeting", text: settings.greetingText };
+  } else if (body && Array.isArray(settings.keywordRules)) {
+    const normalized = body.toLowerCase();
+    const rule = settings.keywordRules.find((item) => item.enabled !== false && item.keyword && normalized.includes(String(item.keyword).toLowerCase()));
+    if (rule) action = { kind: "keyword", text: rule.reply };
+  }
+  if (!action || !action.text) return;
+  const eventId = crypto.createHash("sha256").update(String(message.id) + ":" + action.kind).digest("hex");
+  const eventRef = orgRef.collection("automationEvents").doc(eventId);
+  const claimed = await db.runTransaction(async (tx) => {
+    const eventSnapshot = await tx.get(eventRef);
+    if (eventSnapshot.exists) return false;
+    tx.create(eventRef, { messageId: message.id, customerPhone: phone, kind: action.kind, status: "processing", createdAt: new Date() });
+    if (action.kind === "greeting") {
+      tx.set(orgRef.collection("contacts").doc(phone), { greetingSentAt: new Date() }, { merge: true });
+    }
+    return true;
+  });
+  if (!claimed) return;
+  try {
+    const sent = await sendWhatsAppText(phone, action.text, null, credentials);
+    await eventRef.set({ status: "sent", outgoingMessageId: sent.messageId, completedAt: new Date() }, { merge: true });
+  } catch (error) {
+    await eventRef.set({ status: "failed", error: String(error.message || "Send failed").slice(0, 250), completedAt: new Date() }, { merge: true });
+    console.error("Organisation automation send failed:", error);
+  }
+}
+\nasync function processOrganisationWebhookChange(orgId, value) {
   const db = getDb();
   const orgRef = db.collection("organisations").doc(orgId);
   const contacts = value.contacts || [];
