@@ -10,7 +10,9 @@ const {
   classifyCampaignSendError,
   buildTemplatePayload,
   claimCampaignRecipient,
-  markExpiredCampaignRecipient
+  markExpiredCampaignRecipient,
+  verifyApprovedTemplate,
+  processCampaign
 } = require("../src/campaignWorker");
 
 test("campaign worker uses bounded batch sizes and retry delays", () => {
