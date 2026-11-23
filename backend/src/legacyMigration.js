@@ -8,7 +8,7 @@ const LEGACY_MEDIA_FIELDS = new Set([
 function copySafeFields(value, excluded = LEGACY_MEDIA_FIELDS) {
   const output = {};
   for (const [key, item] of Object.entries(value || {})) {
-    if (excluded.has(key) || /(?:storagepath|signedurl|mediaurl|downloadurl|thumbnailurl|base64|mediabytes|rawmedia|filebuffer)/i.test(key)) continue;
+    if (excluded.has(key) || /(?:storagepath|signedurl|mediaurl|imageurl|videourl|audiourl|documenturl|fileurl|downloadurl|thumbnailurl|avatarurl|profilepictureurl|photourl|base64|mediabytes|rawmedia|filebuffer)/i.test(key)) continue;
     if (item === undefined || typeof item === "function") continue;
     output[key] = item;
   }
