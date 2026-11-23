@@ -33,7 +33,7 @@ function makeDb({ chatExists = true, member = { status: "active", role: "agent",
       const updates = [];
       await callback({
         async get(ref) {
-          if (ref === chatRef) return { exists: chatExists };
+          if (ref === chatRef) return { exists: chatExists, get: () => undefined };
           if (ref === memberRef) return { exists: Boolean(member), data: () => member };
           throw new Error("Unexpected document");
         },
