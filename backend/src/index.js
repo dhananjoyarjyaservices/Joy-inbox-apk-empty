@@ -2682,6 +2682,48 @@ async function handleTenantCampaigns(event) {
   const campaigns = organization.ref.collection("campaigns");
 
   if (method === "GET") {
+    const params = event.queryStringParameters || {};
+    if (params.campaignId) {
+      const campaignId = String(params.campaignId);
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(campaignId)) {
+        return jsonResponse(event, 400, { error: "A valid campaign ID is required." });
+      }
+      const campaignRef = campaigns.doc(campaignId);
+      const campaignSnapshot = await campaignRef.get();
+      if (!campaignSnapshot.exists) return jsonResponse(event, 404, { error: "Campaign was not found." });
+      const limit = Math.max(1, Math.min(100, Number(params.limit) || 50));
+      const recipientsCollection = campaignRef.collection("recipients");
+      let query = recipientsCollection.orderBy("createdAt", "desc").limit(limit);
+      if (params.cursor) {
+        const cursorId = String(params.cursor);
+        if (!/^[A-Za-z0-9_-]{1,128}$/.test(cursorId)) return jsonResponse(event, 400, { error: "Invalid campaign recipient cursor." });
+        const cursorSnapshot = await recipientsCollection.doc(cursorId).get();
+        if (!cursorSnapshot.exists) return jsonResponse(event, 400, { error: "Campaign recipient cursor was not found." });
+        query = query.startAfter(cursorSnapshot);
+      }
+      const recipientSnapshot = await query.get();
+      return jsonResponse(event, 200, {
+        campaignId,
+        recipients: recipientSnapshot.docs.map(document => {
+          const value = document.data() || {};
+          const asIso = field => field?.toDate ? field.toDate().toISOString()
+            : field instanceof Date ? field.toISOString() : null;
+          return {
+            id: document.id,
+            phone: String(value.phone || ""),
+            status: String(value.status || "pending"),
+            deliveryStatus: String(value.deliveryStatus || ""),
+            reason: String(value.reason || ""),
+            error: String(value.error || ""),
+            messageId: String(value.messageId || ""),
+            createdAt: asIso(value.createdAt),
+            sentAt: asIso(value.sentAt),
+            deliveryUpdatedAt: asIso(value.deliveryUpdatedAt)
+          };
+        }),
+        nextCursor: recipientSnapshot.docs.length === limit ? recipientSnapshot.docs[recipientSnapshot.docs.length - 1].id : null
+      });
+    }
     const snapshot = await campaigns.orderBy("createdAt", "desc").limit(50).get();
     return jsonResponse(event, 200, {
       campaigns: snapshot.docs.map(document => {
