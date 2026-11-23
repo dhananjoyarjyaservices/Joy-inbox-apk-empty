@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { saveTenantIncomingMessage } = require("../src/webhook");
+const { saveTenantIncomingMessage, verifyWebhook, isValidMetaWebhookPayload, getWebhookProcessingStatusCode } = require("../src/webhook");
 
 function createRef(path, id = path.split("/").pop()) {
   return {
@@ -106,4 +106,55 @@ test("duplicate incoming customer media message is not written twice", async () 
   assert.equal(await saveTenantIncomingMessage(db, organization, payload, "Customer", "123456789012345"), true);
   assert.equal(await saveTenantIncomingMessage(db, organization, payload, "Customer", "123456789012345"), false);
   assert.equal(db.documents.size, 2);
+});
+
+
+test("Meta webhook subscription verification returns only a bounded challenge for the configured token", t => {
+  const previous = process.env.WHATSAPP_VERIFY_TOKEN;
+  process.env.WHATSAPP_VERIFY_TOKEN = "joy-inbox-webhook-verification-secret";
+  t.after(() => {
+    if (previous === undefined) delete process.env.WHATSAPP_VERIFY_TOKEN;
+    else process.env.WHATSAPP_VERIFY_TOKEN = previous;
+  });
+
+  const valid = verifyWebhook({
+    queryStringParameters: {
+      "hub.mode": "subscribe",
+      "hub.verify_token": "joy-inbox-webhook-verification-secret",
+      "hub.challenge": "challenge-123"
+    }
+  });
+  assert.deepEqual(valid, { statusCode: 200, body: "challenge-123" });
+
+  const wrongToken = verifyWebhook({
+    queryStringParameters: {
+      "hub.mode": "subscribe",
+      "hub.verify_token": "wrong",
+      "hub.challenge": "challenge-123"
+    }
+  });
+  assert.equal(wrongToken.statusCode, 403);
+
+  const oversizedChallenge = verifyWebhook({
+    queryStringParameters: {
+      "hub.mode": "subscribe",
+      "hub.verify_token": "joy-inbox-webhook-verification-secret",
+      "hub.challenge": "x".repeat(4097)
+    }
+  });
+  assert.equal(oversizedChallenge.statusCode, 403);
+});
+
+test("Meta webhook payload validation rejects malformed structures", () => {
+  assert.equal(isValidMetaWebhookPayload({ object: "whatsapp_business_account", entry: [] }), true);
+  assert.equal(isValidMetaWebhookPayload(null), false);
+  assert.equal(isValidMetaWebhookPayload({ object: "whatsapp_business_account", entry: {} }), false);
+  assert.equal(isValidMetaWebhookPayload({ object: 7, entry: [] }), false);
+  assert.equal(isValidMetaWebhookPayload([]), false);
+});
+
+test("webhook processing errors preserve only retryable server status codes", () => {
+  assert.equal(getWebhookProcessingStatusCode({ statusCode: 503 }), 503);
+  assert.equal(getWebhookProcessingStatusCode({ statusCode: 429 }), 500);
+  assert.equal(getWebhookProcessingStatusCode(new Error("unknown")), 500);
 });
