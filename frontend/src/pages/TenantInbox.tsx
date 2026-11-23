@@ -549,6 +549,7 @@ export default function TenantInbox() {
   }
   async function changeCampaignStatus(campaign: OrganizationCampaign, action: OrganizationCampaignAction) {
     if (!organization || campaignActionLoading) return;
+    if (action === "start" && !window.confirm(`Start sending the approved WhatsApp template "${campaign.templateName}" to up to ${campaign.recipientCount} opted-in recipients?`)) return;
     if (action === "cancel" && !window.confirm(`Cancel campaign "${campaign.name}"? Messages already accepted by WhatsApp cannot be recalled.`)) return;
     let scheduledAt: string | undefined;
     if (action === "schedule") {
