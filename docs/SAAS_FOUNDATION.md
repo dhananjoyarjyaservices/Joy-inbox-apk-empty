@@ -98,3 +98,14 @@ Store the value in AWS Lambda environment configuration or a secrets manager; do
 Configure the same AWS Lambda webhook URL (the `/webhook` endpoint) in Meta, and use the one-time organisation verify token displayed after saving. In Meta, subscribe the relevant WhatsApp Business Account to the app and enable the `messages` webhook field. The Meta App Secret used for request signature validation remains a platform-level secret.
 
 The new inbox supports basic text conversation viewing and sending. Team assignment, internal notes, tags, quick replies, media/template sending, automations, broadcasts, analytics and billing remain future work. Do not migrate the old top-level single-owner chat data automatically; it needs a reviewed tenant ownership mapping and migration plan.
+
+
+## Team inbox additions
+
+The organisation inbox now also supports:
+- Assigning a conversation to the currently signed-in agent (managers can assign to any active organisation member through the API).
+- Internal team-only notes stored under each organisation chat.
+- A server API for managers to update a conversation's tags.
+- A server API for updating conversation state to open, pending or resolved while assigning.
+
+The basic UI exposes internal notes and "Assign to me". Manager assignment to another agent, status controls and tag editing still need UI controls. All these API actions validate active organisation membership; agents cannot assign conversations to other agents.
