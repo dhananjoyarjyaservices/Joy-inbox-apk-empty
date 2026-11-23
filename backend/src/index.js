@@ -2589,9 +2589,12 @@ async function handleTenantCampaigns(event) {
   });
   const components = Array.isArray(approved.components) ? approved.components : [];
   const bodyText = components.find(item => item.type === "BODY")?.text || "";
+  const headerDefinition = components.find(item => item.type === "HEADER");
+  const headerText = headerDefinition?.format === "TEXT" ? headerDefinition.text || "" : "";
   const placeholders = [...String(bodyText).matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
+  const headerPlaceholders = [...String(headerText).matchAll(/\{\{\s*(\d+)\s*\}\}/g)];
   const requiredVariables = placeholders.length ? Math.max(...placeholders) : 0;
-  if (components.some(item => item.type === "HEADER" && item.format !== "TEXT") ||
+  if ((headerDefinition && headerDefinition.format !== "TEXT") || headerPlaceholders.length > 0 ||
       components.some(item => item.type === "BUTTONS" && Array.isArray(item.buttons) &&
         item.buttons.some(button => button.type === "URL" && String(button.url || "").includes("{{")))) {
     return jsonResponse(event, 400, {
