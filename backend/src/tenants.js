@@ -476,7 +476,8 @@ async function sendOrganisationMedia(db, user, orgId, body) {
   const to = normalizePhoneNumber(body.to);
   const type = String(body.type || "");
   const caption = String(body.caption || "").trim();
-  const filename = String(body.filename || "attachment").replace(/[\\\\/\r\n]/g, "_").slice(0, 180);
+  const filename = String(body.filename || "attachment").replace(/[\\\\/\r
+]/g, "_").slice(0, 180);
   const mimeType = String(body.mimeType || "");
   const encoded = String(body.fileBase64 || "");
   if (!/^\d{6,20}$/.test(to) || !["image", "video", "audio", "document"].includes(type)) {
@@ -835,7 +836,8 @@ async function handleTenantRoute(event) {
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
   const campaignsMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/campaigns(?:\/([A-Za-z0-9_-]{10,40})\/preview)?$/);
   const consentMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/contacts\/(\d{6,20})\/consent$/);
-  const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);\n  const auditMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/audit-logs$/);
+  const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);
+  const auditMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/audit-logs$/);
   if (!(isCollection || inviteMatch || acceptMatch || membersMatch || memberActionMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch || auditMatch)) return null;
 
   try {
@@ -863,7 +865,11 @@ async function handleTenantRoute(event) {
       const result = await updateOrganisationContactConsent(db, user, consentMatch[1], consentMatch[2], parseBody(event));
       return jsonResponse(event, 200, { success: true, consent: result });
     }
-    if (auditMatch && method === "GET") {\n      const auditLogs = await listOrganisationAuditLogs(db, user, auditMatch[1]);\n      return jsonResponse(event, 200, { auditLogs });\n    }\n    if (automationMatch && method === "GET") {
+    if (auditMatch && method === "GET") {
+      const auditLogs = await listOrganisationAuditLogs(db, user, auditMatch[1]);
+      return jsonResponse(event, 200, { auditLogs });
+    }
+    if (automationMatch && method === "GET") {
       const settings = await getOrganisationAutomation(db, user, automationMatch[1]);
       return jsonResponse(event, 200, { settings });
     }
