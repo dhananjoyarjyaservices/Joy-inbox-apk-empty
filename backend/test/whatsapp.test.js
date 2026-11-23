@@ -62,3 +62,44 @@ test("tenant credential send uses the supplied phone number ID and bearer token"
     else process.env.PHONE_NUMBER_ID = originalPhone;
   }
 });
+
+
+test("Meta 5xx send response is uncertain and must not be automatically retried", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: false,
+    status: 503,
+    async json() { return { error: { message: "Service temporarily unavailable" } }; }
+  });
+  try {
+    await assert.rejects(
+      sendWhatsAppText("15551234567", "Hello", undefined, {
+        accessToken: "EAA-test-token",
+        phoneNumberId: "123456789012345"
+      }),
+      (error) => error.definitive === false && error.retryable === false
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("Meta 4xx send response is a definitive rejection", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    async json() { return { error: { message: "Invalid recipient" } }; }
+  });
+  try {
+    await assert.rejects(
+      sendWhatsAppText("15551234567", "Hello", undefined, {
+        accessToken: "EAA-test-token",
+        phoneNumberId: "123456789012345"
+      }),
+      (error) => error.definitive === true && error.retryable === false
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
