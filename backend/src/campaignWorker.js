@@ -92,7 +92,7 @@ async function finishRecipient(db, campaignRef, recipientRef, recipient, outcome
       updatedAt: now,
       ...details
     };
-    if (outcome === "sent") patch.sentAt = now;
+    if (outcome === "sent") { patch.sentAt = now; patch.deliveryStatus = "sent"; }
     if (outcome === "failed" || outcome === "uncertain") patch.finishedAt = now;
     transaction.update(recipientRef, patch);
     const counters = {
