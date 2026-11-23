@@ -63,6 +63,12 @@ service cloud.firestore {
           && isActiveOrganizationMember(organizationId);
         allow write: if false;
       }
+
+      // Invitation tokens are server-only and must never be readable by
+      // ordinary workspace members through the client SDK.
+      match /invitations/{invitationId} {
+        allow read, write: if false;
+      }
     }
 
     // Legacy single-owner data is limited to these known root collections.
