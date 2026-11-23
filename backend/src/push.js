@@ -40,13 +40,14 @@ async function removeInvalidTokens(collection, responses) {
   if (removed) await batch.commit();
 }
 
-async function sendToDeviceCollection(admin, collection, data) {
+async function sendToDeviceCollection(admin, collection, data, deliveryContext = null) {
   const snapshot = await collection.get();
   const devices = snapshot.docs.map((document) => ({
     deviceId: document.id,
     token: document.get("token")
   })).filter((device) => typeof device.token === "string" && device.token.length > 0);
   let delivered = 0;
+  const deliveryResults = [];
   for (let offset = 0; offset < devices.length; offset += MAX_MULTICAST_SIZE) {
     const group = devices.slice(offset, offset + MAX_MULTICAST_SIZE);
     const result = await admin.messaging().sendEachForMulticast({
@@ -58,6 +59,11 @@ async function sendToDeviceCollection(admin, collection, data) {
       ...response,
       deviceId: group[index].deviceId
     })));
+    result.responses.forEach((response, index) => deliveryResults.push({
+      deviceId: group[index].deviceId, success: response.success,
+      errorCode: response.success ? null : String(response.error?.code || "messaging/unknown-error"),
+      attempts: 1
+    }));
     const retryIndexes = result.responses.map((response, index) => ({ response, index }))
       .filter(({ response }) => !response.success &&
         ["messaging/server-unavailable", "messaging/internal-error", "messaging/unknown-error"].includes(response.error?.code))
@@ -70,12 +76,44 @@ async function sendToDeviceCollection(admin, collection, data) {
         webpush: { headers: { Urgency: "high", TTL: "86400" } }
       });
       delivered += retry.responses.filter(response => response.success).length;
+      retry.responses.forEach((response, retryIndex) => {
+        const originalIndex = retryIndexes[retryIndex];
+        const record = deliveryResults.find(item => item.deviceId === group[originalIndex].deviceId);
+        if (record) {
+          record.success = response.success;
+          record.errorCode = response.success ? null : String(response.error?.code || "messaging/unknown-error");
+          record.attempts = 2;
+        }
+      });
       await removeInvalidTokens(collection, retry.responses.map((response, index) => ({
         ...response,
         deviceId: group[retryIndexes[index]].deviceId
       })));
     }
     delivered += result.responses.filter(response => response.success).length;
+  }
+  if (deliveryContext && deliveryResults.length) {
+    try {
+      const logCollection = collection.firestore.collection("organizations").doc(deliveryContext.organizationId)
+        .collection("members").doc(deliveryContext.uid).collection("notificationDeliveries");
+      const batch = collection.firestore.batch();
+      const now = new Date();
+      deliveryResults.forEach(item => {
+        const ref = logCollection.doc();
+        batch.set(ref, {
+          type: deliveryContext.type,
+          status: item.success ? "delivered" : "failed",
+          deviceId: item.deviceId,
+          attempts: item.attempts,
+          errorCode: item.errorCode,
+          createdAt: now,
+          updatedAt: now
+        });
+      });
+      await batch.commit();
+    } catch (error) {
+      console.warn("Notification delivery log could not be saved:", error);
+    }
   }
   return delivered;
 }
@@ -104,7 +142,7 @@ async function sendTenantSlaOverdueNotification(organizationId, uid, phone, send
     organizationId,
     soundEnabled: preferences.soundEnabled === false ? "false" : "true",
     desktopEnabled: preferences.desktopEnabled === false ? "false" : "true"
-  });
+  }, { organizationId, uid, type: "sla" });
 }
 
 async function sendTenantIncomingTextNotification(organizationId, phone, senderName, text, messageId) {
@@ -124,7 +162,7 @@ async function sendTenantIncomingTextNotification(organizationId, phone, senderN
       ...data,
       soundEnabled: preferences.soundEnabled ? "true" : "false",
       desktopEnabled: preferences.desktopEnabled ? "true" : "false"
-    });
+    }, { organizationId, uid: member.id, type: "message" });
   }
 }
 
