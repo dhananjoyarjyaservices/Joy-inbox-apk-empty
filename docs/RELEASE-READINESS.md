@@ -19,6 +19,7 @@ This checklist separates code already present from work that requires real servi
 - [x] EventBridge schedule templates for campaign, automation and SLA workers.
 - [x] Unit tests for Meta webhook HMAC verification, inbound media metadata-only persistence, duplicate webhook-message handling and workspace invitation lifecycle (hashed tokens, verified-email acceptance, expiry, revocation and safe link generation).
 - [x] Firestore rules explicitly deny client reads and writes to workspace invitation documents; emulator coverage verifies that even active owners cannot read invitation token hashes.
+- [x] Firestore emulator verifies legacy root chat/deletion/WhatsApp-number collections remain readable only by the configured legacy owner, are not writable from the client, and do not expose arbitrary user profile documents to agents.
 - [x] Legacy single-owner HTTP API routes (`/send`, chat state/deletion, media, status, greeting settings and legacy FCM token routes) fail closed with HTTP 410 unless `LEGACY_OWNER_API_ENABLED=true`; organization-scoped routes and Meta webhooks are excluded. Automated tests cover the default-off behavior, explicit migration opt-in and tenant-route isolation.
 
 ## Required before staging acceptance
