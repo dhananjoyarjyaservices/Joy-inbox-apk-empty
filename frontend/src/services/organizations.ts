@@ -147,3 +147,33 @@ export async function saveOrganizationNotificationPreferences(organizationId: st
   const result = await request("/organizations/notifications/preferences", "PUT", { organizationId, ...preferences });
   return result.preferences;
 }
+
+
+export interface OrganizationAutomationRule {
+  id: string;
+  name: string;
+  keyword: string;
+  matchType: "contains" | "exact" | "starts_with";
+  response: string;
+  enabled: boolean;
+  priority: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+export async function listOrganizationAutomationRules(organizationId: string): Promise<OrganizationAutomationRule[]> {
+  const result = await request(`/organizations/automation-rules?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.rules) ? result.rules : [];
+}
+export async function saveOrganizationAutomationRule(
+  organizationId: string,
+  data: Omit<OrganizationAutomationRule, "id" | "createdAt" | "updatedAt">,
+  resourceId?: string,
+): Promise<OrganizationAutomationRule> {
+  const result = await request("/organizations/automation-rules", resourceId
+    ? "PUT" : "POST", { organizationId, data, ...(resourceId ? { resourceId } : {}) });
+  if (!result.rule?.id) throw new Error("Automation rule could not be saved.");
+  return result.rule;
+}
+export async function deleteOrganizationAutomationRule(organizationId: string, resourceId: string): Promise<void> {
+  await request("/organizations/automation-rules", "DELETE", { organizationId, resourceId });
+}
