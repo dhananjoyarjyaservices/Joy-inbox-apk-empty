@@ -49,7 +49,7 @@ test("recordCampaignOptOut creates an organization-scoped suppression record", a
   };
   const result = await recordCampaignOptOut(db, "org_123", "+91 98765 43210", "wamid.123");
   assert.equal(result.status, "opted_out");
-  assert.equal(stored.phone, "919876543210");
+  assert.equal(Object.hasOwn(stored, "phone"), false);
   assert.equal(stored.source, "whatsapp_inbound");
   assert.equal(stored.lastInboundMessageId, "wamid.123");
 });
