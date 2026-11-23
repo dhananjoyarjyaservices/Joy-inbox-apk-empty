@@ -50,6 +50,9 @@ test("recipient normalization rejects empty or oversized campaigns", () => {
 });
 
 test("campaign state transitions prevent resuming terminal campaigns", () => {
+  assert.equal(canTransitionCampaign("preparing", "draft"), true);
+  assert.equal(canTransitionCampaign("preparing", "failed"), true);
+  assert.equal(canTransitionCampaign("preparing", "sending"), false);
   assert.equal(canTransitionCampaign("draft", "queued"), true);
   assert.equal(canTransitionCampaign("sending", "paused"), true);
   assert.equal(canTransitionCampaign("completed", "queued"), false);
