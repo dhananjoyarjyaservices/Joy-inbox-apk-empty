@@ -924,6 +924,8 @@ async function checkTenantSlaAlerts(event) {
       ? pendingValue.toMillis()
       : pendingValue instanceof Date ? pendingValue.getTime() : NaN;
     if (!Number.isFinite(pendingMillis) || pendingMillis > Date.now() - targetMs) continue;
+    const notificationPreferences = await getTenantNotificationPreferences(db, organization.id, assignedTo);
+    if (!notificationPreferences.sla) continue;
 
     const chatRef = document.ref;
     const claimed = await db.runTransaction(async (transaction) => {
