@@ -190,3 +190,65 @@ test("checkout cannot create a duplicate subscription for an active workspace", 
     error => error.statusCode === 409 && /Billing Portal/.test(error.message)
   );
 });
+
+test("checkout completion webhook stores subscription state in the correct organization", async () => {
+  let eventRecord = null;
+  let subscriptionRecord = null;
+  const eventRef = {
+    async set(patch) { eventRecord = { ...eventRecord, ...patch }; }
+  };
+  const organizationRef = {
+    async get() { return { exists: true }; },
+    collection(name) {
+      assert.equal(name, "billing");
+      return { doc(id) {
+        assert.equal(id, "subscription");
+        return { async set(value) { subscriptionRecord = value; } };
+      } };
+    }
+  };
+  const db = {
+    collection(name) {
+      if (name === "stripeWebhookEvents") return { doc() { return eventRef; } };
+      if (name === "organizations") return { doc(id) {
+        assert.equal(id, "org_123");
+        return organizationRef;
+      } };
+      throw new Error("Unexpected collection " + name);
+    },
+    async runTransaction(callback) {
+      return callback({
+        async get() {
+          return { exists: Boolean(eventRecord), data: () => eventRecord, get: key => eventRecord?.[key] };
+        },
+        set(_ref, patch) { eventRecord = { ...eventRecord, ...patch }; }
+      });
+    }
+  };
+  const result = await processStripeWebhookEvent(db, {
+    id: "evt_checkout_123456789",
+    type: "checkout.session.completed",
+    data: { object: {
+      id: "cs_123",
+      customer: "cus_123",
+      subscription: "sub_123",
+      metadata: { organizationId: "org_123" }
+    } }
+  }, {
+    getSubscription: async () => ({
+      id: "sub_123",
+      customer: "cus_123",
+      status: "active",
+      current_period_end: 1_800_000_000,
+      cancel_at_period_end: false,
+      metadata: { organizationId: "org_123" },
+      items: { data: [{ price: { id: "price_growth" } }] }
+    })
+  });
+  assert.equal(result.processed, true);
+  assert.equal(subscriptionRecord.plan, "unknown");
+  assert.equal(subscriptionRecord.status, "active");
+  assert.equal(subscriptionRecord.stripeCustomerId, "cus_123");
+  assert.equal(subscriptionRecord.stripeSubscriptionId, "sub_123");
+  assert.equal(eventRecord.status, "processed");
+});
