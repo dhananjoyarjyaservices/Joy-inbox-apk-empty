@@ -53,11 +53,23 @@ test("lists only the bounded latest tenant internal notes", async () => {
 test("creates a private note with authenticated author metadata", async () => {
   let saved = null;
   const db = {
-    collection() {
-      return { doc() {
-        return { async get() { return { exists: true }; }, collection() {
-          return { doc() {
-            return { id: "note_123", async set(value) { saved = value; } };
+    collection(name) {
+      assert.equal(name, "organizations");
+      return { doc(orgId) {
+        assert.equal(orgId, "org_1");
+        return { collection(child) {
+          assert.equal(child, "chats");
+          return { doc(chatId) {
+            assert.equal(chatId, "chat_1");
+            return {
+              async get() { return { exists: true }; },
+              collection(notes) {
+                assert.equal(notes, "internalNotes");
+                return { doc() {
+                  return { id: "note_123", async set(value) { saved = value; } };
+                } };
+              }
+            };
           } };
         } };
       } };
