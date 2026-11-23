@@ -318,6 +318,32 @@ async function handleOrganizationMembers(event) {
   return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
+async function handleTenantAutomationRuns(event) {
+  const decoded = await authenticateUser(event);
+  if (getMethod(event) !== "GET") return jsonResponse(event, 405, { error: "Method not allowed." });
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "settings:manage");
+  const snapshot = await organization.ref.collection("automationRuns").orderBy("createdAt", "desc").limit(50).get();
+  const runs = snapshot.docs.map((document) => {
+    const data = document.data();
+    return {
+      id: document.id,
+      ruleId: String(data.ruleId || ""),
+      ruleName: String(data.ruleName || "Automation"),
+      customerPhone: String(data.customerPhone || ""),
+      status: String(data.status || "unknown"),
+      completedSteps: Number(data.completedSteps || 0),
+      totalSteps: Number(data.totalSteps || 1),
+      error: data.error ? String(data.error).slice(0, 300) : "",
+      reason: data.reason ? String(data.reason).slice(0, 120) : "",
+      createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
+      updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : null
+    };
+  });
+  return jsonResponse(event, 200, { runs, limit: 50 });
+}
+
 async function handleTenantAutomationRules(event) {
   const decoded = await authenticateUser(event);
   const method = getMethod(event);
@@ -2499,6 +2525,11 @@ exports.handler = async (event) => {
       console.error("Organization member request failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Organization members could not be updated." });
     }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/automation-runs")) {
+    try { return await handleTenantAutomationRuns(event); }
+    catch (error) { console.error("Tenant automation runs request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Automation run history could not be loaded." }); }
   }
 
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/automation-rules")) {
