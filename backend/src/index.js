@@ -47,7 +47,7 @@ const {
   claimSendRequest,
   markSendRequestFailed
 } = require("./sendRequests");
-const { runScheduledSlaChecks } = require("./slaScheduler");
+const { runScheduledSlaChecks, saveTenantSlaNotification } = require("./slaScheduler");
 const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_SLA_MINUTES } = require("./slaSettings");
 const {
   getDeviceDocument,
@@ -746,12 +746,16 @@ async function handleOrganizationNotifications(event) {
     if (typeof body.notificationId !== "string" || !/^[A-Za-z0-9_-]{1,180}$/.test(body.notificationId)) {
       return jsonResponse(event, 400, { error: "A valid notification ID is required." });
     }
-    await readRef.doc(body.notificationId).set({ readAt: new Date() }, { merge: true });
+    await Promise.all([
+      readRef.doc(body.notificationId).set({ readAt: new Date() }, { merge: true }),
+      organization.ref.collection("members").doc(decoded.uid).collection("notifications")
+        .doc(body.notificationId).set({ read: true, readAt: new Date() }, { merge: true })
+    ]);
     return jsonResponse(event, 200, { success: true });
   }
   const [auditSnapshot, slaSnapshot, readSnapshot] = await Promise.all([
     organization.ref.collection("auditLogs").orderBy("createdAt", "desc").limit(100).get(),
-    organization.ref.collection("chats").orderBy("slaOverdueLastDeliveredAt", "desc").limit(50).get(),
+    organization.ref.collection("members").doc(decoded.uid).collection("notifications").orderBy("createdAt", "desc").limit(100).get(),
     readRef.get()
   ]);
   const readIds = new Set(readSnapshot.docs.map(doc => doc.id));
@@ -773,19 +777,13 @@ async function handleOrganizationNotifications(event) {
     });
   }
   for (const doc of slaSnapshot.docs) {
-    const chat = doc.data() || {};
-    if (chat.assignedTo !== decoded.uid || !chat.slaOverdueLastDeliveredAt) continue;
-    const deliveredMillis = chat.slaOverdueLastDeliveredAt?.toMillis
-      ? chat.slaOverdueLastDeliveredAt.toMillis()
-      : new Date(chat.slaOverdueLastDeliveredAt).getTime();
-    const id = `sla_${doc.id}_${deliveredMillis}`;
-    const createdAt = chat.slaOverdueLastDeliveredAt?.toDate
-      ? chat.slaOverdueLastDeliveredAt.toDate().toISOString()
-      : new Date(chat.slaOverdueLastDeliveredAt).toISOString();
+    const item = doc.data() || {};
+    const createdAt = item.createdAt?.toDate ? item.createdAt.toDate().toISOString() : new Date(item.createdAt || 0).toISOString();
     notifications.push({
-      id, type: "sla", title: "SLA response overdue",
-      body: `A customer conversation needs your reply: ${String(chat.customerName || chat.customerPhone || doc.id)}`,
-      chatId: doc.id, createdAt, read: readIds.has(id)
+      id: doc.id, type: "sla", title: String(item.title || "SLA response overdue"),
+      body: String(item.body || "A customer conversation needs your reply"),
+      chatId: String(item.chatId || ""), createdAt,
+      read: item.read === true || readIds.has(doc.id)
     });
   }
   notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -910,6 +908,7 @@ async function checkTenantSlaAlerts(event) {
         );
         if (delivered > 0) {
           notified += 1;
+          await saveTenantSlaNotification(db, organization.id, assignedTo, document.id, pendingMillis, chat.customerName || chat.customerPhone || document.id);
           await chatRef.set({
             slaOverdueRetryAfter: admin.firestore.FieldValue.delete(),
             slaOverdueAttemptCount: admin.firestore.FieldValue.delete(),
