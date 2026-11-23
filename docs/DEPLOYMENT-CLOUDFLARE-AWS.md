@@ -104,7 +104,7 @@ When a push cannot be delivered, the checker releases its temporary claim and st
 
 ### In-app Notification Center
 
-The inbox includes a Notifications tab. It combines assignment/status activity from workspace audit logs with SLA push events saved under `organizations/{organizationId}/members/{uid}/notifications`. Selecting a notification marks it read and opens the related chat. The API is `GET /organizations/notifications?organizationId=...` and `POST /organizations/notifications` with `{ organizationId, notificationId }`. Each user can only read and mark their own workspace notifications through the authenticated membership check. SLA history is persisted only after FCM reports at least one successful device delivery; if writing the history record fails, the already-delivered alert is not retried solely because of that history-write failure.
+The inbox includes a Notifications tab. It combines assignment/status activity from workspace audit logs with SLA push events saved under `organizations/{organizationId}/members/{uid}/notifications`. Selecting a notification marks it read and opens the related chat. The feed refreshes every 30 seconds while open, supports All/Unread/Assignments/Status/SLA filters, and provides Mark all read. The API is `GET /organizations/notifications?organizationId=...` and `POST /organizations/notifications` with `{ organizationId, notificationId }`. Each user can only read and mark their own workspace notifications through the authenticated membership check. SLA history is persisted only after FCM reports at least one successful device delivery; if writing the history record fails, the already-delivered alert is not retried solely because of that history-write failure.
 
 ### Organization SLA settings
 
