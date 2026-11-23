@@ -728,7 +728,8 @@ async function saveOrganisationAutomation(db, user, orgId, body) {
   await db.collection("organisations").doc(orgId).collection("automation").doc("settings").set(settings, { merge: true });
   return settings;
 }
-\nasync function handleTenantRoute(event) {
+
+async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
   const isCollection = path === "/organisations";
