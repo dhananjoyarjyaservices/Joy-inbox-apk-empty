@@ -146,6 +146,57 @@ async function createInvitation(db, user, orgId, body) {
   return { invitationId, email, role, expiresAt: expiresAt.toISOString() };
 }
 
+async function listOrganisationInvitations(db, user, orgId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin"]);
+  const snapshot = await db.collection("organisations").doc(orgId)
+    .collection("invitations").orderBy("createdAt", "desc").limit(100).get();
+  const now = new Date();
+  return snapshot.docs.map((doc) => {
+    const invitation = doc.data();
+    const expiresAt = invitation.expiresAt?.toDate ? invitation.expiresAt.toDate() : new Date(invitation.expiresAt);
+    const status = invitation.status === "pending" && expiresAt <= now ? "expired" : invitation.status;
+    return {
+      id: doc.id,
+      email: invitation.email || "",
+      role: invitation.role || "agent",
+      status,
+      createdAt: invitation.createdAt || null,
+      expiresAt: invitation.expiresAt || null,
+      createdBy: invitation.createdBy || ""
+    };
+  });
+}
+
+async function revokeOrganisationInvitation(db, user, orgId, invitationId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin"]);
+  if (!/^[0-9a-f-]{36}$/i.test(invitationId)) fail("A valid invitation ID is required.");
+  const orgRef = db.collection("organisations").doc(orgId);
+  const inviteRef = orgRef.collection("invitations").doc(invitationId);
+  const auditRef = orgRef.collection("auditLogs").doc();
+  const now = new Date();
+  let revoked = false;
+  await db.runTransaction(async (tx) => {
+    const inviteSnap = await tx.get(inviteRef);
+    if (!inviteSnap.exists) fail("Invitation was not found.", 404);
+    const invitation = inviteSnap.data();
+    if (invitation.status !== "pending") fail("Only pending invitations can be revoked.", 409);
+    const expiresAt = invitation.expiresAt?.toDate ? invitation.expiresAt.toDate() : new Date(invitation.expiresAt);
+    if (expiresAt <= now) {
+      tx.update(inviteRef, { status: "expired", updatedAt: now });
+      return;
+    }
+    tx.update(inviteRef, { status: "revoked", revokedAt: now, revokedBy: user.uid, updatedAt: now });
+    tx.create(auditRef, {
+      action: "invitation.revoked", actorUid: user.uid, actorEmail: String(user.email || ""),
+      targetUid: "", targetEmail: String(invitation.email || ""),
+      details: { role: invitation.role || "agent", invitationId }, createdAt: now
+    });
+    revoked = true;
+  });
+  if (!revoked) fail("This invitation has expired and can no longer be accepted. Create a new invitation.", 409);
+  return { invitationId, status: "revoked" };
+}
+
 async function acceptInvitation(db, user, orgId, body) {
   if (!user.email || user.email_verified !== true) {
     fail("Verify your email before accepting an organisation invitation.", 403);
@@ -824,6 +875,7 @@ async function handleTenantRoute(event) {
   const isCollection = path === "/organisations";
   const inviteMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations$/);
   const acceptMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/accept$/);
+  const invitationActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/([0-9a-f-]{36})$/i);
   const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
   const memberActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members\/([A-Za-z0-9_-]{1,128})$/);
   const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
@@ -837,7 +889,7 @@ async function handleTenantRoute(event) {
   const consentMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/contacts\/(\d{6,20})\/consent$/);
   const automationMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/automation$/);
   const auditMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/audit-logs$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || memberActionMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch || auditMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || invitationActionMatch || membersMatch || memberActionMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch || campaignsMatch || automationMatch || consentMatch || auditMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -857,6 +909,14 @@ async function handleTenantRoute(event) {
     if (acceptMatch && method === "POST") {
       const result = await acceptInvitation(db, user, acceptMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, membership: result });
+    }
+    if (inviteMatch && method === "GET") {
+      const invitations = await listOrganisationInvitations(db, user, inviteMatch[1]);
+      return jsonResponse(event, 200, { invitations });
+    }
+    if (invitationActionMatch && method === "DELETE") {
+      const result = await revokeOrganisationInvitation(db, user, invitationActionMatch[1], invitationActionMatch[2]);
+      return jsonResponse(event, 200, { success: true, invitation: result });
     }
 
 
