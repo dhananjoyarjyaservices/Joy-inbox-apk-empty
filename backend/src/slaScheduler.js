@@ -1,5 +1,6 @@
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const { sendTenantSlaOverdueNotification } = require("./push");
+const { getOrganizationSlaSettings } = require("./slaSettings");
 
 function timestampMillis(value) {
   if (value && typeof value.toMillis === "function") return value.toMillis();
@@ -8,7 +9,10 @@ function timestampMillis(value) {
 }
 
 async function checkOrganization(db, admin, organizationId) {
-  const cutoff = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
+  const settings = await getOrganizationSlaSettings(db, organizationId);
+  if (!settings.enabled) return 0;
+  const targetMs = settings.targetMinutes * 60 * 1000;
+  const cutoff = admin.firestore.Timestamp.fromDate(new Date(Date.now() - targetMs));
   const chatsQuery = db.collection("organizations").doc(organizationId)
     .collection("chats")
     .where("responsePendingSince", "<=", cutoff);
@@ -27,7 +31,7 @@ async function checkOrganization(db, admin, organizationId) {
       const assignedTo = typeof chat.assignedTo === "string" ? chat.assignedTo : "";
       const pendingMillis = timestampMillis(chat.responsePendingSince);
       if (!assignedTo || !Number.isFinite(pendingMillis) ||
-          pendingMillis > Date.now() - 5 * 60 * 1000 ||
+          pendingMillis > Date.now() - targetMs ||
           chat.archived === true || chat.status === "resolved") continue;
 
       const chatRef = document.ref;
