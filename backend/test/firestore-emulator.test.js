@@ -43,6 +43,9 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
     await setDoc(doc(db, "organizations/org_a/contacts/contact_a"), { name: "Private Contact A" });
     await setDoc(doc(db, "organizations/org_a/quickReplies/reply_a"), { title: "Private Reply A" });
     await setDoc(doc(db, "organizations/org_a/settings/whatsapp"), { accessToken: "server-only" });
+    await setDoc(doc(db, "organizations/org_a/campaigns/campaign_a"), { name: "Private campaign", status: "draft" });
+    await setDoc(doc(db, "organizations/org_a/campaigns/campaign_a/recipients/recipient_a"), { phone: "15551234567" });
+    await setDoc(doc(db, "organizations/org_a/campaignSuppressions/suppression_a"), { status: "opted_out" });
   });
 
   const ownerDb = testEnv.authenticatedContext("owner_a").firestore();
@@ -71,6 +74,9 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
   await assertFails(getDoc(doc(suspendedOrgDb, "organizations/org_inactive/chats/chat_inactive")));
   await assertFails(getDoc(doc(anonymousDb, "organizations/org_a/chats/chat_a")));
   await assertFails(getDoc(doc(ownerDb, "organizations/org_a/settings/whatsapp")));
+  await assertFails(getDoc(doc(ownerDb, "organizations/org_a/campaigns/campaign_a")));
+  await assertFails(getDoc(doc(agentDb, "organizations/org_a/campaigns/campaign_a/recipients/recipient_a")));
+  await assertFails(getDoc(doc(ownerDb, "organizations/org_a/campaignSuppressions/suppression_a")));
 
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/chats/new_chat"), { text: "client write" }));
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/contacts/new_contact"), { name: "client write" }));
