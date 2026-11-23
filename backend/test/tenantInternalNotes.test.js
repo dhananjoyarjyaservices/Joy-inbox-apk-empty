@@ -31,7 +31,7 @@ test("lists only the bounded latest tenant internal notes", async () => {
           assert.equal(child, "chats");
           return { doc(chatId) {
             assert.equal(chatId, "chat_1");
-            return { collection(notes) {
+            return { async get() { return { exists: true }; }, collection(notes) {
               assert.equal(notes, "internalNotes");
               return {
                 orderBy(field, direction) { orderedBy = field + ":" + direction; return this; },
