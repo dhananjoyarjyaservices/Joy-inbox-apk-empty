@@ -49,6 +49,7 @@ const {
 } = require("./sendRequests");
 const { runScheduledSlaChecks, saveTenantSlaNotification } = require("./slaScheduler");
 const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_SLA_MINUTES } = require("./slaSettings");
+const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
