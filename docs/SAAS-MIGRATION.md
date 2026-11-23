@@ -214,6 +214,6 @@ The tenant inbox now supports private internal notes at `organizations/{organiza
 
 ## Interactive WhatsApp messages
 
-The tenant inbox composer now supports session-based interactive reply buttons (up to three) and list menus (up to ten rows total), with optional text header/footer. The backend validates Meta length/count limits, sends through the selected workspace Phone Number ID, and uses the tenant send-request idempotency ledger. Outgoing interactive messages are stored as structured tenant message records; incoming button/list selections are stored as searchable text with the selected option ID/title.
+The tenant inbox composer now supports session-based interactive reply buttons (up to three), list menus (up to ten rows total), and HTTPS call-to-action links for payment/catalog URLs, with optional text header/footer. The backend validates Meta length/count limits, sends through the selected workspace Phone Number ID, and uses the tenant send-request idempotency ledger. Outgoing interactive messages are stored as structured tenant message records; incoming button/list selections are stored as searchable text with the selected option ID/title.
 
 Interactive messages remain subject to WhatsApp's active customer-service window and Meta account policy. They are not a substitute for approved templates outside that window.
