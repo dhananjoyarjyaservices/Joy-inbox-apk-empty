@@ -9,6 +9,12 @@ import {
   addOrganisationNote,
   assignOrganisationChat,
   type OrganisationNote,
+  getOrganisationQuickReplies,
+  saveOrganisationQuickReply,
+  type OrganisationQuickReply,
+  updateOrganisationChatTags,
+  updateOrganisationChatStatus,
+  sendOrganisationWhatsAppMedia,
 } from "../services/organisations";
 import { useAuth } from "../context/AuthContext";
 
@@ -19,6 +25,9 @@ type ChatRow = {
   lastMessage: string;
   lastMessageAt?: { toDate?: () => Date } | Date | null;
   unreadCount?: number;
+  status?: "open" | "pending" | "resolved";
+  tags?: string[];
+  assignedToEmail?: string | null;
 };
 
 type MessageRow = {
@@ -87,6 +96,15 @@ export default function OrganisationInbox() {
         : reason.message || "Inbox load nahi hua.");
       setLoading(false);
     });
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId) { setQuickReplies([]); return; }
+    let active = true;
+    getOrganisationQuickReplies(orgId)
+      .then((rows) => { if (active) setQuickReplies(rows); })
+      .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Quick replies load nahi hue."); });
+    return () => { active = false; };
   }, [orgId]);
 
   useEffect(() => {
