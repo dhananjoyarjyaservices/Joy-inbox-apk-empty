@@ -69,6 +69,7 @@ async function checkOrganization(db, admin, organizationId) {
         );
         if (delivered > 0) {
           notified += 1;
+          await saveTenantSlaNotification(db, organizationId, assignedTo, document.id, pendingMillis, chat.customerName || chat.customerPhone || document.id);
           await chatRef.set({
             slaOverdueRetryAfter: admin.firestore.FieldValue.delete(),
             slaOverdueAttemptCount: admin.firestore.FieldValue.delete(),
@@ -105,6 +106,17 @@ async function clearClaim(db, admin, chatRef, pendingMillis, retry = true) {
   });
 }
 
+async function saveTenantSlaNotification(db, organizationId, uid, chatId, pendingMillis, senderName) {
+  const notificationId = `sla_${pendingMillis}_${chatId}`;
+  await db.collection("organizations").doc(organizationId)
+    .collection("members").doc(uid).collection("notifications").doc(notificationId).set({
+      type: "sla", title: "SLA response overdue",
+      body: `A customer conversation needs your reply: ${String(senderName || chatId)}`,
+      chatId, createdAt: new Date(), read: false
+    }, { merge: true });
+  return notificationId;
+}
+
 async function runScheduledSlaChecks() {
   const admin = getFirebaseAdmin();
   const db = getDb();
@@ -130,4 +142,4 @@ async function runScheduledSlaChecks() {
   return { success: true, organizationsChecked, notificationsSent };
 }
 
-module.exports = { runScheduledSlaChecks };
+module.exports = { runScheduledSlaChecks, saveTenantSlaNotification };
