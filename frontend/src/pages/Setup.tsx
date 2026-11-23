@@ -29,7 +29,7 @@ export default function Setup() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [createdInvite, setCreatedInvite] = useState("");
+  const [createdInvite, setCreatedInvite] = useState("");\n  const [phoneNumberId, setPhoneNumberId] = useState("");\n  const [wabaId, setWabaId] = useState("");\n  const [accessToken, setAccessToken] = useState("");\n  const [waConnection, setWaConnection] = useState<WhatsAppConnection>({ connected: false });
 
   const selected = useMemo(
     () => organisations.find((org) => org.id === selectedId) || null,
@@ -72,7 +72,7 @@ export default function Setup() {
     return () => { active = false; };
   }, [selected?.id, selected?.role]);
 
-  async function verifyEmail() {
+  useEffect(() => {\n    if (!selected) { setWaConnection({ connected: false }); return; }\n    let active = true;\n    getOrganisationWhatsAppConnection(selected.id)\n      .then((result) => { if (active) { setWaConnection(result); setPhoneNumberId(result.phoneNumberId || ""); setWabaId(result.wabaId || ""); } })\n      .catch(() => { if (active) setWaConnection({ connected: false }); });\n    return () => { active = false; };\n  }, [selected?.id]);\n\n  async function handleWhatsAppConnect(event: FormEvent<HTMLFormElement>) {\n    event.preventDefault();\n    if (!selected) return;\n    setBusy(true); setError(""); setNotice("");\n    try {\n      const result = await saveOrganisationWhatsAppConnection(selected.id, { phoneNumberId: phoneNumberId.trim(), wabaId: wabaId.trim(), accessToken: accessToken.trim() });\n      setWaConnection(result.connection);\n      setAccessToken("");\n      setNotice("Meta credentials verified and encrypted for this organisation. Webhook routing and live inbox activation are still pending.");\n    } catch (reason) {\n      setError(reason instanceof Error ? reason.message : "WhatsApp connection failed.");\n    } finally { setBusy(false); }\n  }\n\n  async function verifyEmail() {
     setBusy(true);
     setError("");
     try {
@@ -221,6 +221,22 @@ export default function Setup() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div><h2 className="font-semibold text-gray-900">{selected.name}</h2><p className="text-xs text-gray-500">Organisation ID: {selected.id}</p></div>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-700">{selected.role}</span>
+            </div>
+            <div className="mt-5 rounded-xl border border-gray-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div><h3 className="font-semibold text-gray-900">WhatsApp Cloud API</h3><p className="text-xs text-gray-500">Connect this business's own Meta number.</p></div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${waConnection.connected ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600"}`}>{waConnection.connected ? "Credentials verified" : "Not connected"}</span>
+              </div>
+              {waConnection.connected && <p className="mt-3 text-sm text-gray-700">{waConnection.displayPhoneNumber || waConnection.phoneNumberId} · {waConnection.verifiedName}</p>}
+              {["owner", "admin"].includes(selected.role) && (
+                <form onSubmit={handleWhatsAppConnect} className="mt-4 space-y-3">
+                  <input value={phoneNumberId} onChange={(event) => setPhoneNumberId(event.target.value)} required inputMode="numeric" placeholder="WhatsApp Phone Number ID" className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-[#075e54]" />
+                  <input value={wabaId} onChange={(event) => setWabaId(event.target.value)} required inputMode="numeric" placeholder="WhatsApp Business Account ID (WABA ID)" className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-[#075e54]" />
+                  <input value={accessToken} onChange={(event) => setAccessToken(event.target.value)} required type="password" autoComplete="new-password" placeholder="Meta System User / permanent access token" className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-[#075e54]" />
+                  <button disabled={busy} className="w-full rounded-xl bg-[#075e54] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Verifying with Meta..." : waConnection.connected ? "Update WhatsApp credentials" : "Verify and connect number"}</button>
+                </form>
+              )}
+              <p className="mt-3 text-xs leading-5 text-amber-700">Access token encrypted on the server and never returned to the browser. This verifies the Meta credentials only; webhook subscription, incoming-message routing and tenant-isolated inbox are not yet enabled.</p>
             </div>
             {["owner", "admin"].includes(selected.role) && (
               <form onSubmit={handleInvite} className="mt-5 grid gap-3 sm:grid-cols-[1fr_140px_auto]">
