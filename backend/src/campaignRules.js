@@ -57,7 +57,8 @@ function normalizeCampaignRecipients(input) {
     const phone = String(item.phone || item.to || "").replace(/\D/g, "");
     const consentAt = item.consentAt;
     const consentSource = String(item.consentSource || "").trim().slice(0, 120);
-    const validConsentDate = typeof consentAt === "string" && !Number.isNaN(Date.parse(consentAt));
+    const consentMillis = typeof consentAt === "string" ? Date.parse(consentAt) : NaN;
+    const validConsentDate = Number.isFinite(consentMillis) && consentMillis <= Date.now();
     if (item.optedIn !== true || !/^[1-9][0-9]{7,14}$/.test(phone) ||
         !validConsentDate || !consentSource) {
       skipped += 1;
