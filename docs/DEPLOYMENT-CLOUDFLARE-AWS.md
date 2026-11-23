@@ -146,3 +146,9 @@ Team delivery analytics also groups the sampled delivery records by notification
 
 Workspace owners and admins can inspect an individual active or existing member's notification delivery report with `GET /organizations/notifications/member-deliveries?organizationId=...&uid=...`. Optional `from` and `to` date filters use inclusive calendar dates. The response includes aggregate delivery rate, delivered/failed/retried counts, notification-type breakdown, and up to 200 recent delivery records (type, status, attempts, error code, timestamp). Access is restricted to owners/admins with `chats:read`; the member must belong to the selected workspace. No FCM tokens are returned. A `capped` flag indicates when the latest-200 limit was reached.
 
+## Keyword automation rules
+
+Workspace owners and admins can manage up to 100 rules through the authenticated `/organizations/automation-rules` endpoint (GET, POST, PUT, DELETE). Rules are stored under `organizations/{organizationId}/automationRules` and contain a name, keyword, match mode (`contains`, `exact`, or `starts_with`), reply text (maximum 1,024 characters), enabled state, and priority (lower numbers run first).
+
+For each newly persisted inbound WhatsApp text message, the webhook checks up to 100 rules and runs only the first enabled match. Media-only messages do not trigger keyword rules. A run record keyed by the inbound message and rule prevents duplicate replies when Meta retries the same webhook. Replies are sent only inside WhatsApp's 24-hour customer service window; out-of-window matches are recorded as skipped. Automation send failures are recorded and logged without causing Meta to retry an already-saved inbound message. This is a first keyword-auto-reply milestone, not yet a visual workflow builder or multi-step chatbot.
+
