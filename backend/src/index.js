@@ -713,9 +713,10 @@ async function sendTenantTemplate(event) {
   const variables = body.variables === undefined ? [] : body.variables;
   const headerVariables = body.headerVariables === undefined ? [] : body.headerVariables;
   const buttonVariables = body.buttonVariables === undefined ? [] : body.buttonVariables;
+  const headerMedia = body.headerMedia && typeof body.headerMedia === "object" ? body.headerMedia : null;
   const validVariables = values => Array.isArray(values) && values.length <= 100 && values.every(value => typeof value === "string" && value.trim() && value.length <= 1024);
   if (!/^[a-z0-9_]{1,512}$/.test(templateName) || !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(language) ||
-      !validVariables(variables) || !validVariables(headerVariables) || !validVariables(buttonVariables)) {
+      !validVariables(variables) || !validVariables(headerVariables) || !validVariables(buttonVariables) || (headerMedia && (typeof headerMedia.base64 !== "string" || headerMedia.base64.length > 5_600_000 || typeof headerMedia.mimeType !== "string" || typeof headerMedia.filename !== "string"))) {
     return jsonResponse(event, 400, { error: "Template name, language or template variables are invalid." });
   }
   const db = getDb();
@@ -738,19 +739,31 @@ async function sendTenantTemplate(event) {
     return indexes.length ? Math.max(...indexes) : 0;
   };
   const bodyCount = placeholderCount(templateComponents.find(item => item.type === "BODY")?.text);
-  const headerComponent = templateComponents.find(item => item.type === "HEADER" && item.format === "TEXT");
+  const headerDefinition = templateComponents.find(item => item.type === "HEADER");
+  const headerComponent = headerDefinition?.format === "TEXT" ? headerDefinition : null;
+  const mediaHeaderFormat = ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerDefinition?.format) ? headerDefinition.format : null;
   const headerCount = placeholderCount(headerComponent?.text);
   const urlButtons = templateComponents.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button, index) => ({ ...button, index })) : []).filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
-  if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length) {
+  if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length || (Boolean(mediaHeaderFormat) !== Boolean(headerMedia))) {
     return jsonResponse(event, 400, { error: `This template needs ${bodyCount} body, ${headerCount} header and ${urlButtons.length} URL button variable(s).` });
   }
   const clientMessageId = getClientMessageId(body.clientMessageId);
-  const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId: credentials.phoneNumberId || null, to, templateName, language, variables });
+  const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId: credentials.phoneNumberId || null, to, templateName, language, variables, headerVariables, buttonVariables, headerMedia: headerMedia ? { mimeType: headerMedia.mimeType, filename: headerMedia.filename, base64: headerMedia.base64 } : null });
   const claim = await claimTenantSendRequest(db, organization.id, to, clientMessageId, payloadHash);
   if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   const template = { name: templateName, language: { code: language } };
   const components = [];
+  if (headerMedia) {
+    const expectedMime = mediaHeaderFormat === "IMAGE" ? ["image/jpeg", "image/png"] : mediaHeaderFormat === "VIDEO" ? ["video/mp4"] : ["application/pdf"];
+    const mimeType = String(headerMedia.mimeType).split(";")[0].trim().toLowerCase();
+    if (!expectedMime.includes(mimeType)) return jsonResponse(event, 400, { error: `This template requires a ${mediaHeaderFormat.toLowerCase()} header file.` });
+    let buffer;
+    try { buffer = Buffer.from(headerMedia.base64, "base64"); } catch { return jsonResponse(event, 400, { error: "The template header file is invalid." }); }
+    const uploaded = await uploadWhatsAppMedia(buffer, mimeType, headerMedia.filename, credentials);
+    const mediaType = mediaHeaderFormat.toLowerCase();
+    components.push({ type: "header", parameters: [{ type: mediaType, [mediaType]: { id: uploaded.mediaId } }] });
+  }
   if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text: text.trim() })) });
   if (variables.length) components.push({ type: "body", parameters: variables.map(text => ({ type: "text", text: text.trim() })) });
   buttonVariables.forEach((value, index) => {
@@ -786,7 +799,7 @@ async function sendTenantTemplate(event) {
     messageId: result.messageId, clientMessageId, chatId: to, organizationId: organization.id,
     direction: "outgoing", phoneNumberId: credentials.phoneNumberId || null,
     type: "template", text: preview, templateName, templateLanguage: language,
-    templateVariables: { header: headerVariables, body: variables, buttons: buttonVariables }, timestamp, status: "sending", source: "template", sender: decoded.uid
+    templateVariables: { header: headerVariables, body: variables, buttons: buttonVariables, headerMedia: headerMedia ? { mimeType: headerMedia.mimeType, filename: headerMedia.filename } : null }, timestamp, status: "sending", source: "template", sender: decoded.uid
   });
   batch.set(chatRef, {
     customerPhone: to, ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
