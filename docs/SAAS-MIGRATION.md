@@ -170,3 +170,15 @@ Authenticated organization member endpoints are available at `/organizations/mem
 
 All routes require Firebase ID-token verification, active organization membership, and `members:manage`. Only an owner can grant the admin role. The owner role cannot be assigned, demoted, or removed through these routes. An invited person must first register for Joy Inbox with the supplied email; email delivery/invitation links are not implemented yet. Removal marks the member and their organization switcher index as removed; it does not delete the Firebase Authentication account or historical chat messages. Frontend member-management screens and real Firebase integration tests remain pending.
 
+
+
+## Subscription billing foundation (incremental)
+
+The branch now includes a tenant Workspace Billing screen and a Stripe integration foundation:
+- owner/admin-only Checkout and Billing Portal session APIs;
+- server-side Stripe Price ID configuration and idempotent Checkout session creation;
+- raw-body Stripe signature verification with a five-minute timestamp tolerance;
+- idempotent webhook processing for checkout completion, subscription create/update/delete, and failed invoices;
+- organization-scoped subscription status storage and customer consistency checks.
+
+Billing documents and Stripe webhook event records remain server-only under Firestore rules. Billing is not enabled until the Stripe account, test/live API secrets, webhook signing secret, recurring Price IDs and trusted return URLs are configured. Plan entitlements, quotas, taxes, invoices UI, trials/grace policy, and live-payment acceptance testing are still outstanding. See [docs/BILLING-STRIPE.md](BILLING-STRIPE.md).
