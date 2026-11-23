@@ -319,3 +319,18 @@ export async function updateOrganisationContactConsent(
     { method: "PUT", body: JSON.stringify(details) },
   );
 }
+
+
+export async function updateOrganisationMemberRole(orgId: string, uid: string, role: "admin" | "manager" | "agent") {
+  return request<{ success: boolean; member: OrganisationMember }>(
+    "/organisations/" + encodeURIComponent(orgId) + "/members/" + encodeURIComponent(uid),
+    { method: "PUT", body: JSON.stringify({ role }) },
+  );
+}
+
+export async function removeOrganisationMember(orgId: string, uid: string) {
+  return request<{ success: boolean; member: OrganisationMember }>(
+    "/organisations/" + encodeURIComponent(orgId) + "/members/" + encodeURIComponent(uid),
+    { method: "DELETE" },
+  );
+}
