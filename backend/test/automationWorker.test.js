@@ -136,3 +136,17 @@ test("does not alter a job whose lease has not expired", async () => {
   };
   assert.equal(await markExpiredQueueJobUncertain(db, stale, now), false);
 });
+
+test("classifies ambiguous send outcomes as uncertain to prevent duplicate delivery", () => {
+  const { getFailureDisposition } = require("../src/automationWorker");
+  assert.equal(getFailureDisposition(new Error("network timeout"), true, 1), "uncertain");
+  assert.equal(getFailureDisposition(new Error("Firestore write failed"), true, 4), "uncertain");
+});
+
+test("keeps definitive send rejections failed and safe retryable rate limits queued", () => {
+  const { getFailureDisposition } = require("../src/automationWorker");
+  assert.equal(getFailureDisposition(Object.assign(new Error("invalid recipient"), { definitive: true }), true, 1), "failed");
+  assert.equal(getFailureDisposition(Object.assign(new Error("rate limited"), { metaStatusCode: 429 }), true, 1), "queued");
+  assert.equal(getFailureDisposition(Object.assign(new Error("rate limited"), { metaStatusCode: 429 }), true, 5), "failed");
+  assert.equal(getFailureDisposition(Object.assign(new Error("temporary issue"), { retryable: true }), false, 1), "queued");
+});
