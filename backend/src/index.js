@@ -1288,7 +1288,7 @@ async function checkTenantSlaAlerts(event) {
       } else {
         await releaseTenantSlaClaim(db, admin, chatRef, pendingMillis);
       }
-    } catch (error) {
+  } catch (error) {
       await releaseTenantSlaClaim(db, admin, chatRef, pendingMillis);
       throw error;
     }
