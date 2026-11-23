@@ -11,6 +11,7 @@ const {
   buildTemplatePayload,
   claimCampaignRecipient,
   markExpiredCampaignRecipient,
+  finishRecipient,
   verifyApprovedTemplate,
   processCampaign
 } = require("../src/campaignWorker");
@@ -293,4 +294,28 @@ test("transient Meta template verification failures keep campaigns queued withou
   assert.equal(sendCalls, 0);
   assert.equal(harness.campaign.status, "queued");
   assert.match(harness.campaign.verificationError, /temporarily unavailable/);
+});
+
+test("persists a known Meta message ID when Firestore delivery persistence is uncertain", async () => {
+  const harness = createCampaignHarness(null);
+  harness.recipient.status = "sending";
+  harness.campaign.status = "sending";
+  const saved = await finishRecipient(
+    harness.db,
+    harness.campaignRef,
+    { id: "recipient_1" },
+    harness.recipient,
+    "uncertain",
+    { messageId: "wamid.accepted", error: "Firestore write acknowledgement was lost." },
+    { now: () => new Date("2026-11-23T12:00:00.000Z") }
+  );
+  assert.equal(saved, true);
+  assert.equal(harness.recipient.status, "uncertain");
+  assert.equal(harness.recipient.deliveryStatus, "sent");
+  assert.equal(harness.recipient.messageId, "wamid.accepted");
+  assert.equal(harness.campaign.uncertainCount, 1);
+  const messageWrite = harness.writes.find(write => write.type === "set" && write.value?.source === "campaign");
+  assert.ok(messageWrite);
+  assert.equal(messageWrite.value.messageId, "wamid.accepted");
+  assert.equal(messageWrite.value.persistenceUncertain, true);
 });
