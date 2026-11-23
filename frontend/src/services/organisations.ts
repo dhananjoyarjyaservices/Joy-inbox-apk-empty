@@ -254,6 +254,7 @@ export interface OrganisationCampaign {
   bodyParameters: string[];
   audience?: { consentRequired: boolean; tags: string[] };
   status: "draft" | string;
+  audience?: { consentRequired: boolean; tags: string[] };
   createdAt?: { toDate?: () => Date } | Date;
   updatedAt?: { toDate?: () => Date } | Date;
 }
