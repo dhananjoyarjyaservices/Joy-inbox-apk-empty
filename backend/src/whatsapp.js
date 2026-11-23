@@ -108,9 +108,9 @@ async function sendWhatsAppText(to, text, contextMessageId, credentials = null) 
   };
 }
 
-async function sendWhatsAppMedia(to, type, mediaId, caption, filename, contextMessageId) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+async function sendWhatsAppMedia(to, type, mediaId, caption, filename, contextMessageId, credentials = null) {
+  const accessToken = credentials?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = credentials?.phoneNumberId || process.env.PHONE_NUMBER_ID;
   const recipient = normalizePhoneNumber(to);
 
   if (!accessToken || !phoneNumberId) {
