@@ -37,7 +37,7 @@ The product requirement is to support WhatsApp media without permanently storing
 
 ## Not yet complete
 
-The existing production handlers still use the legacy owner UID, global WhatsApp credentials, top-level chat collections and Firebase Storage media functions. The new tenancy helpers are a foundation only; they are not yet wired into every route or webhook. The frontend signup/onboarding flow, tenant-aware Firestore rules, migration utility, webhook routing, per-tenant secret provisioning, and no-persistent-media proxy must be completed before launch.
+The repository now contains substantial tenant-aware API, frontend and webhook implementation, so this early checklist is superseded by the incremental implementation sections below. Remaining release blockers are tracked in `docs/RELEASE-READINESS.md`: CI confirmation for the current head, end-to-end Firebase/Meta/Stripe staging tests, full audit/retirement of legacy owner-only routes, tenant isolation review, migration backup/rollback rehearsal, operational monitoring and explicit deployment approval. Do not interpret the existence of these code paths as production acceptance.
 
 
 ## Incremental implementation update
