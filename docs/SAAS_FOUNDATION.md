@@ -18,7 +18,7 @@ All endpoints below require a Firebase ID token in the `Authorization: Bearer <i
 | PUT | `/organisations/:orgId/members/:uid` | Owner/admin changes a member role. Body: `{ "role": "manager" }`. |
 | DELETE | `/organisations/:orgId/members/:uid` | Owner/admin revokes a member's organisation access (soft removal). |
 
-Invitations currently create a pending invitation record and return its ID; an email-delivery provider is not configured yet, so the ID must be shared by the organisation admin through a trusted channel.
+Invitation creation attempts automatic delivery through the Resend email API. Configure `RESEND_API_KEY`, `INVITATION_FROM_EMAIL` (a sender on a verified Resend domain), and `APP_BASE_URL` in the Lambda environment. The email links to `/setup?orgId=...&invitationId=...`; the invited user must sign in with the matching verified email and accept. If email is not configured or provider delivery fails, the invitation remains pending and the admin can retry from Team invitations or share the fallback IDs securely. No API key is stored in Firestore or returned to the browser.
 
 ## Firestore layout
 
@@ -163,3 +163,13 @@ Role changes and removals are committed by the backend using the Firebase Admin 
 ## Team activity audit log
 
 The organisation setup page displays the latest 100 team events to owners and admins. The server records invitation creation, invitation acceptance, member role changes and member removal in the organisation-scoped `auditLogs` subcollection. Role changes and removals write the membership update and audit event in the same Firestore batch; invitation acceptance writes its membership, invitation status and audit event in one transaction. The API checks owner/admin membership before returning logs. Client writes are denied by Firestore rules.
+
+
+## Invitation email delivery
+
+- Backend uses Resend's HTTPS API; no SDK dependency is required.
+- Configure `RESEND_API_KEY`, `INVITATION_FROM_EMAIL` and `APP_BASE_URL` in AWS Lambda. The sender domain must be verified in Resend; use a verified sender address.
+- New invitations are emailed automatically. Pending invitations with a failed/unconfigured delivery can be retried with `POST /organisations/{orgId}/invitations/{invitationId}/send`.
+- Invitation records track only delivery state/provider message ID and last attempt time. The API key remains in Lambda environment configuration.
+- Delivery is best-effort: a provider failure does not invalidate or delete the invitation. The admin can retry or share the invitation IDs securely.
+- Email acceptance links prefill the organisation and invitation IDs on the setup page; email verification and matching invitation email are still enforced by the backend.
