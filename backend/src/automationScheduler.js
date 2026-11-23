@@ -44,7 +44,7 @@ async function runScheduledAutomationSteps(options = {}) {
       const runSnapshot = await runRef.get();
       const completedBeforeThisStep = Number(runSnapshot.exists ? runSnapshot.get("completedSteps") : 0);
       let previousStepSent = runSnapshot.exists && completedBeforeThisStep >= stepIndex;
-      if (previousStepSent && stepIndex > 1) {
+      if (previousStepSent && queued.previousStepQueued === true) {
         const previousRef = organizationRef.collection("automationQueue").doc(`${queued.runId}_${stepIndex}`);
         const previous = await previousRef.get();
         previousStepSent = previous.exists && previous.get("status") === "sent";
