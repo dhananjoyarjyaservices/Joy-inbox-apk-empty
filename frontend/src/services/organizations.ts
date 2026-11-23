@@ -219,6 +219,11 @@ export interface OrganizationCampaign {
   status: "draft" | "scheduled" | "queued" | "sending" | "paused" | "completed" | "failed" | "cancelled" | string;
   recipientCount: number;
   skippedRecipients: number;
+  sentCount?: number;
+  failedCount?: number;
+  uncertainCount?: number;
+  skippedCount?: number;
+  scheduledAt?: string | null;
   createdAt: string | null;
 }
 export interface OrganizationCampaignRecipient {
@@ -246,4 +251,19 @@ export async function createOrganizationCampaign(organizationId: string, campaig
   const result = await request("/organizations/campaigns", "POST", { organizationId, ...campaign });
   if (!result.campaign?.id) throw new Error("Campaign draft could not be created.");
   return result.campaign;
+}
+
+export type OrganizationCampaignAction = "start" | "schedule" | "pause" | "resume" | "cancel";
+export async function updateOrganizationCampaign(
+  organizationId: string,
+  campaignId: string,
+  action: OrganizationCampaignAction,
+  scheduledAt?: string
+): Promise<{ success: boolean; campaignId: string; status: string }> {
+  return request("/organizations/campaigns", "POST", {
+    organizationId,
+    campaignId,
+    action,
+    ...(scheduledAt ? { scheduledAt } : {})
+  });
 }
