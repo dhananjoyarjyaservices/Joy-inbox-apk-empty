@@ -731,7 +731,7 @@ async function sendTenantTemplate(event) {
   const approvedTemplate = (Array.isArray(templatePayload.data) ? templatePayload.data : []).find(item => item.name === templateName && item.language === language && item.status === "APPROVED");
   if (!approvedTemplate) return jsonResponse(event, 400, { error: "This template is not approved for the selected language." });
   const bodyText = (Array.isArray(approvedTemplate.components) ? approvedTemplate.components : []).find(item => item.type === "BODY")?.text || "";
-  const expectedVariables = [...bodyText.matchAll(/\\\\{\\\\{\\\\s*(\\\\d+)\\\\s*\\\\}\\\\}/g)].map(match => Number(match[1]));
+  const expectedVariables = [...bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
   const expectedCount = expectedVariables.length ? Math.max(...expectedVariables) : 0;
   if (variables.length !== expectedCount) return jsonResponse(event, 400, { error: `This template requires ${expectedCount} body variable(s).` });
   const clientMessageId = getClientMessageId(body.clientMessageId);
