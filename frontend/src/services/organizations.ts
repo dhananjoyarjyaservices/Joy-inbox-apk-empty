@@ -330,3 +330,33 @@ export async function getOrganizationCampaignReportRecipients(
 
 // Backward-compatible name used by the tenant inbox report panel.
 export const getOrganizationCampaignRecipients = getOrganizationCampaignReportRecipients;
+
+
+export interface OrganizationInvitation {
+  id: string;
+  email: string;
+  role: "admin" | "agent";
+  status: string;
+  invitedBy: string;
+  createdAt: string;
+  expiresAt: string;
+}
+export async function listOrganizationInvitations(organizationId: string): Promise<OrganizationInvitation[]> {
+  const result = await request(`/organizations/invitations?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.invitations) ? result.invitations : [];
+}
+export async function createOrganizationInvitation(
+  organizationId: string,
+  email: string,
+  role: "admin" | "agent"
+): Promise<{ email: string; role: string; status: string; expiresAt: string; token: string; inviteUrl: string | null }> {
+  const result = await request("/organizations/invitations", "POST", { organizationId, email, role });
+  if (!result.invitation?.token) throw new Error("Invitation token was not returned.");
+  return result.invitation;
+}
+export async function revokeOrganizationInvitation(organizationId: string, email: string) {
+  return request("/organizations/invitations", "DELETE", { organizationId, email });
+}
+export async function acceptOrganizationInvitation(organizationId: string, token: string) {
+  return request("/organizations/invitations/accept", "POST", { organizationId, token });
+}
