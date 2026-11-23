@@ -242,7 +242,7 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
 
   const recipientsRef = campaignRef.collection("recipients");
   const [pendingSnapshot, staleSnapshot] = await Promise.all([
-    recipientsRef.where("status", "==", "pending").limit(MAX_RECIPIENTS_PER_CAMPAIGN * 3).get(),
+    recipientsRef.where("status", "==", "pending").orderBy("updatedAt", "asc").limit(MAX_RECIPIENTS_PER_CAMPAIGN * 3).get(),
     recipientsRef.where("status", "==", "sending").limit(MAX_RECIPIENTS_PER_CAMPAIGN * 3).get()
   ]);
   let sent = 0, failed = 0, skipped = 0, uncertain = 0, retried = 0;
@@ -278,6 +278,20 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
         }, dependencies);
         skipped += 1;
         continue;
+      }
+
+      const latestCampaign = await campaignRef.get();
+      const latestStatus = latestCampaign.exists ? latestCampaign.get("status") : "cancelled";
+      if (!["queued", "sending"].includes(latestStatus)) {
+        if (latestStatus === "cancelled") {
+          await finishRecipient(db, campaignRef, document.ref, recipient, "skipped", {
+            reason: "campaign_cancelled_before_send"
+          }, dependencies);
+          skipped += 1;
+        } else {
+          await document.ref.update({ status: "pending", leaseUntil: null, updatedAt: now });
+        }
+        break;
       }
 
       const variables = Array.isArray(recipient.variables) ? recipient.variables : [];
