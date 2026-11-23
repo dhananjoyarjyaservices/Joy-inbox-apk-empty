@@ -73,3 +73,8 @@ The worker rechecks this organization-scoped suppression record immediately befo
 ### Explicit WhatsApp re-subscription
 
 A customer can explicitly send START, UNSTOP, or SUBSCRIBE to reactivate the organization-scoped suppression record. This is treated as a compliance event and does not trigger greetings or keyword automations. The record stores the inbound message ID, timestamp, and explicit inbound opt-in source; it does not store the raw phone number in the suppression document. Campaign drafts still require the recipient's separately supplied valid consent timestamp and source.
+
+
+### Recipient delivery report
+
+Owners/admins can load recipient-level campaign results from `GET /organizations/campaigns?organizationId=ORG_ID&campaignId=CAMPAIGN_ID&limit=100&cursor=...`. The endpoint returns a bounded page of recipient phone, send status, Meta delivery status, reason/error and message ID. The inbox campaign card exposes a paginated recipient report. Keep this data restricted to workspace owners/admins because it contains customer phone numbers.
