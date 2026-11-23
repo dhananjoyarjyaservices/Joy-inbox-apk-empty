@@ -9,6 +9,7 @@ const ROLE_PERMISSIONS = {
 
 function httpError(message, statusCode) { const error = new Error(message); error.statusCode = statusCode; return error; }
 function validId(value) { return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value); }
+function validPhoneNumberId(value) { return typeof value === "string" && /^[0-9]{5,32}$/.test(value); }
 
 async function requireOrganization(db, decoded, organizationId) {
   if (!decoded?.uid) throw httpError("Authentication required.", 401);
@@ -207,7 +208,7 @@ async function rotateOrganizationWhatsAppCredentials(db, organizationId, targetK
 }
 
 async function resolvePhoneNumberOrganization(db, phoneNumberId) {
-  if (!validId(phoneNumberId)) throw httpError("Invalid WhatsApp phone number ID.", 400);
+  if (!validPhoneNumberId(phoneNumberId)) throw httpError("Invalid WhatsApp phone number ID.", 400);
   const mapping = await db.collection("whatsappPhoneNumbers").doc(phoneNumberId).get();
   if (!mapping.exists || mapping.data().status !== "active" || !validId(mapping.data().organizationId)) throw httpError("No active organization is connected to this WhatsApp number.", 404);
   return requireOrganizationForWebhook(db, mapping.data().organizationId);
@@ -227,7 +228,7 @@ async function saveWhatsAppConnection(db, organization, input) {
   const accessToken = String(input?.accessToken || "").trim();
   const displayPhoneNumber = String(input?.displayPhoneNumber || "").trim().slice(0, 40);
   const verifiedName = String(input?.verifiedName || "").trim().slice(0, 100);
-  if (!validId(phoneNumberId) || !/^EAA[A-Za-z0-9_-]+$/.test(accessToken) || accessToken.length > 4096) {
+  if (!validPhoneNumberId(phoneNumberId) || !/^EAA[A-Za-z0-9_-]+$/.test(accessToken) || accessToken.length > 4096) {
     throw httpError("A valid WhatsApp Phone Number ID and access token are required.", 400);
   }
   const encrypted = encryptSecret(accessToken);
@@ -262,7 +263,7 @@ async function saveWhatsAppConnection(db, organization, input) {
 
 async function disconnectWhatsAppConnection(db, organization, phoneNumberId) {
   if (!organization?.id || !organization.ref) throw httpError("Organization context is required.", 400);
-  if (!validId(phoneNumberId)) throw httpError("A valid WhatsApp Phone Number ID is required.", 400);
+  if (!validPhoneNumberId(phoneNumberId)) throw httpError("A valid WhatsApp Phone Number ID is required.", 400);
   const settingsRef = organization.ref.collection("settings").doc("whatsapp");
   const numberRef = settingsRef.collection("numbers").doc(phoneNumberId);
   const mappingRef = db.collection("whatsappPhoneNumbers").doc(phoneNumberId);
@@ -288,6 +289,7 @@ async function disconnectWhatsAppConnection(db, organization, phoneNumberId) {
 
 async function getWhatsAppCredentials(db, organizationId, phoneNumberId) {
   if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
+  if (phoneNumberId !== undefined && !validPhoneNumberId(phoneNumberId)) throw httpError("A valid WhatsApp Phone Number ID is required.", 400);
   const settingsRef = db.collection("organizations").doc(organizationId).collection("settings").doc("whatsapp");
   const snapshot = phoneNumberId
     ? await settingsRef.collection("numbers").doc(phoneNumberId).get()
