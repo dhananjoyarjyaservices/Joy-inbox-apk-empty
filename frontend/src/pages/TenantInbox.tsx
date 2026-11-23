@@ -240,7 +240,15 @@ export default function TenantInbox() {
     const header = chosen.components.find(component => component.type === "HEADER");
     const buttons = chosen.components.flatMap(component => component.type === "BUTTONS" && Array.isArray(component.buttons) ? component.buttons.map((button, index) => ({ ...button, index })) : []).filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
     const bodyRequired = count(chosen.components.find(component => component.type === "BODY")?.text || "");
-    const headerRequired = count(header?.text || "");
+    const headerRequired = header?.format === "TEXT" ? count(header.text || "") : 0;
+    const mediaHeader = Boolean(header && ["IMAGE", "VIDEO", "DOCUMENT"].includes(header.format || ""));
+    if (mediaHeader && !templateHeaderFile) { setError(`Select a ${String(header?.format).toLowerCase()} file for this template header.`); return; }
+    if (!mediaHeader && templateHeaderFile) { setError("This template does not use a media header."); return; }
+    let headerMedia: { base64: string; mimeType: string; filename: string } | undefined;
+    if (templateHeaderFile) {
+      const base64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || "").split(",")[1] || ""); reader.onerror = () => reject(new Error("Could not read the selected header file.")); reader.readAsDataURL(templateHeaderFile); });
+      headerMedia = { base64, mimeType: templateHeaderFile.type, filename: templateHeaderFile.name };
+    }
     const variables = templateVariablesText.split("\n").map(value => value.trim()).filter(Boolean);
     const headerVariables = templateHeaderVariablesText.split("\n").map(value => value.trim()).filter(Boolean);
     const buttonVariables = templateButtonVariablesText.split("\n").map(value => value.trim()).filter(Boolean);
@@ -250,7 +258,7 @@ export default function TenantInbox() {
     setTemplateSending(true); setError("");
     try {
       await sendTenantTemplate(organization.id, templateRecipient, selectedPhoneNumberId, templateWabaId.trim(), name, language, variables, headerVariables, buttonVariables, headerMedia);
-      setTemplateVariablesText(""); setTemplateHeaderVariablesText(""); setTemplateButtonVariablesText("");
+      setTemplateVariablesText(""); setTemplateHeaderVariablesText(""); setTemplateButtonVariablesText(""); setTemplateHeaderFile(null);
       setError("");
     } catch (e) { setError(e instanceof Error ? e.message : "Template message could not be sent."); }
     finally { setTemplateSending(false); }
