@@ -476,8 +476,7 @@ async function sendOrganisationMedia(db, user, orgId, body) {
   const to = normalizePhoneNumber(body.to);
   const type = String(body.type || "");
   const caption = String(body.caption || "").trim();
-  const filename = String(body.filename || "attachment").replace(/[\\\\/\r
-]/g, "_").slice(0, 180);
+  const filename = String(body.filename || "attachment").replace(/[\\/\r\n]/g, "_").slice(0, 180);
   const mimeType = String(body.mimeType || "");
   const encoded = String(body.fileBase64 || "");
   if (!/^\d{6,20}$/.test(to) || !["image", "video", "audio", "document"].includes(type)) {
