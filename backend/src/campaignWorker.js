@@ -317,12 +317,21 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
         continue;
       }
 
-      // This is the final read before calling Meta, so a new STOP reply
-      // recorded after draft creation is honored at send time.
+      // Read the current campaign state and opt-out suppression together
+      // immediately before Meta send; a new STOP after draft creation is honored.
       const suppressionRef = organizationRef.collection("campaignSuppressions")
         .doc(suppressionDocumentId(recipient.phone));
-      const suppressionSnapshot = await suppressionRef.get();
-      if (suppressionSnapshot.exists && suppressionSnapshot.get("status") !== "active") {
+      const preSendState = await db.runTransaction(async transaction => {
+        const [suppressionSnapshot, campaignSnapshot] = await Promise.all([
+          transaction.get(suppressionRef),
+          transaction.get(campaignRef)
+        ]);
+        return {
+          suppressed: suppressionSnapshot.exists && suppressionSnapshot.get("status") !== "active",
+          campaignStatus: campaignSnapshot.exists ? campaignSnapshot.get("status") : "cancelled"
+        };
+      });
+      if (preSendState.suppressed) {
         await finishRecipient(db, campaignRef, document.ref, recipient, "skipped", {
           reason: "whatsapp_opt_out_suppression"
         }, dependencies);
@@ -330,8 +339,7 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
         continue;
       }
 
-      const finalCampaignState = await campaignRef.get();
-      const finalCampaignStatus = finalCampaignState.exists ? finalCampaignState.get("status") : "cancelled";
+      const finalCampaignStatus = preSendState.campaignStatus;
       if (!["queued", "sending"].includes(finalCampaignStatus)) {
         if (finalCampaignStatus === "cancelled") {
           await finishRecipient(db, campaignRef, document.ref, recipient, "skipped", {
