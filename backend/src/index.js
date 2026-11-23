@@ -769,7 +769,7 @@ async function listTenantMemberNotificationDeliveries(event) {
   if (!memberDoc.exists) return jsonResponse(event, 404, { error: "Team member was not found in this workspace." });
   const parseDate = (value, endOfDay = false) => {
     if (!value) return null;
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
     const date = new Date(value + (endOfDay ? "T23:59:59.999" : "T00:00:00.000"));
     return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? undefined : date;
   };
