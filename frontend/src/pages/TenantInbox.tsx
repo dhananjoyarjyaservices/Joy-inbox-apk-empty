@@ -315,7 +315,7 @@ export default function TenantInbox() {
     try {
       await saveTenantContact(organization.id, {
         name: contactName.trim(), phone: contactPhone.trim(), email: contactEmail.trim(),
-        notes: contactNotes.trim(), source: contacts.find(item => item.id === editingContactId)?.source || "local"
+        notes: contactNotes.trim(), source: contacts.find(item => item.id === editingContactId)?.source || "local", tags: contacts.find(item => item.id === editingContactId)?.tags || []
       }, editingContactId || undefined);
       resetContactForm(); await refreshResources();
     } catch (e) { setError(e instanceof Error ? e.message : "Contact could not be saved."); }
