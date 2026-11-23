@@ -219,3 +219,8 @@ Staging acceptance checks before production:
 7. Verify schedule times are interpreted in UTC and campaigns only queue after the selected time.
 
 This repository change only adds code and an optional infrastructure template. It does not create the Lambda, EventBridge schedule, deploy Firestore indexes, configure Meta credentials, or send any real campaign. Keep production scheduling disabled until the staging checks and business/compliance approval are complete.
+
+
+### Campaign suppression secret
+
+Set `CAMPAIGN_SUPPRESSION_HASH_KEY` as a base64-encoded 32-byte secret in the backend API Lambda and campaign worker Lambda. Production refuses to derive suppression document IDs without this key. Keep the key identical across webhook and worker deployments; changing it requires a planned migration of existing suppression document IDs. Never place this key in frontend/Vite configuration or commit it.
