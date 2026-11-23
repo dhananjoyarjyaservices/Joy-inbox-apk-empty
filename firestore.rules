@@ -27,7 +27,11 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      match /whatsappConnections/{connectionId} {\n        allow read, write: if false;\n      }\n\n      match /invitations/{invitationId} {
+      match /whatsappConnections/{connectionId} {
+        allow read, write: if false;
+      }
+
+      match /invitations/{invitationId} {
         allow read: if request.auth != null
           && (request.auth.token.email == resource.data.email || hasOrgManagementRole(orgId));
         allow write: if false;
