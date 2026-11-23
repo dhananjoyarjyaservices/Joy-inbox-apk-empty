@@ -11,7 +11,7 @@ import { listOrganizationMembers, updateOrganizationChatAssignment, listChatAssi
 import { listenToTenantChats, listenToTenantMessages, loadOlderTenantMessages } from "../services/tenantChats";
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
 import { enablePushNotifications, syncPushToken, listenForForegroundPush, playNotificationSound, listRegisteredPushDevices, revokePushDevice, listNotificationDeliveries, listTeamNotificationDeliveryAnalytics, getMemberNotificationDeliveryReport, type TeamNotificationDeliveryAnalytics, type MemberNotificationDeliveryReport, type NotificationDelivery, type RegisteredPushDevice } from "../services/pushNotifications";
-import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
+import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, listTenantInternalNotes, addTenantInternalNote, type TenantContact, type TenantQuickReply, type TenantInternalNote } from "../services/tenantResources";
 
 type TenantChat = {
   id: string;
@@ -146,6 +146,10 @@ export default function TenantInbox() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [customerNotes, setCustomerNotes] = useState("");
   const [customerTags, setCustomerTags] = useState("");
+  const [internalNotes, setInternalNotes] = useState<TenantInternalNote[]>([]);
+  const [internalNoteDraft, setInternalNoteDraft] = useState("");
+  const [internalNotesLoading, setInternalNotesLoading] = useState(false);
+  const [internalNoteSaving, setInternalNoteSaving] = useState(false);
   const [customerSaving, setCustomerSaving] = useState(false);
   const [contacts, setContacts] = useState<TenantContact[]>([]);
   const [replies, setReplies] = useState<TenantQuickReply[]>([]);
@@ -246,6 +250,20 @@ export default function TenantInbox() {
   useEffect(() => {
     if (view === "billing" && organization) void loadBilling();
   }, [view, organization?.id]);
+
+  useEffect(() => {
+    if (!organization || !selected) {
+      setInternalNotes([]);
+      return;
+    }
+    let active = true;
+    setInternalNotesLoading(true);
+    listTenantInternalNotes(organization.id, selected)
+      .then(notes => { if (active) setInternalNotes(notes); })
+      .catch(error => { if (active) setError(error instanceof Error ? error.message : "Internal notes could not load."); })
+      .finally(() => { if (active) setInternalNotesLoading(false); });
+    return () => { active = false; };
+  }, [organization?.id, selected]);
 
   useEffect(() => {
     if (!organization) { setTeamMembers([]); return; }
@@ -569,6 +587,22 @@ export default function TenantInbox() {
     catch (error) { setError(error instanceof Error ? error.message : "Campaigns could not be loaded."); }
     finally { setCampaignLoading(false); }
   }
+  async function saveInternalNote(event: FormEvent) {
+    event.preventDefault();
+    if (!organization || !selected || internalNoteSaving || !internalNoteDraft.trim()) return;
+    setInternalNoteSaving(true);
+    setError("");
+    try {
+      const note = await addTenantInternalNote(organization.id, selected, internalNoteDraft);
+      setInternalNotes(current => [note, ...current]);
+      setInternalNoteDraft("");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Internal note could not be saved.");
+    } finally {
+      setInternalNoteSaving(false);
+    }
+  }
+
   async function loadBilling() {
     if (!organization || billingLoading) return;
     setBillingLoading(true);
