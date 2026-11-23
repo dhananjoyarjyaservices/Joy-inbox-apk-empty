@@ -104,3 +104,26 @@ test("organization-scoped APIs are not blocked by the legacy owner API switch", 
     assert.doesNotMatch(response.body, /legacy endpoint is disabled/i);
   });
 });
+
+
+test("every unscoped HTTP route is either explicitly public/system or covered by the legacy kill switch", async () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const source = fs.readFileSync(path.join(__dirname, "../src/index.js"), "utf8");
+  const routeSuffixes = [...source.matchAll(/path\\.endsWith\\(["']([^"']+)["']\\)/g)]
+    .map((match) => match[1]);
+  const legacyBlock = source.match(/const LEGACY_OWNER_API_ROUTE_SUFFIXES = Object\\.freeze\\(\\[([\\s\\S]*?)\\]\\);/);
+  assert.ok(legacyBlock, "legacy route kill-switch inventory must exist");
+  const protectedSuffixes = new Set(
+    [...legacyBlock[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1])
+  );
+  const explicitSystemRoutes = new Set(["/webhook", "/billing/stripe-webhook"]);
+  const unprotected = [...new Set(routeSuffixes)].filter((suffix) =>
+    !suffix.startsWith("/organizations/") &&
+    !suffix.startsWith("/whatsapp/") &&
+    suffix !== "/organizations" &&
+    !explicitSystemRoutes.has(suffix) &&
+    !protectedSuffixes.has(suffix)
+  );
+  assert.deepEqual(unprotected, [], "new unscoped routes must be classified before they can ship");
+});
