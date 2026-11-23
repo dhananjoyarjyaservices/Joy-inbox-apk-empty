@@ -6,6 +6,7 @@ import { logout } from "../services/auth";
 import { getActiveOrganizationId } from "../services/activeOrganization";
 import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, sendTenantText, retryTenantFailedText, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult } from "../services/organizations";
 import OrganizationMembers from "../components/OrganizationMembers";
+import { listOrganizationMembers, updateOrganizationChatAssignment, type OrganizationMember } from "../services/organizationMembers";
 import { listenToTenantChats, listenToTenantMessages } from "../services/tenantChats";
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
 import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, type TenantContact, type TenantQuickReply } from "../services/tenantResources";
@@ -20,6 +21,10 @@ type TenantChat = {
   unreadCount?: number;
   archived?: boolean;
   pinned?: boolean;
+  assignedTo?: string | null;
+  assigneeName?: string;
+  assigneeEmail?: string;
+  status?: "open" | "pending" | "resolved";
 };
 type TenantMessage = {
   id: string;
@@ -50,6 +55,8 @@ export default function TenantInbox() {
   const navigate = useNavigate();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
+  const [teamMembers, setTeamMembers] = useState<OrganizationMember[]>([]);
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [selectedPhoneNumberId, setSelectedPhoneNumberId] = useState("");
   const [chats, setChats] = useState<TenantChat[]>([]);
   const [selected, setSelected] = useState("");
@@ -104,6 +111,15 @@ export default function TenantInbox() {
     }).catch((e) => { if (active) { setError(e instanceof Error ? e.message : "Workspace could not load."); setLoading(false); } });
     return () => { active = false; };
   }, [navigate]);
+
+  useEffect(() => {
+    if (!organization) { setTeamMembers([]); return; }
+    let active = true;
+    listOrganizationMembers(organization.id, { limit: 100 })
+      .then(page => { if (active) setTeamMembers(page.members.filter(member => member.status === "active")); })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : "Team members could not load."); });
+    return () => { active = false; };
+  }, [organization?.id]);
 
   useEffect(() => {
     if (!organization) return;
@@ -257,6 +273,23 @@ export default function TenantInbox() {
     } catch (e) { setError(e instanceof Error ? e.message : "Chat action failed."); }
   }
 
+  async function updateAssignment(input: { assignedTo?: string | null; status?: "open" | "pending" | "resolved" }) {
+    if (!organization || !currentChat || assignmentSaving) return;
+    setAssignmentSaving(true); setError("");
+    try {
+      await updateOrganizationChatAssignment(organization.id, { chatId: currentChat.id, ...input });
+      setChats(items => items.map(chat => chat.id === currentChat.id ? {
+        ...chat,
+        ...(Object.hasOwn(input, "assignedTo") ? {
+          assignedTo: input.assignedTo ?? null,
+          assigneeName: teamMembers.find(member => member.uid === input.assignedTo)?.displayName || teamMembers.find(member => member.uid === input.assignedTo)?.email || ""
+        } : {}),
+        ...(input.status ? { status: input.status } : {})
+      } : chat));
+    } catch (e) { setError(e instanceof Error ? e.message : "Conversation assignment could not be updated."); }
+    finally { setAssignmentSaving(false); }
+  }
+
   async function toggleMessagePin(message: TenantMessage) {
     if (!organization || !selected) return;
     try { await updateTenantMessageState(organization.id, { chatId: selected, messageId: message.id, pinned: !Boolean((message as TenantMessage & { pinned?: boolean }).pinned) }); }
@@ -382,12 +415,16 @@ export default function TenantInbox() {
         <div className="border-b px-3 py-2"><input value={chatSearch} onChange={e => setChatSearch(e.target.value)} placeholder="Search chats..." className="w-full rounded-full border px-3 py-2 text-sm outline-none focus:border-[#075e54]"/></div>
         {visibleChats.length ? visibleChats.map((chat) => <button key={chat.id} onClick={() => setSelected(chat.id)} className={`w-full border-b border-gray-100 p-4 text-left hover:bg-gray-50 ${selected === chat.id ? "bg-[#effaf3]" : ""}`}>
           <div className="flex justify-between gap-2"><span className="truncate font-medium">{chat.customerName || contacts.find(contact => contact.phone.replace(/[^0-9]/g, "") === (chat.customerPhone || chat.id).replace(/[^0-9]/g, ""))?.name || chat.customerPhone || chat.id}</span><span className="text-xs text-gray-400">{timeLabel(chat.lastMessageAt)}</span></div>
-          <p className="mt-1 truncate text-sm text-gray-500">{chat.lastMessage || "No message preview"}</p><div className="mt-2 flex gap-3 text-xs text-gray-500"><span onClick={(e) => { e.stopPropagation(); void chatAction("pin", chat); }} className="cursor-pointer">{(chat as TenantChat & { pinned?: boolean }).pinned ? "Unpin" : "Pin"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("archive", chat); }} className="cursor-pointer">{(chat as TenantChat & { archived?: boolean }).archived ? "Unarchive" : "Archive"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("read", chat); }} className="cursor-pointer">Read</span><span onClick={(e) => { e.stopPropagation(); void chatAction("delete", chat); }} className="cursor-pointer text-red-600">Delete</span></div>
+          <p className="mt-1 truncate text-sm text-gray-500">{chat.lastMessage || "No message preview"}</p><div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-500"><span>{chat.assigneeName || (chat.assignedTo ? teamMembers.find(member => member.uid === chat.assignedTo)?.displayName || "Assigned" : "Unassigned")}</span><span className="capitalize">· {chat.status || "open"}</span></div><div className="mt-2 flex gap-3 text-xs text-gray-500"><span onClick={(e) => { e.stopPropagation(); void chatAction("pin", chat); }} className="cursor-pointer">{(chat as TenantChat & { pinned?: boolean }).pinned ? "Unpin" : "Pin"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("archive", chat); }} className="cursor-pointer">{(chat as TenantChat & { archived?: boolean }).archived ? "Unarchive" : "Archive"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("read", chat); }} className="cursor-pointer">Read</span><span onClick={(e) => { e.stopPropagation(); void chatAction("delete", chat); }} className="cursor-pointer text-red-600">Delete</span></div>
         </button>) : <p className="p-6 text-sm text-gray-500">No conversations yet. New WhatsApp messages will appear here.</p>}
       </aside>
       <section className={`flex min-w-0 flex-1 flex-col ${selected ? "flex" : "hidden md:flex"}`}>
         {currentChat ? <>
-          <div className="flex items-center justify-between gap-3 border-b bg-white p-3"><div className="flex min-w-0 items-center gap-3"><button className="md:hidden" onClick={() => setSelected("")}>←</button><div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#d9fdd3] font-semibold text-[#075e54]">{(currentChat.customerName || currentChat.customerPhone || selected).slice(0,1).toUpperCase()}</div><div className="min-w-0"><p className="truncate font-semibold">{currentChat.customerName || currentChat.customerPhone || selected}</p><p className="truncate text-xs text-gray-500">{currentChat.customerPhone || selected}</p></div></div>{whatsappConnections.length > 0 && <select aria-label="Send from WhatsApp number" value={selectedPhoneNumberId} onChange={e => setSelectedPhoneNumberId(e.target.value)} className="max-w-40 rounded-lg border bg-white px-2 py-2 text-xs text-gray-700">{whatsappConnections.map(connection => <option key={connection.phoneNumberId} value={connection.phoneNumberId}>{connection.displayPhoneNumber || connection.verifiedName || connection.phoneNumberId}</option>)}</select>}<button type="button" onClick={() => setShowCustomerInfo(value => !value)} className={`shrink-0 rounded-full border px-3 py-2 text-xs ${showCustomerInfo ? "border-[#075e54] bg-[#d9fdd3] text-[#075e54]" : "text-gray-600"}`}>Customer info</button></div>
+          <div className="flex items-center justify-between gap-3 border-b bg-white p-3"><div className="flex min-w-0 items-center gap-3"><button className="md:hidden" onClick={() => setSelected("")}>←</button><div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#d9fdd3] font-semibold text-[#075e54]">{(currentChat.customerName || currentChat.customerPhone || selected).slice(0,1).toUpperCase()}</div><div className="min-w-0"><p className="truncate font-semibold">{currentChat.customerName || currentChat.customerPhone || selected}</p><p className="truncate text-xs text-gray-500">{currentChat.customerPhone || selected}</p></div></div>{whatsappConnections.length > 0 && <select aria-label="Send from WhatsApp number" value={selectedPhoneNumberId} onChange={e => setSelectedPhoneNumberId(e.target.value)} className="max-w-40 rounded-lg border bg-white px-2 py-2 text-xs text-gray-700">{whatsappConnections.map(connection => <option key={connection.phoneNumberId} value={connection.phoneNumberId}>{connection.displayPhoneNumber || connection.verifiedName || connection.phoneNumberId}</option>)}</select>}<div className="flex flex-wrap items-center gap-2">
+            <label className="text-[11px] text-gray-500">Assign<select aria-label="Assign conversation" disabled={assignmentSaving || organization?.role === "agent"} value={currentChat.assignedTo || ""} onChange={e => void updateAssignment({ assignedTo: e.target.value || null })} className="ml-1 max-w-36 rounded-lg border bg-white px-2 py-2 text-xs text-gray-700"><option value="">Unassigned</option>{teamMembers.map(member => <option key={member.uid} value={member.uid}>{member.displayName || member.email || member.uid} ({member.role})</option>)}</select></label>
+            <label className="text-[11px] text-gray-500">Status<select aria-label="Conversation status" disabled={assignmentSaving} value={currentChat.status || "open"} onChange={e => void updateAssignment({ status: e.target.value as "open" | "pending" | "resolved" })} className="ml-1 rounded-lg border bg-white px-2 py-2 text-xs text-gray-700"><option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option></select></label>
+          </div>
+          <button type="button" onClick={() => setShowCustomerInfo(value => !value)} className={`shrink-0 rounded-full border px-3 py-2 text-xs ${showCustomerInfo ? "border-[#075e54] bg-[#d9fdd3] text-[#075e54]" : "text-gray-600"}`}>Customer info</button></div>
           {showCustomerInfo && <aside className="border-b bg-white p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Customer details</h3><span className="text-xs text-gray-400">{currentContact ? "Saved contact" : "Not saved yet"}</span></div><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs text-gray-500">Customer name<input maxLength={100} value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Customer name" className="mt-1 w-full rounded-lg border p-2 text-sm text-gray-800"/></label><label className="text-xs text-gray-500">WhatsApp number<input readOnly value={currentChat.customerPhone || selected} className="mt-1 w-full rounded-lg border bg-gray-50 p-2 text-sm text-gray-800"/></label><label className="text-xs text-gray-500">Email<input type="email" maxLength={254} value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} placeholder="Customer email" className="mt-1 w-full rounded-lg border p-2 text-sm text-gray-800"/></label><label className="text-xs text-gray-500">Notes<textarea maxLength={1000} rows={2} value={customerNotes} onChange={e => setCustomerNotes(e.target.value)} placeholder="Add customer notes..." className="mt-1 w-full rounded-lg border p-2 text-sm text-gray-800"/></label></div><div className="mt-3 flex justify-end"><button disabled={customerSaving} onClick={() => void saveCustomerInfo()} className="rounded-lg bg-[#075e54] px-4 py-2 text-sm text-white disabled:opacity-50">{customerSaving ? "Saving..." : "Save customer details"}</button></div></aside>}<div className="flex-1 space-y-3 overflow-y-auto p-4">
             <div className="sticky top-0 z-10 flex gap-2 bg-[#eef2f3]"><input value={messageSearch} onChange={e => setMessageSearch(e.target.value)} placeholder="Search messages in this chat..." className="min-w-0 flex-1 rounded-full border bg-white px-3 py-2 text-sm outline-none focus:border-[#075e54]"/><button type="button" onClick={() => setSavedOnly(value => !value)} className={`shrink-0 rounded-full border px-3 text-xs ${savedOnly ? "border-[#075e54] bg-[#d9fdd3] text-[#075e54]" : "bg-white text-gray-600"}`}>{savedOnly ? "All messages" : "Saved"}</button></div>
             {visibleMessages.map((message) => <div key={message.id} id={"message-" + message.id} className={`flex ${message.direction === "outgoing" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm ${message.direction === "outgoing" ? "bg-[#d9fdd3]" : "bg-white"}`}>{mediaUrls[message.id] ? <div className="mb-2">{message.type === "image" ? <img src={mediaUrls[message.id]} alt={message.mediaFilename || "WhatsApp image"} className="max-h-64 max-w-full rounded-lg object-contain"/> : message.type === "video" ? <video src={mediaUrls[message.id]} controls className="max-h-64 max-w-full rounded-lg"/> : message.type === "audio" ? <audio src={mediaUrls[message.id]} controls className="max-w-full"/> : <a href={mediaUrls[message.id]} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-[#075e54] underline"><FileText size={18}/>{message.mediaFilename || "Open attachment"}</a>}</div> : message.mediaId ? <p className="mb-2 text-xs text-gray-500">Loading attachment or preview unavailable</p> : null}<p className="whitespace-pre-wrap break-words text-sm">{message.text || (message.mediaId ? "" : `[${message.type || "Message"}]`)}</p><div className="mt-1 flex gap-3"><button onClick={() => void toggleMessagePin(message)} className="text-[10px] text-gray-500">{(message as TenantMessage & { pinned?: boolean }).pinned ? "Unpin" : "Pin"}</button><button onClick={() => void toggleMessageSaved(message)} className="text-[10px] text-gray-500">{(message as TenantMessage & { saved?: boolean }).saved ? "★ Saved" : "☆ Save"}</button></div>{message.deliveryError && <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 text-left"><p className="text-xs font-semibold text-red-700">{message.deliveryError.title || "Message delivery failed"}</p><p className="mt-1 text-xs text-red-700">{message.deliveryError.details || message.deliveryError.message || "WhatsApp could not deliver this message."}</p>{message.deliveryError.code && <p className="mt-1 text-[10px] text-red-500">Error code: {message.deliveryError.code}</p>}{message.direction === "outgoing" && message.status === "failed" && message.type === "text" && <div className="mt-2 flex items-center gap-2">{retriedMessageIds.includes(message.id) ? <span className="text-xs font-medium text-green-700">Retry submitted as a new message</span> : <button type="button" disabled={retryingMessageIds.includes(message.id)} onClick={() => void retryFailedText(message)} className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 disabled:opacity-50">{retryingMessageIds.includes(message.id) ? "Retrying..." : "Retry message"}</button>}</div>}{message.direction === "outgoing" && message.status === "failed" && message.type !== "text" && <p className="mt-2 text-[10px] text-gray-500">For safety, attach this media again to retry it.</p>}</div>}<p className="mt-1 text-right text-[10px] text-gray-400">{timeLabel(message.timestamp)} {message.status || ""}</p></div></div>)}
