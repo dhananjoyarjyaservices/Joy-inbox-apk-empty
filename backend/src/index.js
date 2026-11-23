@@ -787,6 +787,17 @@ async function listTenantTeamNotificationDeliveries(event) {
     const failed = total - delivered;
     const retried = deliveries.filter(item => Number(item.attempts || 1) > 1).length;
     const attempts = deliveries.reduce((sum, item) => sum + Math.max(1, Number(item.attempts || 1)), 0);
+    const byType = {};
+    for (const item of deliveries) {
+      const type = String(item.type || "other");
+      if (!byType[type]) byType[type] = { total: 0, delivered: 0, failed: 0, retried: 0, attempts: 0 };
+      const stats = byType[type];
+      stats.total += 1;
+      if (item.status === "delivered") stats.delivered += 1;
+      else stats.failed += 1;
+      if (Number(item.attempts || 1) > 1) stats.retried += 1;
+      stats.attempts += Math.max(1, Number(item.attempts || 1));
+    }
     const latest = deliveries[0]?.createdAt;
     return {
       uid: memberDoc.id,
@@ -794,12 +805,22 @@ async function listTenantTeamNotificationDeliveries(event) {
       role: String(member.role || "agent"),
       total, delivered, failed, retried, attempts,
       rate: total ? Math.round(delivered / total * 100) : 0,
+      byType,
       lastActivityAt: latest?.toDate ? latest.toDate().toISOString() : null
     };
   }));
   const agents = memberRows.filter(Boolean).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  const typeTotals = {};
+  for (const agent of agents) {
+    for (const [type, stats] of Object.entries(agent.byType)) {
+      if (!typeTotals[type]) typeTotals[type] = { total: 0, delivered: 0, failed: 0, retried: 0, attempts: 0 };
+      for (const key of ["total", "delivered", "failed", "retried", "attempts"]) typeTotals[type][key] += stats[key];
+    }
+  }
+  for (const stats of Object.values(typeTotals)) stats.rate = stats.total ? Math.round(stats.delivered / stats.total * 100) : 0;
   return jsonResponse(event, 200, {
     agents,
+    typeTotals,
     sampledMembers: membersSnapshot.size,
     capped: membersSnapshot.size >= 50 || memberRows.some(item => item && item.total >= 500),
     perMemberLimit: 500,
