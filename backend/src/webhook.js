@@ -205,7 +205,15 @@ async function updateTenantMessageStatus(organization, status) {
   } : null;
   await ref.firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
-    if (!snapshot.exists || !shouldApplyMessageStatus(snapshot.data()?.status, nextStatus)) return;
+    if (!snapshot.exists) {
+      // The send endpoint may still be committing the outgoing message.
+      // Return a non-2xx webhook response so Meta can retry this status event.
+      throw Object.assign(new Error("Outgoing message is not committed yet."), {
+        statusCode: 503,
+        retryable: true
+      });
+    }
+    if (!shouldApplyMessageStatus(snapshot.data()?.status, nextStatus)) return;
     transaction.update(ref, {
       status: nextStatus,
       statusUpdatedAt: new Date(),
