@@ -502,6 +502,8 @@ async function processOrganisationWebhookChange(orgId, value) {
       lastSeenAt: new Date(),
       updatedAt: new Date()
     }, { merge: true });
+
+    await maybeRunOrganisationAutomation(orgId, phone, message, contactName);
   }
 
   for (const status of value.statuses || []) {
