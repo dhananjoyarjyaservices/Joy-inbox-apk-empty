@@ -334,3 +334,22 @@ export async function removeOrganisationMember(orgId: string, uid: string) {
     { method: "DELETE" },
   );
 }
+
+
+export interface OrganisationAuditLog {
+  id: string;
+  action: string;
+  actorUid: string;
+  actorEmail: string;
+  targetUid?: string;
+  targetEmail?: string;
+  details?: Record<string, unknown>;
+  createdAt?: { toDate?: () => Date } | Date | string;
+}
+
+export async function getOrganisationAuditLogs(orgId: string) {
+  const result = await request<{ auditLogs: OrganisationAuditLog[] }>(
+    "/organisations/" + encodeURIComponent(orgId) + "/audit-logs",
+  );
+  return result.auditLogs || [];
+}
