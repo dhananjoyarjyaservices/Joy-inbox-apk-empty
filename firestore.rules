@@ -1,0 +1,194 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+
+    // Multi-tenant organisation data is readable only by active members.
+    // All writes are performed by the authenticated backend Admin SDK.
+    function isOrgMember(orgId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/organisations/$(orgId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/organisations/$(orgId)/members/$(request.auth.uid)).data.status == "active";
+    }
+
+    function hasOrgManagementRole(orgId) {
+      return isOrgMember(orgId)
+        && get(/databases/$(database)/documents/organisations/$(orgId)/members/$(request.auth.uid)).data.role in ["owner", "admin", "manager"];
+    }
+
+    match /organisations/{orgId} {
+      allow read: if isOrgMember(orgId);
+      allow write: if false;
+
+      match /members/{memberUid} {
+        allow read: if isOrgMember(orgId)
+          && (request.auth.uid == memberUid || hasOrgManagementRole(orgId));
+        allow write: if false;
+      }
+
+      match /chats/{chatId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if false;
+
+        match /messages/{messageId} {
+          allow read: if isOrgMember(orgId);
+          allow write: if false;
+        }
+
+        match /internalNotes/{noteId} {
+          allow read: if isOrgMember(orgId);
+          allow write: if false;
+        }
+      }
+
+      match /contacts/{contactId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if false;
+
+        match /consentEvents/{eventId} {
+          allow read: if hasOrgManagementRole(orgId);
+          allow write: if false;
+        }
+      }
+
+      match /quickReplies/{quickReplyId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if false;
+      }
+
+      match /campaigns/{campaignId} {
+        allow read: if hasOrgManagementRole(orgId);
+        allow write: if false;
+      }
+
+      match /automation/{settingsId} {
+        allow read: if hasOrgManagementRole(orgId);
+        allow write: if false;
+      }
+
+      match /automationEvents/{eventId} {
+        allow read: if hasOrgManagementRole(orgId);
+        allow write: if false;
+      }
+
+      match /whatsappConnections/{connectionId} {
+        allow read, write: if false;
+      }
+
+      match /invitations/{invitationId} {
+        allow read: if request.auth != null
+          && (request.auth.token.email == resource.data.email || hasOrgManagementRole(orgId));
+        allow write: if false;
+      }
+    }
+
+    function isOwner() {
+      return request.auth != null
+        && request.auth.uid == "Vy49nGnw74gR5SFHmjN0DOQ2QFE3";
+    }
+
+    // FCM tokens are only accessed by the authenticated Lambda API.
+    // The top-level collection check keeps device credentials private from all clients.
+    match /{collection}/{document=**} {
+      allow read: if isOwner() && collection != "fcmTokens" && collection != "organisations" && collection != "whatsappPhoneNumbers";
+      allow write: if false;
+    }
+
+    // Restrict browser updates to the existing outgoing-message metadata fields.
+    match /chats/{chatId}/messages/{messageId} {
+      allow update: if isOwner()
+        && resource.data.direction == "outgoing"
+        && request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(["direction", "source", "messageId"])
+        && request.resource.data.direction == "outgoing"
+        && request.resource.data.source in ["manual", "quick_reply"]
+        && request.resource.data.messageId == messageId;
+    }
+
+    // Owner can manage their own saved Quick Replies.
+    match /users/{userId}/quickReplies/{replyId} {
+      allow read: if isOwner()
+        && request.auth.uid == userId;
+
+      allow create: if isOwner()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          "title",
+          "shortcut",
+          "message",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.message is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.message.size() > 0
+        && request.resource.data.title.size() <= 60
+        && request.resource.data.message.size() <= 4096;
+
+      allow update: if isOwner()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          "title",
+          "shortcut",
+          "message",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.message is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.message.size() > 0
+        && request.resource.data.title.size() <= 60
+        && request.resource.data.message.size() <= 4096;
+
+      allow delete: if isOwner()
+        && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/contacts/{contactId} {
+      function validContact() {
+        return request.resource.data.keys().hasOnly([
+            "name",
+            "phone",
+            "phoneId",
+            "email",
+            "notes",
+            "source",
+            "createdAt",
+            "updatedAt",
+            "lastSeenAt"
+          ])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 100
+          && request.resource.data.phone is string
+          && request.resource.data.phone.matches("^\\+[1-9][0-9]{6,14}$")
+          && request.resource.data.phoneId is string
+          && request.resource.data.phoneId.matches("^[1-9][0-9]{6,14}$")
+          && request.resource.data.phoneId == contactId
+          && request.resource.data.email is string
+          && request.resource.data.email.size() <= 254
+          && request.resource.data.notes is string
+          && request.resource.data.notes.size() <= 1000
+          && request.resource.data.source in ["local", "whatsapp"];
+      }
+
+      allow read: if isOwner() && request.auth.uid == userId;
+
+      allow create: if isOwner()
+        && request.auth.uid == userId
+        && validContact()
+        && request.resource.data.source == "local";
+
+      allow update: if isOwner()
+        && request.auth.uid == userId
+        && validContact()
+        && request.resource.data.source == resource.data.source;
+
+      allow delete: if isOwner() && request.auth.uid == userId;
+    }
+  }
+}
