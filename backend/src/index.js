@@ -760,7 +760,9 @@ async function sendTenantTemplate(event) {
     if (!expectedMime.includes(mimeType)) return jsonResponse(event, 400, { error: `This template requires a ${mediaHeaderFormat.toLowerCase()} header file.` });
     let buffer;
     try { buffer = Buffer.from(headerMedia.base64, "base64"); } catch { return jsonResponse(event, 400, { error: "The template header file is invalid." }); }
-    const uploaded = await uploadWhatsAppMedia(buffer, mimeType, headerMedia.filename, credentials);
+    let uploaded;
+    try { uploaded = await uploadWhatsAppMedia(buffer, mimeType, headerMedia.filename, credentials); }
+    catch (error) { await markTenantSendRequestFailed(claim.ref, error); throw error; }
     const mediaType = mediaHeaderFormat.toLowerCase();
     components.push({ type: "header", parameters: [{ type: mediaType, [mediaType]: { id: uploaded.mediaId } }] });
   }
