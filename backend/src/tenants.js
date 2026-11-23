@@ -322,6 +322,75 @@ async function sendOrganisationText(db, user, orgId, body) {
   return { messageId: result.messageId, chatId: to, status: "sent" };
 }
 
+
+async function updateOrganisationChat(db, user, orgId, chatId, body, action) {
+  const membership = await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager", "agent"]);
+  if (!/^\d{6,20}$/.test(chatId)) fail("A valid customer phone number is required.");
+  const chatRef = db.collection("organisations").doc(orgId).collection("chats").doc(chatId);
+  const chatSnapshot = await chatRef.get();
+  if (!chatSnapshot.exists) fail("Conversation was not found.", 404);
+
+  if (action === "assignment") {
+    const assignedToUid = body.assignedToUid === null ? "" : String(body.assignedToUid || "");
+    if (membership.role === "agent" && assignedToUid !== user.uid) {
+      fail("Agents can only assign conversations to themselves.", 403);
+    }
+    let assignedToEmail = "";
+    if (assignedToUid) {
+      const target = await getMembership(db, orgId, assignedToUid);
+      if (!target) fail("The selected team member is not active in this organisation.", 404);
+      assignedToEmail = target.email || "";
+    }
+    const updates = {
+      assignedToUid: assignedToUid || null,
+      assignedToEmail: assignedToEmail || null,
+      assignedAt: new Date(),
+      assignedBy: user.uid,
+      updatedAt: new Date()
+    };
+    if (body.status !== undefined) {
+      if (!["open", "pending", "resolved"].includes(body.status)) fail("Status must be open, pending or resolved.");
+      updates.status = body.status;
+    }
+    await chatRef.set(updates, { merge: true });
+    return { assignedToUid: assignedToUid || null, assignedToEmail: assignedToEmail || null, status: updates.status || chatSnapshot.data().status || "open" };
+  }
+
+  if (action === "note") {
+    const content = typeof body.content === "string" ? body.content.trim() : "";
+    if (!content || content.length > 2000) fail("Internal note must contain 1 to 2000 characters.");
+    const noteRef = chatRef.collection("internalNotes").doc();
+    await noteRef.create({
+      content,
+      authorUid: user.uid,
+      authorEmail: String(user.email || ""),
+      createdAt: new Date()
+    });
+    return { id: noteRef.id, content };
+  }
+
+  if (action === "tags") {
+    if (!["owner", "admin", "manager"].includes(membership.role)) fail("Only managers can edit conversation tags.", 403);
+    if (!Array.isArray(body.tags) || body.tags.length > 20 ||
+      body.tags.some((tag) => typeof tag !== "string" || !/^[a-z0-9_-]{1,24}$/i.test(tag)) ||
+      new Set(body.tags).size !== body.tags.length) {
+      fail("Provide up to 20 unique tags using letters, numbers, underscore or hyphen.");
+    }
+    await chatRef.set({ tags: body.tags, updatedAt: new Date() }, { merge: true });
+    return { tags: body.tags };
+  }
+  fail("Unsupported conversation action.", 400);
+}
+
+async function listOrganisationNotes(db, user, orgId, chatId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager", "agent"]);
+  if (!/^\d{6,20}$/.test(chatId)) fail("A valid customer phone number is required.");
+  const snapshot = await db.collection("organisations").doc(orgId)
+    .collection("chats").doc(chatId).collection("internalNotes")
+    .orderBy("createdAt", "desc").limit(50).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
 async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
@@ -331,7 +400,8 @@ async function handleTenantRoute(event) {
   const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
   const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
   const orgMessagesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch)) return null;
+  const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgChatActionMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -351,6 +421,16 @@ async function handleTenantRoute(event) {
     if (acceptMatch && method === "POST") {
       const result = await acceptInvitation(db, user, acceptMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, membership: result });
+    }
+
+    if (orgChatActionMatch && orgChatActionMatch[3] === "notes" && method === "GET") {
+      const notes = await listOrganisationNotes(db, user, orgChatActionMatch[1], orgChatActionMatch[2]);
+      return jsonResponse(event, 200, { notes });
+    }
+    if (orgChatActionMatch && method === "POST") {
+      const action = orgChatActionMatch[3] === "notes" ? "note" : orgChatActionMatch[3];
+      const result = await updateOrganisationChat(db, user, orgChatActionMatch[1], orgChatActionMatch[2], parseBody(event), action);
+      return jsonResponse(event, 200, { success: true, result });
     }
     if (orgMessagesMatch && method === "POST") {
       const result = await sendOrganisationText(db, user, orgMessagesMatch[1], parseBody(event));
