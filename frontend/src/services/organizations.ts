@@ -82,7 +82,7 @@ export interface WhatsAppTemplate {
   status: string;
   language: string;
   category: string;
-  components: Array<{ type?: string; text?: string; format?: string }>;
+  components: Array<{ type?: string; text?: string; format?: string; buttons?: Array<{ type?: string; text?: string; url?: string }> }>;
 }
 export async function listWhatsAppTemplates(organizationId: string, phoneNumberId: string, wabaId: string): Promise<WhatsAppTemplate[]> {
   const query = new URLSearchParams({ organizationId, phoneNumberId, wabaId });
