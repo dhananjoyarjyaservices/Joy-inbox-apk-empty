@@ -32,6 +32,7 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
     await setDoc(doc(db, "organizations/org_b"), { status: "active", name: "Workspace B" });
     await setDoc(doc(db, "organizations/org_inactive"), { status: "suspended", name: "Suspended Workspace" });
     await setDoc(doc(db, "organizations/org_a/members/owner_a"), { status: "active", role: "owner" });
+    await setDoc(doc(db, "organizations/org_a/invitations/secret_invite"), { status: "pending", tokenHash: "server-only-hash" });
     await setDoc(doc(db, "users/owner_a/organizations/org_a"), { organizationId: "org_a" });
     await setDoc(doc(db, "users/owner_a/organizations/org_b"), { organizationId: "org_b" });
     await setDoc(doc(db, "users/owner_b/organizations/org_a"), { organizationId: "org_a" });
@@ -63,6 +64,8 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
   const anonymousDb = testEnv.unauthenticatedContext().firestore();
 
   await assertSucceeds(getDoc(doc(ownerDb, "organizations/org_a")));
+  await assertFails(getDoc(doc(ownerDb, "organizations/org_a/invitations/secret_invite")));
+  await assertFails(setDoc(doc(ownerDb, "organizations/org_a/invitations/client_invite"), { tokenHash: "client-write" }));
   await assertSucceeds(getDoc(doc(ownerDb, "users/owner_a/organizations/org_a")));
   await assertFails(getDoc(doc(ownerDb, "users/owner_a/organizations/org_b")));
   await assertFails(getDoc(doc(otherTenantDb, "users/owner_b/organizations/org_a")));
