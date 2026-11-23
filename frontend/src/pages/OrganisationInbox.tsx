@@ -62,7 +62,8 @@ export default function OrganisationInbox() {
   const [chatSearch, setChatSearch] = useState("");
   const [tagDraft, setTagDraft] = useState("");
   const [savingTags, setSavingTags] = useState(false);
-  const [changingStatus, setChangingStatus] = useState(false);\n  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
   const filteredChats = useMemo(() => { const term = chatSearch.trim().toLowerCase(); return term ? chats.filter((chat) => [chat.customerName, chat.customerPhone, chat.lastMessage, ...(chat.tags || [])].some((value) => String(value || "").toLowerCase().includes(term))) : chats; }, [chats, chatSearch]);
