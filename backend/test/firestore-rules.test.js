@@ -65,6 +65,6 @@ test("unrecognized roles and missing authentication cannot satisfy the tenant me
 
 test("workspace switcher index reads also require active membership in that workspace", () => {
   const block = rules.slice(rules.indexOf("match /users/{userId}/organizations/{organizationId}"), rules.indexOf("// Organization metadata"));
-  assert.match(block, /request\\.auth\\.uid == userId/);
-  assert.match(block, /isActiveOrganizationMember\\(organizationId\\)/);
+  assert.match(block, /request\.auth\.uid == userId/);
+  assert.match(block, /isActiveOrganizationMember\(organizationId\)/);
 });
