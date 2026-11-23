@@ -13,6 +13,10 @@ function logWhatsAppLatency(startedAt, type, outcome) {
   }));
 }
 
+function isDefinitiveWhatsAppSendRejection(status) {
+  return Number.isInteger(status) && status >= 400 && status < 500 && status !== 408;
+}
+
 function definitiveError(message) {
   const error = new Error(message);
   error.definitive = true;
@@ -47,7 +51,7 @@ async function readSendResponse(response, startedAt, type, fallbackMessage) {
     error.statusCode = 502;
     // A 4xx response is an explicit rejection. A 5xx response may occur
     // after Meta accepted the request, so delivery must remain unknown.
-    error.definitive = response.status >= 400 && response.status < 500 && response.status !== 408;
+    error.definitive = isDefinitiveWhatsAppSendRejection(response.status);
     error.retryable = false;
     throw error;
   }
@@ -210,6 +214,7 @@ async function checkWhatsAppConnection(credentials) {
 
 module.exports = {
   normalizePhoneNumber,
+  isDefinitiveWhatsAppSendRejection,
   resolveCredentials,
   sendWhatsAppText,
   sendWhatsAppMedia,
