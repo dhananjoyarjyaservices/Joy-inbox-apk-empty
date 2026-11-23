@@ -21,7 +21,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!API_BASE) throw new Error("Backend URL is not configured.");
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in again.");
-  const token = await user.getIdToken();
+  const token = await user.getIdToken(true);
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
