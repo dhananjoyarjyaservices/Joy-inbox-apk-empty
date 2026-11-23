@@ -229,7 +229,7 @@ export interface OrganizationCampaign {
   scheduledAt?: string | null;
   createdAt: string | null;
 }
-export interface OrganizationCampaignRecipient {
+export interface OrganizationCampaignDraftRecipient {
   phone: string;
   optedIn: true;
   consentAt: string;
@@ -244,7 +244,7 @@ export interface CreateOrganizationCampaignInput {
   phoneNumberId: string;
   wabaId: string;
   variables?: string[];
-  recipients: OrganizationCampaignRecipient[];
+  recipients: OrganizationCampaignDraftRecipient[];
 }
 export async function listOrganizationCampaigns(organizationId: string): Promise<OrganizationCampaign[]> {
   const result = await request(`/organizations/campaigns?organizationId=${encodeURIComponent(organizationId)}`);
