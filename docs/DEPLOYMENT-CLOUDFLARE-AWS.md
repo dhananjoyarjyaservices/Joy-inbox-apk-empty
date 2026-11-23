@@ -199,3 +199,23 @@ The Owner/Admin Automation screen includes queue health counts for queued, sendi
 
 Before production rollout, wait for GitHub Actions to finish successfully, deploy Firestore indexes, deploy the API and separate worker Lambda, then create the one-minute EventBridge schedule. Send a test inbound message that triggers a delayed step and verify: queue record created, due time reached, worker invocation logged, outgoing chat message saved, and run marked sent. Also test a deliberate rate-limit failure and an expired worker lease in a non-production workspace. Do not treat a committed workflow or worker file as proof of a live deployment.
 
+
+
+## Scheduled campaign delivery worker (deployment required)
+
+The backend exposes a separate scheduled handler at `src/index.campaignScheduledHandler`. It processes only campaigns that an owner/admin explicitly started or scheduled through the tenant API. Create a separate Lambda from the same backend source bundle, using Node.js 22, a 60-second timeout, and the same Firebase Admin and tenant encryption environment variables as the API Lambda. Do not expose a public Function URL.
+
+The optional CloudFormation schedule is in `infra/aws/campaign-worker-schedule.yaml`. Deploy it only after the campaign worker Lambda exists, passing its ARN as `CampaignWorkerLambdaArn`. It invokes the worker every minute. Also deploy `firestore.indexes.json` with `firebase deploy --only firestore:indexes` and wait until every index is ready before scheduling real campaigns.
+
+The campaign worker handles at most five campaigns and ten recipients per invocation. It rechecks the tenant's opt-out suppression record before each send, verifies template approval, persists the outgoing template message in the tenant chat, and tracks sent/failed/skipped/uncertain counts. HTTP 429 responses are retried with bounded backoff; ambiguous network/5xx results and expired send leases are marked uncertain and are not automatically resent. A pause or cancel stops subsequent recipient claims, although a request already in flight cannot be recalled.
+
+Staging acceptance checks before production:
+1. Create a campaign with a test recipient who explicitly opted in; verify it remains a draft.
+2. Start the campaign manually and confirm the worker sends the approved template and writes the returned Meta message ID to the chat.
+3. Opt a test recipient out after draft creation but before start; confirm the worker skips them and does not call Meta.
+4. Pause and cancel campaigns while queued; confirm no further recipient claims occur.
+5. Simulate Meta 429, 4xx, 5xx and timeout responses; confirm retry, failed and uncertain states are correct.
+6. Confirm Meta status webhooks reconcile campaign message statuses.
+7. Verify schedule times are interpreted in UTC and campaigns only queue after the selected time.
+
+This repository change only adds code and an optional infrastructure template. It does not create the Lambda, EventBridge schedule, deploy Firestore indexes, configure Meta credentials, or send any real campaign. Keep production scheduling disabled until the staging checks and business/compliance approval are complete.
