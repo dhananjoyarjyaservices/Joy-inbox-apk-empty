@@ -717,7 +717,23 @@ async function sendTenantTemplate(event) {
     return jsonResponse(event, 400, { error: "Template name, language or body variables are invalid." });
   }
   const db = getDb();
+  const wabaId = String(body.wabaId || "").trim();
+  if (!/^\\d{5,32}$/.test(wabaId)) return jsonResponse(event, 400, { error: "A valid WhatsApp Business Account ID is required." });
   const credentials = await getWhatsAppCredentials(db, organization.id, body.phoneNumberId);
+  const version = process.env.GRAPH_API_VERSION || "v26.0";
+  const templateUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
+  templateUrl.searchParams.set("fields", "name,status,language,components");
+  templateUrl.searchParams.set("name", templateName);
+  templateUrl.searchParams.set("limit", "100");
+  const templateResponse = await fetch(templateUrl.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
+  const templatePayload = await templateResponse.json().catch(() => ({}));
+  if (!templateResponse.ok) return jsonResponse(event, 502, { error: templatePayload.error?.message || "Meta could not verify this template. Check WABA ID and token permissions." });
+  const approvedTemplate = (Array.isArray(templatePayload.data) ? templatePayload.data : []).find(item => item.name === templateName && item.language === language && item.status === "APPROVED");
+  if (!approvedTemplate) return jsonResponse(event, 400, { error: "This template is not approved for the selected language." });
+  const bodyText = (Array.isArray(approvedTemplate.components) ? approvedTemplate.components : []).find(item => item.type === "BODY")?.text || "";
+  const expectedVariables = [...bodyText.matchAll(/\\\\{\\\\{\\\\s*(\\\\d+)\\\\s*\\\\}\\\\}/g)].map(match => Number(match[1]));
+  const expectedCount = expectedVariables.length ? Math.max(...expectedVariables) : 0;
+  if (variables.length !== expectedCount) return jsonResponse(event, 400, { error: `This template requires ${expectedCount} body variable(s).` });
   const clientMessageId = getClientMessageId(body.clientMessageId);
   const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId: credentials.phoneNumberId || null, to, templateName, language, variables });
   const claim = await claimTenantSendRequest(db, organization.id, to, clientMessageId, payloadHash);
