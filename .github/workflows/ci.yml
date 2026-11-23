@@ -6,6 +6,7 @@ on:
       - feature/saas-foundation
   pull_request:
     branches:
+      - main
       - feature/saas-foundation
 
 permissions:
