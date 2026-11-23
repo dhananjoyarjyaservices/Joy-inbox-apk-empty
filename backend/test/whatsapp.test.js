@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { resolveCredentials, sendWhatsAppText } = require("../src/whatsapp");
+const { resolveCredentials, sendWhatsAppText, isDefinitiveWhatsAppSendRejection } = require("../src/whatsapp");
 
 test("uses explicitly supplied tenant credentials instead of global environment", () => {
   process.env.WHATSAPP_ACCESS_TOKEN = "EAA-global-token";
@@ -143,4 +143,19 @@ test("Meta rate-limit response is a definitive rejection", async () => {
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+
+test("Meta send rejection classification treats timeouts and server errors as ambiguous", () => {
+  for (const status of [408, 500, 502, 503, 504, 599]) {
+    assert.equal(isDefinitiveWhatsAppSendRejection(status), false, String(status));
+  }
+});
+
+test("Meta send rejection classification treats explicit 4xx errors as definitive", () => {
+  for (const status of [400, 401, 403, 404, 429]) {
+    assert.equal(isDefinitiveWhatsAppSendRejection(status), true, String(status));
+  }
+  assert.equal(isDefinitiveWhatsAppSendRejection(200), false);
+  assert.equal(isDefinitiveWhatsAppSendRejection("400"), false);
 });
