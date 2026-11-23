@@ -136,6 +136,31 @@ export async function syncPushToken(): Promise<void> {
   await authenticatedRequest("/organizations/fcm-tokens/register", { token, installationId, organizationId });
 }
 
+let notificationAudioContext: AudioContext | null = null;
+
+export function playNotificationSound(): void {
+  try {
+    const AudioContextConstructor = window.AudioContext;
+    if (!AudioContextConstructor) return;
+    notificationAudioContext ||= new AudioContextConstructor();
+    if (notificationAudioContext.state === "suspended") void notificationAudioContext.resume();
+    const oscillator = notificationAudioContext.createOscillator();
+    const gain = notificationAudioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, notificationAudioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(660, notificationAudioContext.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.0001, notificationAudioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, notificationAudioContext.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, notificationAudioContext.currentTime + 0.18);
+    oscillator.connect(gain);
+    gain.connect(notificationAudioContext.destination);
+    oscillator.start();
+    oscillator.stop(notificationAudioContext.currentTime + 0.19);
+  } catch (error) {
+    console.warn("Notification sound could not play:", error);
+  }
+}
+
 export async function listenForForegroundPush(callback: (data: Record<string, string>) => void): Promise<() => void> {
   if (!(await isSupported())) return () => undefined;
   return onMessage(getMessaging(firebaseApp), payload => callback(payload.data || {}));
