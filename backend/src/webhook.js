@@ -366,6 +366,7 @@ async function maybeRunOrganisationAutomation(orgId, phone, message, contactName
   const connection = connectionSnapshot.data() || {};
   if (!connection.accessTokenEncrypted || !connection.phoneNumberId) return;
   const priorContact = contactSnapshot.exists ? contactSnapshot.data() : {};
+  if (priorContact.whatsappOptOut === true) return;
   const body = message.type === "text" ? String(message.text?.body || "").trim() : "";
   let action = null;
   const lastAwayAt = priorContact.awaySentAt?.toDate
