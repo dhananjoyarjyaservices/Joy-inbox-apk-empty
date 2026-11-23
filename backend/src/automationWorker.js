@@ -13,6 +13,15 @@ function retryDelayMs(attempt) {
   return Math.min(15 * 60 * 1000, 1000 * (2 ** (safeAttempt - 1)));
 }
 
+function getFailureDisposition(error, sendAttempted, attempts) {
+  const rateLimited = Number(error?.metaStatusCode) === 429;
+  const definitive = error?.definitive === true;
+  const explicitlyRetryable = error?.retryable === true;
+  if (sendAttempted && !definitive && !rateLimited) return "uncertain";
+  if ((rateLimited || (!definitive && explicitlyRetryable)) && attempts < MAX_ATTEMPTS) return "queued";
+  return "failed";
+}
+
 function timestampMillis(value) {
   if (!value) return 0;
   if (typeof value.toMillis === "function") return value.toMillis();
@@ -45,6 +54,7 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
   const runRef = organizationRef.collection("automationRuns").doc(job.runId);
   const chatRef = organizationRef.collection("chats").doc(job.customerPhone);
 
+  let sendAttempted = false;
   try {
     const runSnapshot = await runRef.get();
     if (!runSnapshot.exists) throw Object.assign(new Error("Automation run was not found."), { definitive: true });
@@ -61,6 +71,7 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     }
 
     const credentials = await getCredentials(db, job.organizationId, job.phoneNumberId || undefined);
+    sendAttempted = true;
     const result = await sendText(job.customerPhone, job.text, undefined, credentials);
     const sentAt = new Date();
     const batch = db.batch();
@@ -105,30 +116,29 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     return "sent";
   } catch (error) {
     const attempts = Number(job.attempts || 1);
-    const rateLimited = Number(error?.metaStatusCode) === 429;
-    const definitive = error?.definitive === true;
-    const explicitlyRetryable = error?.retryable === true;
-    const canRetry = (rateLimited || (!definitive && explicitlyRetryable)) && attempts < MAX_ATTEMPTS;
+    const disposition = getFailureDisposition(error, sendAttempted, attempts);
     const failedAt = new Date();
-    const nextStatus = canRetry ? "queued" : "failed";
     const patch = {
-      status: nextStatus,
+      status: disposition,
       leaseUntil: null,
       error: String(error?.message || "Automation queue delivery failed.").slice(0, 300),
       updatedAt: failedAt,
-      ...(canRetry ? { dueAt: new Date(failedAt.getTime() + retryDelayMs(attempts)) } : {})
+      ...(disposition === "queued" ? { dueAt: new Date(failedAt.getTime() + retryDelayMs(attempts)) } : {})
     };
+    if (disposition === "uncertain") {
+      patch.error = "WhatsApp send was attempted but delivery could not be confirmed. Manual review is required; automatic resend was prevented.";
+    }
     await jobRef.update(patch);
-    if (!canRetry) {
+    if (disposition !== "queued") {
       await runRef.set({
         status: "partially_failed",
+        ...(disposition === "uncertain" ? { uncertainStep: Number(job.stepIndex || 0) + 1 } : { failedStep: Number(job.stepIndex || 0) + 1 }),
         error: patch.error,
-        failedStep: Number(job.stepIndex || 0) + 1,
         updatedAt: failedAt
       }, { merge: true });
     }
-    console.error("Automation queue job failed:", { jobId: jobRef.id, status: nextStatus, error: patch.error });
-    return nextStatus;
+    console.error("Automation queue job ended:", { jobId: jobRef.id, status: disposition, error: patch.error });
+    return disposition;
   }
 }
 
@@ -210,6 +220,7 @@ module.exports = {
   MAX_ATTEMPTS,
   retryDelayMs,
   timestampMillis,
+  getFailureDisposition,
   claimQueueJob,
   markExpiredQueueJobUncertain,
   processClaimedJob,
