@@ -132,3 +132,7 @@ export async function listOrganizationNotifications(organizationId: string): Pro
 export async function markOrganizationNotificationRead(organizationId: string, notificationId: string): Promise<void> {
   await request("/organizations/notifications", "POST", { organizationId, notificationId });
 }
+
+export async function markAllOrganizationNotificationsRead(organizationId: string): Promise<void> {
+  await request("/organizations/notifications", "POST", { organizationId, markAllRead: true });
+}
