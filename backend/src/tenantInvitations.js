@@ -59,6 +59,13 @@ async function createTenantInvitation(db, organizationId, actor, input, options 
   const now = options.now ? options.now() : new Date();
   const token = crypto.randomBytes(32).toString("base64url");
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  // Validate the configured frontend URL before persisting anything so a
+  // configuration error cannot leave an invitation that the caller cannot retrieve.
+  const inviteUrl = createInvitationUrl(
+    options.frontendBaseUrl || process.env.FRONTEND_BASE_URL,
+    organizationId,
+    token
+  );
   await db.runTransaction(async transaction => {
     const snapshot = await transaction.get(invitationRef);
     if (snapshot.exists) {
@@ -84,7 +91,7 @@ async function createTenantInvitation(db, organizationId, actor, input, options 
     status: "pending",
     expiresAt: new Date(now.getTime() + INVITATION_TTL_MS).toISOString(),
     token,
-    inviteUrl: createInvitationUrl(options.frontendBaseUrl || process.env.FRONTEND_BASE_URL, organizationId, token)
+    inviteUrl
   };
 }
 
@@ -99,7 +106,9 @@ async function listTenantInvitations(db, organizationId, limit = 50) {
       id: document.id,
       email: String(value.email || ""),
       role: String(value.role || "agent"),
-      status: String(value.status || "unknown"),
+      status: value.status === "pending" && invitationExpiry(value.expiresAt).getTime() <= Date.now()
+        ? "expired"
+        : String(value.status || "unknown"),
       invitedBy: String(value.invitedBy || ""),
       createdAt: invitationExpiry(value.createdAt).toISOString(),
       expiresAt: invitationExpiry(value.expiresAt).toISOString()
