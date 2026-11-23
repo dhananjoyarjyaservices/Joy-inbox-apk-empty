@@ -876,6 +876,9 @@ async function scheduleOrganisationCampaign(db, user, orgId, campaignId, body) {
     if (campaign.status !== "draft" && campaign.status !== "scheduled") {
       fail("Only draft or scheduled campaigns can be scheduled.", 409);
     }
+    if (campaign.status === "scheduled" && campaign.queueStatus === "ready") {
+      fail("Cancel this prepared campaign before changing its schedule.", 409);
+    }
     result = { id: campaignId, status: "scheduled", scheduledAt };
     tx.update(ref, { status: "scheduled", scheduledAt, scheduledBy: user.uid, updatedAt: now });
   });
