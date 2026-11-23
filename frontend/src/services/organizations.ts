@@ -136,3 +136,14 @@ export async function markOrganizationNotificationRead(organizationId: string, n
 export async function markAllOrganizationNotificationsRead(organizationId: string): Promise<void> {
   await request("/organizations/notifications", "POST", { organizationId, markAllRead: true });
 }
+
+export interface OrganizationNotificationPreferences { assignment: boolean; status: boolean; sla: boolean; }
+export const DEFAULT_NOTIFICATION_PREFERENCES: OrganizationNotificationPreferences = { assignment: true, status: true, sla: true };
+export async function getOrganizationNotificationPreferences(organizationId: string): Promise<OrganizationNotificationPreferences> {
+  const result = await request(`/organizations/notifications/preferences?organizationId=${encodeURIComponent(organizationId)}`);
+  return result.preferences || DEFAULT_NOTIFICATION_PREFERENCES;
+}
+export async function saveOrganizationNotificationPreferences(organizationId: string, preferences: OrganizationNotificationPreferences): Promise<OrganizationNotificationPreferences> {
+  const result = await request("/organizations/notifications/preferences", "PUT", { organizationId, ...preferences });
+  return result.preferences;
+}
