@@ -54,11 +54,28 @@ async function sendToDeviceCollection(admin, collection, data) {
       data,
       webpush: { headers: { Urgency: "high", TTL: "86400" } }
     });
-    delivered += result.responses.filter(response => response.success).length;
     await removeInvalidTokens(collection, result.responses.map((response, index) => ({
       ...response,
       deviceId: group[index].deviceId
     })));
+    const retryIndexes = result.responses.map((response, index) => ({ response, index }))
+      .filter(({ response }) => !response.success &&
+        ["messaging/server-unavailable", "messaging/internal-error", "messaging/unknown-error"].includes(response.error?.code))
+      .map(({ index }) => index);
+    if (retryIndexes.length) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const retry = await admin.messaging().sendEachForMulticast({
+        tokens: retryIndexes.map(index => group[index].token),
+        data,
+        webpush: { headers: { Urgency: "high", TTL: "86400" } }
+      });
+      delivered += retry.responses.filter(response => response.success).length;
+      await removeInvalidTokens(collection, retry.responses.map((response, index) => ({
+        ...response,
+        deviceId: group[retryIndexes[index]].deviceId
+      })));
+    }
+    delivered += result.responses.filter(response => response.success).length;
   }
   return delivered;
 }
