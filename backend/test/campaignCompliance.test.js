@@ -9,6 +9,15 @@ const {
   filterSuppressedCampaignRecipients
 } = require("../src/campaignCompliance");
 
+test("recognizes explicit START/UNSTOP opt-in requests", () => {
+  for (const value of ["START", "start!", "UNSTOP", "subscribe"]) {
+    assert.equal(isWhatsAppOptInMessage(value), true, value);
+  }
+  for (const value of ["please start the app", "starting now", ""]) {
+    assert.equal(isWhatsAppOptInMessage(value), false, value);
+  }
+});
+
 test("recognizes common WhatsApp opt-out keywords without matching ordinary text", () => {
   for (const value of ["STOP", "stop all", "Unsubscribe!", "cancel", "END", "quit", "opt out", "Please stop sending me messages", "dont message me"]) {
     assert.equal(isWhatsAppOptOutMessage(value), true, value);
@@ -94,4 +103,23 @@ test("a new STOP reply re-applies suppression even after a prior active status",
   assert.equal(stored.status, "opted_out");
   assert.equal(stored.source, "whatsapp_inbound");
   assert.equal(stored.lastInboundMessageId, "wamid.stop-again");
+});
+
+test("explicit START changes a previously suppressed contact to active", async () => {
+  let stored = { status: "opted_out", source: "whatsapp_inbound" };
+  const ref = { async get() { return { exists: true, data: () => stored }; } };
+  const db = {
+    collection: () => ({ doc: () => ({ collection: () => ({ doc: () => ref }) }) }),
+    async runTransaction(callback) {
+      await callback({
+        get: async () => ({ exists: true, data: () => stored }),
+        set: (_ref, value, options) => { stored = options?.merge ? { ...stored, ...value } : value; },
+        create: (_ref, value) => { stored = value; }
+      });
+    }
+  };
+  await recordCampaignOptIn(db, "org_123", "+91 98765 43210", "wamid.start");
+  assert.equal(stored.status, "active");
+  assert.equal(stored.source, "whatsapp_inbound_explicit_opt_in");
+  assert.equal(stored.lastInboundMessageId, "wamid.start");
 });
