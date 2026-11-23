@@ -115,6 +115,8 @@ export interface HistoricalAgentPerformance {
   email: string;
   assignedCount: number;
   resolvedCount: number;
+  responseCount?: number;
+  averageResponseMs?: number | null;
   lastActivityAt?: unknown;
 }
 
