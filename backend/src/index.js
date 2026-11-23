@@ -319,6 +319,43 @@ async function handleOrganizationMembers(event) {
   return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
+async function handleTenantAutomationQueueHealth(event) {
+  const decoded = await authenticateUser(event);
+  if (getMethod(event) !== "GET") return jsonResponse(event, 405, { error: "Method not allowed." });
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "settings:manage");
+  const queue = organization.ref.collection("automationQueue");
+  const statuses = ["queued", "sending", "sent", "failed", "skipped", "uncertain"];
+  const counts = await Promise.all(statuses.map(async (status) => {
+    const snapshot = await queue.where("status", "==", status).count().get();
+    return [status, Number(snapshot.data().count || 0)];
+  }));
+  const [dueSnapshot, failedSnapshot] = await Promise.all([
+    queue.where("status", "==", "queued").where("dueAt", "<=", new Date()).count().get(),
+    queue.where("status", "in", ["failed", "uncertain"]).limit(20).get()
+  ]);
+  const recentIssues = failedSnapshot.docs.map((document) => {
+    const data = document.data();
+    return {
+      id: document.id,
+      status: String(data.status || "failed"),
+      ruleId: String(data.ruleId || ""),
+      customerPhone: String(data.customerPhone || ""),
+      step: Number(data.stepIndex || 0) + 1,
+      error: String(data.error || data.reason || "").slice(0, 300),
+      updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : null
+    };
+  });
+  return jsonResponse(event, 200, {
+    counts: Object.fromEntries(counts),
+    dueNow: Number(dueSnapshot.data().count || 0),
+    recentIssues,
+    maxJobsPerInvocation: 25,
+    maxAttempts: 5
+  });
+}
+
 async function handleTenantAutomationRuns(event) {
   const decoded = await authenticateUser(event);
   if (getMethod(event) !== "GET") return jsonResponse(event, 405, { error: "Method not allowed." });
@@ -2530,6 +2567,11 @@ exports.handler = async (event) => {
       console.error("Organization member request failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Organization members could not be updated." });
     }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/automation-queue-health")) {
+    try { return await handleTenantAutomationQueueHealth(event); }
+    catch (error) { console.error("Automation queue health request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Automation queue health could not be loaded." }); }
   }
 
   if (method === "GET" && path.endsWith("/organizations/automation-runs")) {
