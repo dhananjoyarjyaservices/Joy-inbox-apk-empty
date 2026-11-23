@@ -19,6 +19,7 @@ This checklist separates code already present from work that requires real servi
 - [x] EventBridge schedule templates for campaign, automation and SLA workers.
 - [x] Unit tests for Meta webhook HMAC verification, inbound media metadata-only persistence, duplicate webhook-message handling and workspace invitation lifecycle (hashed tokens, verified-email acceptance, expiry, revocation and safe link generation).
 - [x] Firestore rules explicitly deny client reads and writes to workspace invitation documents; emulator coverage verifies that even active owners cannot read invitation token hashes.
+- [x] Legacy single-owner HTTP API routes (`/send`, chat state/deletion, media, status, greeting settings and legacy FCM token routes) fail closed with HTTP 410 unless `LEGACY_OWNER_API_ENABLED=true`; organization-scoped routes and Meta webhooks are excluded. Automated tests cover the default-off behavior, explicit migration opt-in and tenant-route isolation.
 
 ## Required before staging acceptance
 
@@ -32,7 +33,7 @@ This checklist separates code already present from work that requires real servi
 - [ ] Exercise campaign STOP/START, suppression re-check, throttling, pause/cancel and uncertain-delivery reconciliation end-to-end.
 - [x] Implement invitation lifecycle in code: pending invitations, hashed one-time tokens, verified-email acceptance, seven-day expiry, revocation, audit-safe tenant membership creation, copyable fragment-based invitation links that preserve configured deployment base paths, email verification/resend, login redirect preservation and expired-status display in the team UI.
 - [ ] Configure a transactional email provider and verify delivery/retry/bounce handling; until then, workspace owners/admins must distribute the generated invitation links through a trusted channel.
-- [ ] Run load tests, concurrency tests and security review for all legacy routes.
+- [ ] Run load tests, concurrency tests and security review for all legacy routes; keep `LEGACY_OWNER_API_ENABLED` unset/false outside a controlled migration window.
 - [ ] Review data retention, privacy notice, consent language, WhatsApp template policy and billing/tax requirements.
 
 ## Required before migrating production data
