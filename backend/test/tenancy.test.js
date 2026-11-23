@@ -208,6 +208,11 @@ test("disconnect marks only the selected WhatsApp number inactive and preserves 
   assert.ok(stored.accessToken);
   assert.equal(db.docs.get("whatsappPhoneNumbers/333333333333333").status, "disconnected");
   assert.equal(db.docs.get("whatsappPhoneNumbers/444444444444444").status, "active");
+  await assert.rejects(
+    () => resolvePhoneNumberOrganization(db, "333333333333333"),
+    { statusCode: 404 }
+  );
+  assert.equal((await resolvePhoneNumberOrganization(db, "444444444444444")).id, "org_disconnect");
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
 
