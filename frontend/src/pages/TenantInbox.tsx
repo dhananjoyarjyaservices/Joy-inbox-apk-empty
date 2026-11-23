@@ -708,7 +708,7 @@ export default function TenantInbox() {
         `"${String(recipient[column] ?? "").replace(/"/g, '""')}"`
       ).join(","))
     ];
-    const blob = new Blob([rows.join("\\n")], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
