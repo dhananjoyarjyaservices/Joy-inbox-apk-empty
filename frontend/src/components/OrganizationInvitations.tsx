@@ -33,8 +33,10 @@ export default function OrganizationInvitations({ organizationId, actorRole }: P
       setEmail("");
       const shareUrl = result.inviteUrl || (() => {
         const url = new URL("/setup", window.location.origin);
-        url.searchParams.set("organizationId", organizationId);
-        url.searchParams.set("invite", result.token);
+        const fragment = new URLSearchParams();
+        fragment.set("organizationId", organizationId);
+        fragment.set("invite", result.token);
+        url.hash = fragment.toString();
         return url.toString();
       })();
       setInviteUrl(shareUrl);
