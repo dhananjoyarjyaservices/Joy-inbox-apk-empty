@@ -2,7 +2,6 @@
 const { getDb } = require("./firebase");
 const { verifyMetaSignature, getRawBody } = require("./security");
 const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
-const { downloadWhatsAppMedia } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { sendIncomingTextNotification } = require("./push");
 
@@ -116,25 +115,7 @@ async function saveIncomingMessage(message, contactName) {
             ? `${message.location.latitude}, ${message.location.longitude}`
             : `${message.type || "Unsupported"} message`)
         );
-  const mediaId = mediaMessage.id || "";
-  let media = null;
-  let mediaError = "";
-
-  if (mediaId) {
-    try {
-      media = await downloadWhatsAppMedia(
-        mediaId,
-        phone,
-        messageId,
-        mediaMessage.filename
-      );
-    } catch (error) {
-      mediaError =
-        error instanceof Error ? error.message : "Media could not be retrieved.";
-      console.error("Incoming media retrieval failed:", mediaError);
-    }
-  }
-
+  // Incoming customer media is intentionally not downloaded or persisted.
   const chatRef = db.collection("chats").doc(phone);
 
   const messageRef = chatRef
@@ -175,13 +156,10 @@ async function saveIncomingMessage(message, contactName) {
       status: "received",
       source: "whatsapp",
       sender: phone,
-      mediaId: media?.mediaId || mediaId || null,
-      mediaStoragePath: media?.storagePath || null,
-      mediaMimeType: media?.mimeType || mediaMessage.mime_type || null,
-      mediaSize: media?.size || Number(mediaMessage.file_size) || null,
-      mediaFilename: String(mediaMessage.filename || "").slice(0, 180) || null,
-      mediaSha256: media?.sha256 || null,
-      mediaDownloadError: mediaError || null,
+      mediaStoragePath: null,
+      mediaDownloadError: message.type !== "text"
+        ? "Customer media is not stored by Joy Inbox."
+        : null,
       ...(contextMessageId ? {
         replyToMessageId: replyToMessageDocumentId,
         replyToMessageText: String(contextMessageData?.text || ""),
