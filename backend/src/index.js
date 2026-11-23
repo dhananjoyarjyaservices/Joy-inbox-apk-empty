@@ -842,6 +842,16 @@ async function checkTenantSlaAlerts(event) {
             }
           });
         }
+      } else {
+        await db.runTransaction(async (transaction) => {
+          const latest = await transaction.get(chatRef);
+          if (latest.exists && latest.get("slaOverdueNotifiedFor") === pendingMillis) {
+            transaction.update(chatRef, {
+              slaOverdueNotifiedFor: admin.firestore.FieldValue.delete(),
+              slaOverdueNotifiedAt: admin.firestore.FieldValue.delete()
+            });
+          }
+        });
       }
     } catch (error) {
       await db.runTransaction(async (transaction) => {
