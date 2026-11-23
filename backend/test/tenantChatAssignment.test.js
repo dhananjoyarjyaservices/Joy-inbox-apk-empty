@@ -134,7 +134,7 @@ test("tenant chat assignment route builds actor context from verified user and s
   const path = require("node:path");
   const source = fs.readFileSync(path.join(__dirname, "../src/index.js"), "utf8");
   const handlerStart = source.indexOf("async function handleTenantChatAction");
-  const handlerEnd = source.indexOf("\\nasync function ", handlerStart + 1);
+  const handlerEnd = source.indexOf("async function getTenantGreetingSettings", handlerStart + 1);
   assert.notEqual(handlerStart, -1);
   assert.notEqual(handlerEnd, -1);
   const handler = source.slice(handlerStart, handlerEnd);
