@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { LogOut, MessageCircle, Send, Settings, RefreshCw, Paperclip, FileText, Bell } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
-import { getActiveOrganizationId } from "../services/activeOrganization";
+import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
 import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, checkTenantSlaAlerts, listWhatsAppTemplates, sendTenantTemplate, sendTenantText, retryTenantFailedText, retryTenantFailedTemplate, getOrganizationSlaSettings, saveOrganizationSlaSettings, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult, type WhatsAppTemplate, listOrganizationNotifications, listOrganizationAutomationRules, listOrganizationAutomationRuns, getOrganizationAutomationQueueHealth, type OrganizationAutomationQueueHealth, saveOrganizationAutomationRule, deleteOrganizationAutomationRule, type OrganizationAutomationRule, type OrganizationAutomationRun, markOrganizationNotificationRead, markAllOrganizationNotificationsRead, getOrganizationNotificationPreferences, saveOrganizationNotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, type OrganizationNotificationPreferences, type OrganizationNotification, listOrganizationCampaigns, createOrganizationCampaign, type OrganizationCampaign } from "../services/organizations";
 import OrganizationMembers from "../components/OrganizationMembers";
 import { listOrganizationMembers, updateOrganizationChatAssignment, listChatAssignmentAudit, listHistoricalAgentPerformance, type OrganizationMember, type ChatAssignmentAuditEvent, type HistoricalAgentPerformance } from "../services/organizationMembers";
@@ -211,6 +211,8 @@ export default function TenantInbox() {
       const id = getActiveOrganizationId();
       const current = items.find((item) => item.id === id) || items[0];
       if (!current) { navigate("/setup", { replace: true }); return; }
+      // Keep the selected workspace in sync when the saved ID is stale or no longer accessible.
+      if (current.id !== id) setActiveOrganizationId(current.id);
       setOrganization(current);
       setLoading(false);
     }).catch((e) => { if (active) { setError(e instanceof Error ? e.message : "Workspace could not load."); setLoading(false); } });
