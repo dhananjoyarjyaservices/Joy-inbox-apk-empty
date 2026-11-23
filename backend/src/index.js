@@ -2611,7 +2611,9 @@ async function handleTenantInvitations(event) {
 }
 
 async function handleAcceptTenantInvitation(event) {
-  const body = parseBody(event);
+  let body;
+  try { body = parseBody(event); }
+  catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   const decoded = await authenticateUser(event);
   const result = await acceptTenantInvitation(getDb(), body.organizationId, body.token, decoded);
   return jsonResponse(event, 200, { success: true, membership: result });
