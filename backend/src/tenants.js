@@ -86,8 +86,8 @@ async function createOrganisation(db, user, body) {
 }
 
 async function listOrganisations(db, uid) {
-  const memberships = await db.collectionGroup("members").where("uid", "==", uid).where("status", "==", "active").get();
-  const rows = await Promise.all(memberships.docs.map(async (memberDoc) => {
+  const memberships = await db.collectionGroup("members").where("uid", "==", uid).get();
+  const rows = await Promise.all(memberships.docs.filter((doc) => doc.data().status === "active").map(async (memberDoc) => {
     const orgRef = memberDoc.ref.parent.parent;
     if (!orgRef) return null;
     const org = await orgRef.get();
