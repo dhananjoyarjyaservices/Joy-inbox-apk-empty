@@ -38,7 +38,8 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/setup" element={<Setup />} />
-            <Route path="/org/:orgId/inbox" element={<OrganisationInbox />} />\n            <Route path="/org/:orgId/campaigns" element={<Campaigns />} />
+            <Route path="/org/:orgId/inbox" element={<OrganisationInbox />} />
+            <Route path="/org/:orgId/campaigns" element={<Campaigns />} />
             <Route element={<LegacyInboxRoute />}>
               <Route path="/" element={<Dashboard />} />
             </Route>
