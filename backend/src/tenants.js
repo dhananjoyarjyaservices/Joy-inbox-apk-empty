@@ -857,6 +857,48 @@ async function previewOrganisationCampaign(db, user, orgId, campaignId) {
 
 
 
+async function scheduleOrganisationCampaign(db, user, orgId, campaignId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  if (!/^[A-Za-z0-9_-]{10,40}$/.test(campaignId)) fail("A valid campaign ID is required.");
+  const scheduledAt = new Date(body.scheduledAt);
+  const now = new Date();
+  if (!body.scheduledAt || Number.isNaN(scheduledAt.getTime()) ||
+      scheduledAt.getTime() < now.getTime() + 5 * 60 * 1000 ||
+      scheduledAt.getTime() > now.getTime() + 30 * 24 * 60 * 60 * 1000) {
+    fail("Choose a schedule at least 5 minutes and no more than 30 days in the future.");
+  }
+  const ref = db.collection("organisations").doc(orgId).collection("campaigns").doc(campaignId);
+  let result;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail("Campaign was not found.", 404);
+    const campaign = snap.data();
+    if (campaign.status !== "draft" && campaign.status !== "scheduled") {
+      fail("Only draft or scheduled campaigns can be scheduled.", 409);
+    }
+    result = { id: campaignId, status: "scheduled", scheduledAt };
+    tx.update(ref, { status: "scheduled", scheduledAt, scheduledBy: user.uid, updatedAt: now });
+  });
+  return result;
+}
+
+async function cancelOrganisationCampaign(db, user, orgId, campaignId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  if (!/^[A-Za-z0-9_-]{10,40}$/.test(campaignId)) fail("A valid campaign ID is required.");
+  const ref = db.collection("organisations").doc(orgId).collection("campaigns").doc(campaignId);
+  let result;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) fail("Campaign was not found.", 404);
+    if (snap.data().status !== "scheduled") fail("Only scheduled campaigns can be cancelled.", 409);
+    const now = new Date();
+    tx.update(ref, { status: "cancelled", cancelledAt: now, cancelledBy: user.uid, updatedAt: now });
+    result = { id: campaignId, status: "cancelled" };
+  });
+  return result;
+}
+
+
 async function getOrganisationAutomation(db, user, orgId) {
   await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
   const snapshot = await db.collection("organisations").doc(orgId)
@@ -1007,7 +1049,15 @@ async function handleTenantRoute(event) {
       const campaign = await createOrganisationCampaign(db, user, campaignsMatch[1], parseBody(event));
       return jsonResponse(event, 201, { success: true, campaign });
     }
-    if (campaignsMatch && method === "GET" && campaignsMatch[2]) {
+    if (campaignsMatch && method === "POST" && campaignsMatch[2] && campaignsMatch[3] === "schedule") {
+      const result = await scheduleOrganisationCampaign(db, user, campaignsMatch[1], campaignsMatch[2], parseBody(event));
+      return jsonResponse(event, 200, { success: true, campaign: result, deliveryEnabled: false });
+    }
+    if (campaignsMatch && method === "POST" && campaignsMatch[2] && campaignsMatch[3] === "cancel") {
+      const result = await cancelOrganisationCampaign(db, user, campaignsMatch[1], campaignsMatch[2]);
+      return jsonResponse(event, 200, { success: true, campaign: result });
+    }
+    if (campaignsMatch && method === "GET" && campaignsMatch[2] && campaignsMatch[3] === "preview") {
       const preview = await previewOrganisationCampaign(db, user, campaignsMatch[1], campaignsMatch[2]);
       return jsonResponse(event, 200, { preview });
     }
