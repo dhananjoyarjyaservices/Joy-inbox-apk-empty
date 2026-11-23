@@ -333,7 +333,7 @@ async function handleTenantAutomationQueueHealth(event) {
   }));
   const [dueSnapshot, failedSnapshot] = await Promise.all([
     queue.where("status", "==", "queued").where("dueAt", "<=", new Date()).count().get(),
-    queue.where("status", "in", ["failed", "uncertain"]).limit(20).get()
+    queue.where("status", "in", ["failed", "uncertain"]).orderBy("updatedAt", "desc").limit(20).get()
   ]);
   const recentIssues = failedSnapshot.docs.map((document) => {
     const data = document.data();
