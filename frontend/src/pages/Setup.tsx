@@ -10,7 +10,10 @@ import {
   listMembers,
   listOrganisations,
   type Organisation,
-  type OrganisationMember,\n  getOrganisationWhatsAppConnection,\n  saveOrganisationWhatsAppConnection,\n  type WhatsAppConnection,
+  type OrganisationMember,
+  getOrganisationWhatsAppConnection,
+  saveOrganisationWhatsAppConnection,
+  type WhatsAppConnection,
 } from "../services/organisations";
 
 export default function Setup() {
