@@ -23,13 +23,13 @@ Joy Inbox is being migrated from a single-owner WhatsApp Cloud API inbox to a mu
 
 ## SaaS migration status
 
-The existing application source has been migrated from the original repository. A first backend tenancy foundation is present in `backend/src/tenancy.js` with organization membership lookup, role permissions, WhatsApp phone-number-to-organization resolution, and AES-256-GCM helpers for server-side tenant secrets. See [docs/SAAS-MIGRATION.md](docs/SAAS-MIGRATION.md) for the target data model, security requirements, media policy and migration sequence. Cloudflare Pages + AWS Lambda deployment preparation is documented in [docs/DEPLOYMENT-CLOUDFLARE-AWS.md](docs/DEPLOYMENT-CLOUDFLARE-AWS.md).
+The SaaS branch now contains an integrated tenant foundation: organization onboarding and membership/role checks; encrypted per-organization WhatsApp credentials; tenant-scoped text/media messaging, chat state and resource APIs; Meta webhook routing by Phone Number ID; campaign and automation workers; billing integration foundations; and a dry-run-first legacy migration utility. See [docs/SAAS-MIGRATION.md](docs/SAAS-MIGRATION.md) for the implementation notes and migration sequence, [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md) for the remaining acceptance gates, and [docs/DEPLOYMENT-CLOUDFLARE-AWS.md](docs/DEPLOYMENT-CLOUDFLARE-AWS.md) for deployment preparation.
 
-**Important: this branch is not production-ready.** Existing API handlers still enforce a legacy single-owner UID, use global WhatsApp credentials, store chats in top-level collections, and persist media in Firebase Storage. The new tenancy helpers are not yet wired into every API route, webhook, frontend service or Firestore rule. Do not deploy this branch to production or connect real customer tenants until those items and their tests are complete.
+**This branch is not production-ready.** Legacy owner-only routes and data paths remain for compatibility, and not every legacy endpoint has been retired. The tenant implementation still requires automated CI confirmation, real Firebase/Meta/Stripe staging validation, full tenant-isolation review, migration/rollback rehearsal and explicit deployment approval. Do not connect real customer tenants until those gates pass.
 
 ## Customer media policy
 
-The SaaS target is to support WhatsApp images, video, audio and documents without permanently storing customer media in Firebase Storage or another durable object store. The final implementation must retain only message metadata and Meta media IDs, use bounded transient processing in Lambda memory, and retrieve inbound media through an authenticated short-lived proxy. See the migration document for required safeguards.
+The tenant webhook stores customer media metadata and Meta media IDs only; it does not download or persist inbound customer media bytes to Firebase Storage, S3, local disk or Lambda /tmp. The authenticated tenant media proxy fetches previews from Meta on demand and applies size/MIME/host checks. Outbound uploads are processed in bounded Lambda memory and sent directly to Meta. Legacy owner-only media routes still exist and must not be used as the tenant media path.
 
 ## Development
 
