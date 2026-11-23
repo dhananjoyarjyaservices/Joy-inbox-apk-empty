@@ -190,7 +190,8 @@ async function processStripeWebhookEvent(db, event, dependencies = {}) {
       const organizationId = String(object.metadata?.organizationId || "");
       if (organizationId) await writeOrganizationSubscription(db, organizationId, object);
     } else if (event.type === "invoice.payment_failed") {
-      const subscriptionId = typeof object.subscription === "string" ? object.subscription : object.subscription?.id;
+      const subscriptionValue = object.subscription || object.parent?.subscription_details?.subscription;
+      const subscriptionId = typeof subscriptionValue === "string" ? subscriptionValue : subscriptionValue?.id;
       if (subscriptionId) {
         subscription = await (dependencies.getSubscription || (id => stripeRequest(`/subscriptions/${encodeURIComponent(id)}`)))(subscriptionId);
         const organizationId = String(subscription.metadata?.organizationId || "");
