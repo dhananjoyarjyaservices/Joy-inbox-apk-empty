@@ -30,7 +30,9 @@ function isWhatsAppOptOutMessage(value) {
   if (!text || text.length > 160) return false;
   const token = text.replace(/[.!?,;:]+$/g, "").replace(/[\s_-]+/g, "");
   if (OPT_OUT_KEYWORDS.has(token)) return true;
-  return /^(please)?(stop|unsubscribe|remove|optout)(sending|messages|me)?$/.test(token);
+  return /^(please)?(stop|unsubscribe|remove|optout)(sending|messages|me)?$/.test(token) ||
+    /^(please)?stop(sending|messaging)(you|me)?(messages)?$/.test(token) ||
+    /^(please)?(donot|dont)(send|message)(me)?$/.test(token);
 }
 
 async function recordCampaignOptOut(db, organizationId, phone, inboundMessageId) {
@@ -46,6 +48,9 @@ async function recordCampaignOptOut(db, organizationId, phone, inboundMessageId)
     const snapshot = await transaction.get(ref);
     if (snapshot.exists) {
       transaction.set(ref, {
+        status: "opted_out",
+        source: "whatsapp_inbound",
+        optedOutAt: snapshot.data()?.optedOutAt || now,
         lastOptOutAt: now,
         lastInboundMessageId: String(inboundMessageId || "").slice(0, 256),
         updatedAt: now
