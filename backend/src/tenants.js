@@ -276,7 +276,8 @@ async function handleTenantRoute(event) {
   const isCollection = path === "/organisations";
   const inviteMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations$/);
   const acceptMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/invitations\/accept$/);
-  const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);\n  const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
+  const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
+  const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
   if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch)) return null;
 
   try {
@@ -298,7 +299,15 @@ async function handleTenantRoute(event) {
       const result = await acceptInvitation(db, user, acceptMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, membership: result });
     }
-    if (whatsappMatch && method === "GET") {\n      const result = await getWhatsAppConnection(db, user, whatsappMatch[1]);\n      return jsonResponse(event, 200, result);\n    }\n    if (whatsappMatch && method === "POST") {\n      const result = await saveWhatsAppConnection(db, user, whatsappMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, connection: result });\n    }\n    if (membersMatch && method === "GET") {
+    if (whatsappMatch && method === "GET") {
+      const result = await getWhatsAppConnection(db, user, whatsappMatch[1]);
+      return jsonResponse(event, 200, result);
+    }
+    if (whatsappMatch && method === "POST") {
+      const result = await saveWhatsAppConnection(db, user, whatsappMatch[1], parseBody(event));
+      return jsonResponse(event, 200, { success: true, connection: result });
+    }
+    if (membersMatch && method === "GET") {
       await requireMembership(db, membersMatch[1], user.uid, ["owner", "admin", "manager"]);
       const snapshot = await db.collection("organisations").doc(membersMatch[1]).collection("members").where("status", "==", "active").get();
       const members = snapshot.docs.map((doc) => ({
