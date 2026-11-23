@@ -102,6 +102,10 @@ The scheduled runner scans organizations in pages and checks up to 1,000 overdue
 
 When a push cannot be delivered, the checker releases its temporary claim and stores an exponential retry delay (1, 2, 4, 8, 16, 32, then up to 60 minutes). Successful delivery clears the retry counter and records `slaOverdueLastDeliveredAt`. Reassigning a chat resets its retry state so the new assignee is not held behind the previous assignee's backoff. Retry fields are stored on the chat document; no separate queue service is required.
 
+### In-app Notification Center
+
+The inbox includes a Notifications tab. It combines assignment/status activity from workspace audit logs with SLA push events saved under `organizations/{organizationId}/members/{uid}/notifications`. Selecting a notification marks it read and opens the related chat. The API is `GET /organizations/notifications?organizationId=...` and `POST /organizations/notifications` with `{ organizationId, notificationId }`. Each user can only read and mark their own workspace notifications through the authenticated membership check. SLA history is persisted only after FCM reports at least one successful device delivery; if writing the history record fails, the already-delivered alert is not retried solely because of that history-write failure.
+
 ### Organization SLA settings
 
 Workspace owners and admins can open Inbox → Settings → SLA alerts to enable or disable overdue push alerts and select a first-response target from 1 to 120 minutes. Settings are stored at `organizations/{organizationId}/settings/sla`; workspaces without a saved setting retain the default of enabled with a 5-minute target. Both the interactive checker and scheduled runner read this same setting, and first-response analytics store the configured target with each response metric. Agents can view the setting but cannot change it.
