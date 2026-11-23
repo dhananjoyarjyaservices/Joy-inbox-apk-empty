@@ -385,15 +385,15 @@ async function processWebhookPayload(payload) {
         const contact = contacts.find((item) => item.wa_id === message.from);
         const name = contact?.profile?.name || message.from;
         const created = await saveTenantIncomingMessage(db, organization, message, name, String(phoneNumberId));
+        const phone = normalizePhoneNumber(message.from);
+        const inboundText = message.type === "text" ? String(message.text?.body || "") : "";
+        if (isWhatsAppOptOutMessage(inboundText)) {
+          // Re-apply suppression on webhook retries even when the inbound
+          // message was already persisted before a previous suppression write failed.
+          await recordCampaignOptOut(db, organization.id, phone, String(message.id || ""));
+          continue;
+        }
         if (created) {
-          const phone = normalizePhoneNumber(message.from);
-          const inboundText = message.type === "text" ? String(message.text?.body || "") : "";
-          if (isWhatsAppOptOutMessage(inboundText)) {
-            await recordCampaignOptOut(db, organization.id, phone, String(message.id || ""));
-            // A STOP-style reply is a compliance instruction, not a keyword
-            // automation or greeting trigger.
-            continue;
-          }
           await maybeSendTenantGreeting(db, organization, credentials, phone, message);
           try {
             await maybeRunTenantKeywordAutomation(db, organization, credentials, phone, message);
