@@ -301,6 +301,35 @@ export async function cancelOrganisationCampaign(orgId: string, campaignId: stri
 }
 
 
+export interface OrganisationCampaignReport {
+  campaignId: string;
+  title: string;
+  status: string;
+  queueStatus: string;
+  deliveryEnabled: boolean;
+  totalTracked: number;
+  counts: Record<"queued" | "sending" | "sent" | "delivered" | "read" | "failed" | "cancelled", number>;
+  message: string;
+}
+
+export async function prepareOrganisationCampaignQueue(orgId: string, campaignId: string) {
+  return request<{ success: boolean; queue: {
+    campaignId: string; eligibleCount: number; queuedCount: number; existingCount: number;
+    excludedCount: number; queueStatus: string; deliveryEnabled: boolean; message: string;
+  } }>(
+    `/organisations/${encodeURIComponent(orgId)}/campaigns/${encodeURIComponent(campaignId)}/prepare`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export async function getOrganisationCampaignReport(orgId: string, campaignId: string) {
+  const result = await request<{ report: OrganisationCampaignReport }>(
+    `/organisations/${encodeURIComponent(orgId)}/campaigns/${encodeURIComponent(campaignId)}/report`,
+  );
+  return result.report;
+}
+
+
 export interface OrganisationAutomationSettings {
   greetingEnabled: boolean;
   greetingText: string;
