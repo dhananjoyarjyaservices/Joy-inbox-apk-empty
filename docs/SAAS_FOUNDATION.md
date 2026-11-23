@@ -192,3 +192,10 @@ A separate AWS Lambda handler is available at `backend/src/campaign-worker.js`. 
 Required Lambda environment variables: `CAMPAIGN_DELIVERY_ENABLED=false` initially, `WHATSAPP_CREDENTIALS_ENCRYPTION_KEY`, and `GRAPH_API_VERSION` (optional; defaults to v26.0), plus the existing Firebase Admin credentials. Set the Lambda handler to `src/campaign-worker.handler` (or the packaged equivalent) and configure an EventBridge schedule only after validating the deployment and Meta setup.
 
 **Safety/rollout:** keep delivery disabled until a production test plan and business consent review are complete. A worker crash after Meta accepts a message but before Firestore records the response can create an ambiguous outcome; the WhatsApp send API does not provide a general exactly-once guarantee. Delivery/read webhook reconciliation and recovery of expired in-progress leases remain follow-up hardening tasks. This worker has unit coverage for the disabled-by-default guard and retry backoff, but it has not been tested against a live Meta account or Firestore emulator. No campaign messages have been sent by this code change.
+
+
+## Campaign delivery status reconciliation
+
+Organisation-scoped WhatsApp status webhooks now reconcile campaign recipient records. When Meta sends a `sent`, `delivered`, `read`, or `failed` status for a message ID, the webhook looks up the matching campaign recipient, verifies that the recipient belongs to the mapped organisation and phone number, and advances the recipient status. Delivery timestamps and the campaign's `lastDeliveryStatusAt` are recorded. Stale status events are ignored; read, failed and cancelled recipient states are terminal, and a failed status may replace sent but not delivered. The campaign report reads recipient records, so its delivered/read/failed counters reflect webhook updates.
+
+This reconciliation is implemented for organisation-scoped campaigns. It does not change legacy owner-only chat status processing. Firestore collection-group query and Meta webhook integration still require emulator/live integration tests.
