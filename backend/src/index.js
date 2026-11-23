@@ -2590,7 +2590,7 @@ async function handleTenantCampaigns(event) {
       }
       await recipientBatch.commit();
     }
-    } catch (error) {
+  } catch (error) {
     await campaignRef.set({
       status: "failed",
       preparationError: String(error?.message || "Campaign recipient preparation failed.").slice(0, 300),
