@@ -50,6 +50,11 @@ export type NotificationDelivery = {
   errorCode: string | null; createdAt: string | null;
 };
 
+export type TeamNotificationDeliveryAnalytics = {
+  uid: string; name: string; role: string; total: number; delivered: number;
+  failed: number; retried: number; attempts: number; rate: number; lastActivityAt: string | null;
+};
+
 export type RegisteredPushDevice = {
   installationId: string; deviceName: string; platform: string; userAgent: string;
   createdAt: string | null; updatedAt: string | null;
@@ -168,6 +173,13 @@ export async function listNotificationDeliveries(organizationId: string): Promis
     `/organizations/notifications/deliveries?organizationId=${encodeURIComponent(organizationId)}`
   );
   return Array.isArray(result.deliveries) ? result.deliveries : [];
+}
+
+export async function listTeamNotificationDeliveryAnalytics(organizationId: string): Promise<TeamNotificationDeliveryAnalytics[]> {
+  const result = await authenticatedGet<{ agents?: TeamNotificationDeliveryAnalytics[] }>(
+    `/organizations/notifications/team-deliveries?organizationId=${encodeURIComponent(organizationId)}`
+  );
+  return Array.isArray(result.agents) ? result.agents : [];
 }
 
 export async function listRegisteredPushDevices(organizationId: string): Promise<RegisteredPushDevice[]> {
