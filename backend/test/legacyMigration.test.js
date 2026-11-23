@@ -118,6 +118,6 @@ test("legacy migration dry-run validates organization ownership and performs no 
   };
   const result = await runLegacyMigration(db, { organizationId: "org_123", ownerUid: "uid_123" });
   assert.equal(result.execute, false);
-  assert.deepEqual(result.source, { chats: 2, contacts: 3, quickReplies: 4, greetingSettings: 1 });
+  assert.deepEqual(result.source, { chats: 2, messages: 0, contacts: 3, quickReplies: 4, greetingSettings: 1 });
   assert.equal(writes, 0);
 });
