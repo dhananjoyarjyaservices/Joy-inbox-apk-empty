@@ -10,7 +10,7 @@ import {
   listMembers,
   listOrganisations,
   updateOrganisationMemberRole,
-  removeOrganisationMember,
+  removeOrganisationMember,\n  getOrganisationAuditLogs,\n  type OrganisationAuditLog,
   type Organisation,
   type OrganisationMember,
   getOrganisationWhatsAppConnection,
@@ -23,7 +23,7 @@ export default function Setup() {
   const navigate = useNavigate();
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [members, setMembers] = useState<OrganisationMember[]>([]);
+  const [members, setMembers] = useState<OrganisationMember[]>([]);\n  const [auditLogs, setAuditLogs] = useState<OrganisationAuditLog[]>([]);
   const [orgName, setOrgName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "manager" | "agent">("agent");
@@ -311,6 +311,20 @@ export default function Setup() {
             )}
             {createdInvite && <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-700"><p className="font-semibold">Share these IDs securely with the invited email owner:</p><p className="mt-2 break-all">Organisation: {selected.id}</p><p className="mt-1 break-all">Invitation: {createdInvite}</p><button onClick={() => navigator.clipboard?.writeText(`Organisation ID: ${selected.id}
 Invitation ID: ${createdInvite}`)} className="mt-2 inline-flex items-center gap-2 font-semibold text-[#075e54]"><Copy size={13} /> Copy IDs</button><p className="mt-2 text-amber-700">Email delivery is not configured yet; send these IDs through a trusted channel only to the invited email address.</p></div>}
+
+            {["owner", "admin"].includes(selected.role) && (
+              <div className="mt-5 rounded-xl border border-gray-200 p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div><h3 className="font-semibold text-gray-900">Team activity log</h3><p className="text-xs text-gray-500">Latest 100 invitation and membership changes.</p></div>
+                  <button type="button" onClick={() => getOrganisationAuditLogs(selected.id).then(setAuditLogs).catch((reason) => setError(reason.message))} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600">Refresh</button>
+                </div>
+                {auditLogs.length === 0 ? <p className="text-xs text-gray-500">No team activity recorded yet.</p> : <div className="max-h-80 space-y-3 overflow-y-auto">{auditLogs.map((entry) => {
+                  const dateValue = entry.createdAt && typeof entry.createdAt === "object" && "toDate" in entry.createdAt && typeof entry.createdAt.toDate === "function" ? entry.createdAt.toDate() : new Date(entry.createdAt as string);
+                  const label = entry.action === "invitation.created" ? "Invitation created" : entry.action === "invitation.accepted" ? "Invitation accepted" : entry.action === "member.role_changed" ? "Member role changed" : entry.action === "member.removed" ? "Member removed" : entry.action;
+                  return <div key={entry.id} className="border-b border-gray-100 pb-2 last:border-0"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-medium text-gray-800">{label}</span><span className="text-xs text-gray-400">{Number.isNaN(dateValue.getTime()) ? "" : dateValue.toLocaleString()}</span></div><p className="mt-1 text-xs text-gray-600">By: {entry.actorEmail || entry.actorUid}{entry.targetEmail ? " · Target: " + entry.targetEmail : ""}</p>{entry.details?.previousRole && <p className="text-xs text-gray-500">Role: {String(entry.details.previousRole)} → {String(entry.details.newRole || "removed")}</p>}</div>;
+                })}</div>}
+              </div>
+            )}
             <div className="mt-5"><h3 className="mb-2 text-sm font-semibold text-gray-800">Team members</h3>{members.length ? <div className="divide-y divide-gray-100">{members.map((member) => <div key={member.uid} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><span className="block truncate text-gray-700">{member.email || member.uid}</span><span className="text-xs text-gray-400">{member.uid}</span></div><div className="flex items-center gap-2"><span className="rounded-full bg-gray-100 px-2 py-1 text-xs capitalize text-gray-600">{member.role}</span>{selected && ["owner", "admin"].includes(selected.role) && member.role !== "owner" && member.uid !== user?.uid && <><select aria-label={"Role for " + (member.email || member.uid)} value={member.role} disabled={busy || (selected.role === "admin" && member.role === "admin")} onChange={(event) => handleMemberRoleChange(member, event.target.value as "admin" | "manager" | "agent")} className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs"><option value="agent">Agent</option><option value="manager">Manager</option>{selected.role === "owner" && <option value="admin">Admin</option>}</select><button type="button" disabled={busy} onClick={() => handleRemoveMember(member)} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-600 disabled:opacity-50">Remove</button></>}</div></div>)}</div> : <p className="text-xs text-gray-500">Member list unavailable for your role or no members found.</p>}</div>
           </section>
         )}
