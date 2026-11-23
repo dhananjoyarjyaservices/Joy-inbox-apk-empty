@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Copy, RefreshCw, Send, X } from "lucide-react";
 import { createOrganizationInvitation, listOrganizationInvitations, revokeOrganizationInvitation, type OrganizationInvitation } from "../services/organizations";
 
@@ -13,23 +13,38 @@ export default function OrganizationInvitations({ organizationId, actorRole }: P
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
+  const requestId = useRef(0);
+  const activeOrganizationId = useRef(organizationId);
   const canManage = actorRole === "owner" || actorRole === "admin";
 
   const refresh = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setLoading(true); setError("");
-    try { setItems(await listOrganizationInvitations(organizationId)); }
-    catch (e) { setError(e instanceof Error ? e.message : "Invitations could not be loaded."); }
-    finally { setLoading(false); }
+    try {
+      const invitations = await listOrganizationInvitations(organizationId);
+      if (currentRequest === requestId.current) setItems(invitations);
+    } catch (e) {
+      if (currentRequest === requestId.current) setError(e instanceof Error ? e.message : "Invitations could not be loaded.");
+    } finally {
+      if (currentRequest === requestId.current) setLoading(false);
+    }
   }, [organizationId]);
 
-  useEffect(() => { setItems([]); setInviteUrl(""); setNotice(""); void refresh(); }, [refresh]);
+  useEffect(() => {
+    activeOrganizationId.current = organizationId;
+    requestId.current += 1;
+    setItems([]); setInviteUrl(""); setNotice(""); setError("");
+    void refresh();
+  }, [organizationId, refresh]);
 
   async function invite(event: FormEvent) {
     event.preventDefault();
     if (!canManage || busy) return;
     setBusy(true); setError(""); setNotice(""); setInviteUrl("");
+    const operationOrganizationId = organizationId;
     try {
-      const result = await createOrganizationInvitation(organizationId, email.trim(), role);
+      const result = await createOrganizationInvitation(operationOrganizationId, email.trim(), role);
+      if (activeOrganizationId.current !== operationOrganizationId) return;
       setEmail("");
       const shareUrl = result.inviteUrl || (() => {
         const basePath = import.meta.env.BASE_URL.endsWith("/") ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + "/";
@@ -43,16 +58,24 @@ export default function OrganizationInvitations({ organizationId, actorRole }: P
       setInviteUrl(shareUrl);
       setNotice("Invitation created. Copy and send this secure link to the invited person.");
       await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : "Invitation could not be created."); }
-    finally { setBusy(false); }
+    } catch (e) { if (activeOrganizationId.current === operationOrganizationId) setError(e instanceof Error ? e.message : "Invitation could not be created."); }
+    finally { if (activeOrganizationId.current === operationOrganizationId) setBusy(false); }
   }
 
   async function revoke(emailAddress: string) {
     if (!canManage || busy || !window.confirm("Revoke the pending invitation for " + emailAddress + "?")) return;
     setBusy(true); setError(""); setNotice("");
-    try { await revokeOrganizationInvitation(organizationId, emailAddress); setNotice("Invitation revoked."); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : "Invitation could not be revoked."); }
-    finally { setBusy(false); }
+    const operationOrganizationId = organizationId;
+    try {
+      await revokeOrganizationInvitation(operationOrganizationId, emailAddress);
+      if (activeOrganizationId.current !== operationOrganizationId) return;
+      setNotice("Invitation revoked.");
+      await refresh();
+    } catch (e) {
+      if (activeOrganizationId.current === operationOrganizationId) setError(e instanceof Error ? e.message : "Invitation could not be revoked.");
+    } finally {
+      if (activeOrganizationId.current === operationOrganizationId) setBusy(false);
+    }
   }
 
   async function copyLink() {
