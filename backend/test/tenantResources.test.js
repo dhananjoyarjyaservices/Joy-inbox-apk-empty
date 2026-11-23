@@ -8,6 +8,9 @@ test("validates and normalizes tenant contact data", () => {
   assert.equal(result.phone, "+919876543210");
   assert.equal(result.phoneId, "919876543210");
   assert.equal(result.source, "local");
+  assert.deepEqual(result.tags, []);
+  assert.deepEqual(contactInput({ name: "Alex", phone: "+919876543210", tags: [" VIP ", "vip", "Follow up"] }).tags, ["VIP", "Follow up"]);
+  assert.throws(() => contactInput({ name: "Alex", phone: "+919876543210", tags: ["x".repeat(31)] }), { statusCode: 400 });
 });
 
 test("rejects invalid contact phone and extra fields", () => {
