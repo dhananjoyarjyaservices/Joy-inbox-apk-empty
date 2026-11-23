@@ -279,3 +279,18 @@ test("campaign worker sends an eligible recipient and records message and campai
   assert.equal(harness.campaign.status, "completed");
   assert.ok(harness.writes.some(write => write.type === "set" && write.value?.source === "campaign"));
 });
+
+test("transient Meta template verification failures keep campaigns queued without sending", async () => {
+  const harness = createCampaignHarness(null);
+  let sendCalls = 0;
+  const result = await processCampaign(harness.db, harness.campaignRef, {
+    now: () => new Date("2026-11-23T12:00:00.000Z"),
+    getCredentials: async () => ({ accessToken: "server-secret", phoneNumberId: "123456789" }),
+    fetch: async () => ({ ok: false, status: 503, async json() { return { error: { message: "Meta temporarily unavailable" } }; } }),
+    sendRecipient: async () => { sendCalls += 1; return { messageId: "wamid.should-not-send" }; }
+  });
+  assert.equal(result.retryingVerification, true);
+  assert.equal(sendCalls, 0);
+  assert.equal(harness.campaign.status, "queued");
+  assert.match(harness.campaign.verificationError, /temporarily unavailable/);
+});
