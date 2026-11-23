@@ -224,3 +224,14 @@ This repository change only adds code and an optional infrastructure template. I
 ### Campaign suppression secret
 
 Set `CAMPAIGN_SUPPRESSION_HASH_KEY` as a base64-encoded 32-byte secret in the backend API Lambda and campaign worker Lambda. Production refuses to derive suppression document IDs without this key. Keep the key identical across webhook and worker deployments; changing it requires a planned migration of existing suppression document IDs. Never place this key in frontend/Vite configuration or commit it.
+
+
+## Other scheduled workers
+
+The repository also provides optional EventBridge templates for the lease-aware automation worker and SLA monitor:
+
+- `infra/aws/automation-worker-schedule.yaml`: every minute; Lambda handler `src/automationWorker.handler`.
+- `infra/aws/sla-monitor-schedule.yaml`: every five minutes; Lambda handler `src/index.slaScheduledHandler`.
+- `infra/aws/campaign-worker-schedule.yaml`: every minute; Lambda handler `src/index.campaignScheduledHandler`.
+
+Deploy each as a separate scheduled Lambda with the same backend-only Firebase Admin, tenant encryption and campaign suppression secrets as required by that worker. Do not expose public Function URLs for scheduled workers. Configure reserved concurrency and alarms after measuring staging throughput. These templates are infrastructure source only; none of the Lambdas or EventBridge rules have been deployed by this change.
