@@ -3,6 +3,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  sendEmailVerification,
   onAuthStateChanged,
   type User,
 } from "firebase/auth";
@@ -31,6 +32,15 @@ export async function registerWithEmail(
     email.trim(),
     password
   );
+
+  // Workspace invitations require Firebase's verified-email claim. Send the
+  // verification message and sign out so the new account cannot proceed as
+  // an unverified member.
+  try {
+    await sendEmailVerification(result.user);
+  } finally {
+    await signOut(auth);
+  }
 
   return result.user;
 }
