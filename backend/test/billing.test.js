@@ -191,7 +191,10 @@ test("checkout cannot create a duplicate subscription for an active workspace", 
   );
 });
 
-test("checkout completion webhook stores subscription state in the correct organization", async () => {
+test("checkout completion webhook stores subscription state in the correct organization", async t => {
+  const previousPrice = process.env.STRIPE_PRICE_GROWTH;
+  process.env.STRIPE_PRICE_GROWTH = "price_growth";
+  t.after(() => { if (previousPrice === undefined) delete process.env.STRIPE_PRICE_GROWTH; else process.env.STRIPE_PRICE_GROWTH = previousPrice; });
   let eventRecord = null;
   let subscriptionRecord = null;
   const eventRef = {
@@ -246,7 +249,7 @@ test("checkout completion webhook stores subscription state in the correct organ
     })
   });
   assert.equal(result.processed, true);
-  assert.equal(subscriptionRecord.plan, "unknown");
+  assert.equal(subscriptionRecord.plan, "growth");
   assert.equal(subscriptionRecord.status, "active");
   assert.equal(subscriptionRecord.stripeCustomerId, "cus_123");
   assert.equal(subscriptionRecord.stripeSubscriptionId, "sub_123");
