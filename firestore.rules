@@ -19,7 +19,7 @@ service cloud.firestore {
 
     // Users can only read their own organization switcher index.
     match /users/{userId}/organizations/{organizationId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId && isActiveOrganizationMember(organizationId);
       allow write: if false;
     }
 
