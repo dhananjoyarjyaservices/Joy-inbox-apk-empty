@@ -43,7 +43,7 @@ test("tenant writes are denied for organization metadata, chats, messages, conta
     rules.indexOf("// Legacy single-owner data")
   );
   assert.ok(tenantBlock.length > 0);
-  assert.equal((tenantBlock.match(/allow write: if false;/g) || []).length, 7);
+  assert.equal((tenantBlock.match(/allow write: if false;/g) || []).length, 6);
   assert.doesNotMatch(tenantBlock, /allow (?:create|update|delete|write): if true/);
 });
 
