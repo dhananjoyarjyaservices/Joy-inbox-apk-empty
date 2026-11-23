@@ -48,6 +48,7 @@ const {
   markSendRequestFailed
 } = require("./sendRequests");
 const { runScheduledSlaChecks, saveTenantSlaNotification } = require("./slaScheduler");
+const { runScheduledAutomationSteps } = require("./automationScheduler");
 const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_SLA_MINUTES } = require("./slaSettings");
 const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
 const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = require("./automationRules");
@@ -2436,8 +2437,12 @@ async function saveGreetingSettings(event) {
 // EventBridge Scheduler invokes this handler through Lambda's IAM permissions.
 // Set the configured handler name to "src/index.slaScheduledHandler".
 exports.slaScheduledHandler = async () => {
-  const result = await runScheduledSlaChecks();
-  console.info("Scheduled SLA alert check completed:", JSON.stringify(result));
+  const [sla, automation] = await Promise.all([
+    runScheduledSlaChecks(),
+    runScheduledAutomationSteps()
+  ]);
+  const result = { sla, automation };
+  console.info("Scheduled SLA and automation checks completed:", JSON.stringify(result));
   return result;
 };
 
