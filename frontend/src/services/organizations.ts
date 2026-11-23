@@ -193,6 +193,16 @@ export interface OrganizationAutomationRun {
   createdAt: string | null;
   updatedAt: string | null;
 }
+export interface OrganizationAutomationQueueHealth {
+  counts: Record<"queued" | "sending" | "sent" | "failed" | "skipped" | "uncertain", number>;
+  dueNow: number;
+  recentIssues: { id: string; status: string; ruleId: string; customerPhone: string; step: number; error: string; updatedAt: string | null }[];
+  maxJobsPerInvocation: number;
+  maxAttempts: number;
+}
+export async function getOrganizationAutomationQueueHealth(organizationId: string): Promise<OrganizationAutomationQueueHealth> {
+  return request(`/organizations/automation-queue-health?organizationId=${encodeURIComponent(organizationId)}`);
+}
 export async function listOrganizationAutomationRuns(organizationId: string): Promise<OrganizationAutomationRun[]> {
   const result = await request(`/organizations/automation-runs?organizationId=${encodeURIComponent(organizationId)}`);
   return Array.isArray(result.runs) ? result.runs : [];
