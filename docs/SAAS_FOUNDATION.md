@@ -126,16 +126,20 @@ The organisation inbox now exposes tenant-scoped endpoints for:
 Structured outgoing message metadata is stored in the organisation chat history. Template and interactive messages are submitted through the connected organisation's encrypted WhatsApp Cloud API credentials. These endpoints have CI syntax/build coverage; real delivery still requires Meta configuration and end-to-end testing.
 
 
-## Broadcast campaign foundation (draft and preview only)
+## Broadcast campaign foundation (schedule, consent-filtered queue and report)
 
-Organisation managers can create and list campaign drafts using an already approved WhatsApp template. Campaign audience preview counts only contacts that have an explicit `whatsappOptIn: true` flag and a recorded `whatsappOptInAt` timestamp. Optional campaign tags further narrow the audience. Contacts without consent metadata are excluded.
+Organisation managers can create campaign drafts using a WhatsApp template name, schedule drafts for a future time, preview the audience and prepare a durable recipient queue. Preview and queue preparation include only contacts with explicit `whatsappOptIn: true`, a recorded `whatsappOptInAt` timestamp, no opt-out flag, and all configured audience tags. Queue recipient document IDs are deterministic hashes of the customer phone ID, making repeated preparation idempotent. Recipient rows store the template parameters, scheduled time and a consent snapshot, not customer media.
 
 Endpoints:
-- `GET /organisations/{orgId}/campaigns` — list recent drafts.
-- `POST /organisations/{orgId}/campaigns` — create a draft with title, approved template name, language and body parameters.
-- `GET /organisations/{orgId}/campaigns/{campaignId}/preview` — preview eligible and excluded contact counts.
+- `GET /organisations/{orgId}/campaigns` — list campaigns.
+- `POST /organisations/{orgId}/campaigns` — create a draft.
+- `GET /organisations/{orgId}/campaigns/{campaignId}/preview` — preview eligible and excluded counts.
+- `POST /organisations/{orgId}/campaigns/{campaignId}/schedule` — schedule a draft 5 minutes to 30 days ahead.
+- `POST /organisations/{orgId}/campaigns/{campaignId}/prepare` — create the consent-filtered recipient queue for a scheduled campaign (up to 5,000 contacts per preparation).
+- `GET /organisations/{orgId}/campaigns/{campaignId}/report` — report queued/sent/delivered/read/failed/cancelled counters.
+- `POST /organisations/{orgId}/campaigns/{campaignId}/cancel` — cancel a scheduled campaign and mark its still-queued recipient rows cancelled.
 
-**Delivery is deliberately disabled.** Preview returns `sendingEnabled: false`; no messages are sent. The current contact onboarding flow does not yet collect and verify WhatsApp opt-in evidence, so the campaign feature must not be used for live broadcasts until consent capture, suppression/opt-out handling, rate limits, batching, delivery status tracking and an auditable send worker are implemented.
+**Actual WhatsApp delivery is deliberately disabled.** Queue preparation only creates recipient work items; no messages are sent. Before live delivery, a worker must recheck current consent and suppression immediately before each send, verify that the approved template and language still exist, enforce WhatsApp rate limits and per-organisation quotas, claim recipients idempotently, retry transient errors safely, and process delivery webhooks. The report counters for sent/delivered/read/failed remain zero until that worker is implemented and deployed. Consent evidence must be genuine and retained by the business; a text description alone does not establish legal validity.
 
 
 ## Organisation automations
