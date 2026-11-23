@@ -49,6 +49,8 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
     await setDoc(doc(db, "organizations/org_a/campaigns/campaign_a"), { name: "Private campaign", status: "draft" });
     await setDoc(doc(db, "organizations/org_a/campaigns/campaign_a/recipients/recipient_a"), { phone: "15551234567" });
     await setDoc(doc(db, "organizations/org_a/campaignSuppressions/suppression_a"), { status: "opted_out" });
+    await setDoc(doc(db, "organizations/org_a/billing/subscription"), { status: "active", stripeCustomerId: "cus_private" });
+    await setDoc(doc(db, "stripeWebhookEvents/evt_123456789"), { status: "processed" });
   });
 
   const ownerDb = testEnv.authenticatedContext("owner_a").firestore();
@@ -83,6 +85,8 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
   await assertFails(getDoc(doc(ownerDb, "organizations/org_a/campaigns/campaign_a")));
   await assertFails(getDoc(doc(agentDb, "organizations/org_a/campaigns/campaign_a/recipients/recipient_a")));
   await assertFails(getDoc(doc(ownerDb, "organizations/org_a/campaignSuppressions/suppression_a")));
+  await assertFails(getDoc(doc(ownerDb, "organizations/org_a/billing/subscription")));
+  await assertFails(getDoc(doc(ownerDb, "stripeWebhookEvents/evt_123456789")));
 
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/chats/new_chat"), { text: "client write" }));
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/contacts/new_contact"), { name: "client write" }));
