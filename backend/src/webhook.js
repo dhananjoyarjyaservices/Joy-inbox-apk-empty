@@ -307,6 +307,24 @@ function shouldApplyMessageStatus(currentStatus, nextStatus) {
   return MESSAGE_STATUS_RANK[nextStatus] > (MESSAGE_STATUS_RANK[currentStatus] ?? -1);
 }
 
+function getCampaignDeliveryCounterPatch(campaign, previousStatus, nextStatus) {
+  const patch = {};
+  const previous = previousStatus || "sent";
+  if (nextStatus === "delivered" && !["delivered", "read", "failed"].includes(previous)) {
+    patch.deliveredCount = Number(campaign.deliveredCount || 0) + 1;
+  }
+  if (nextStatus === "read") {
+    if (!["delivered", "read", "failed"].includes(previous)) {
+      patch.deliveredCount = Number(campaign.deliveredCount || 0) + 1;
+    }
+    if (previous !== "read") patch.readCount = Number(campaign.readCount || 0) + 1;
+  }
+  if (nextStatus === "failed" && !["delivered", "read", "failed"].includes(previous)) {
+    patch.deliveryFailedCount = Number(campaign.deliveryFailedCount || 0) + 1;
+  }
+  return patch;
+}
+
 async function updateTenantMessageStatus(organization, status) {
   const messageId = String(status.id || "");
   const recipient = normalizePhoneNumber(status.recipient_id);
@@ -331,12 +349,47 @@ async function updateTenantMessageStatus(organization, status) {
         retryable: true
       });
     }
-    if (!shouldApplyMessageStatus(snapshot.data()?.status, nextStatus)) return;
+    const message = snapshot.data() || {};
+    if (!shouldApplyMessageStatus(message.status, nextStatus)) return;
+    const updatedAt = new Date();
+    let campaignContext = null;
+    if (message.source === "campaign" && /^[A-Za-z0-9_-]{1,128}$/.test(String(message.campaignId || ""))) {
+      const campaignRef = organization.ref.collection("campaigns").doc(message.campaignId);
+      const recipientId = crypto.createHash("sha256").update(recipient).digest("hex");
+      const recipientRef = campaignRef.collection("recipients").doc(recipientId);
+      const [campaignSnapshot, recipientSnapshot] = await Promise.all([
+        transaction.get(campaignRef),
+        transaction.get(recipientRef)
+      ]);
+      if (campaignSnapshot.exists && recipientSnapshot.exists) {
+        campaignContext = {
+          campaignRef,
+          recipientRef,
+          campaign: campaignSnapshot.data() || {},
+          previousDeliveryStatus: recipientSnapshot.get("deliveryStatus") || message.status || "sent"
+        };
+      }
+    }
     transaction.update(ref, {
       status: nextStatus,
-      statusUpdatedAt: new Date(),
+      statusUpdatedAt: updatedAt,
       ...(deliveryError ? { deliveryError } : {})
     });
+    if (campaignContext) {
+      transaction.update(campaignContext.recipientRef, {
+        deliveryStatus: nextStatus,
+        deliveryUpdatedAt: updatedAt,
+        ...(deliveryError ? { deliveryError } : {})
+      });
+      const counters = getCampaignDeliveryCounterPatch(
+        campaignContext.campaign,
+        campaignContext.previousDeliveryStatus,
+        nextStatus
+      );
+      if (Object.keys(counters).length) {
+        transaction.update(campaignContext.campaignRef, { ...counters, updatedAt });
+      }
+    }
   });
 }
 
