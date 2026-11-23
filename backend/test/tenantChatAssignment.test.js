@@ -16,7 +16,7 @@ function fakeDb({ chatExists = true, member = { status: "active", role: "agent",
     const reference = {
       path,
       async get() {
-        return { exists, data: () => data };
+        return { exists, data: () => data, get: (field) => data?.[field] };
       },
       async set(value, options) {
         writes.push({ path, value, options });
