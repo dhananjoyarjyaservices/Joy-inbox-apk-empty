@@ -69,6 +69,19 @@ export interface WhatsAppConnectionHealthResult {
   verifiedName?: string;
   error?: string;
 }
+export interface WhatsAppTemplate {
+  id: string;
+  name: string;
+  status: string;
+  language: string;
+  category: string;
+  components: Array<{ type?: string; text?: string; format?: string }>;
+}
+export async function listWhatsAppTemplates(organizationId: string, phoneNumberId: string, wabaId: string): Promise<WhatsAppTemplate[]> {
+  const query = new URLSearchParams({ organizationId, phoneNumberId, wabaId });
+  const result = await request(`/whatsapp/templates?${query.toString()}`);
+  return Array.isArray(result.templates) ? result.templates : [];
+}
 export async function checkWhatsAppConnectionHealth(organizationId: string): Promise<WhatsAppConnectionHealthResult[]> {
   const result = await request("/whatsapp/connection-health", "POST", { organizationId });
   return Array.isArray(result.results) ? result.results : [];
