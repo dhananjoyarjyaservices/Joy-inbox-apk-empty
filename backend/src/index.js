@@ -51,7 +51,8 @@ const {
   getDeviceDocument,
   getTenantDeviceDocument,
   isValidFcmToken,
-  isValidInstallationId
+  isValidInstallationId,
+  sendTenantSlaOverdueNotification
 } = require("./push");
 
 function getMethod(event) {
@@ -722,6 +723,84 @@ async function registerTenantFcmToken(event) {
     updatedAt: new Date()
   }, { merge: true });
   return jsonResponse(event, 200, { success: true });
+}
+
+async function checkTenantSlaAlerts(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); }
+  catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "chats:read");
+
+  const db = getDb();
+  const admin = getFirebaseAdmin();
+  const cutoff = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
+  const snapshot = await db.collection("organizations").doc(organization.id)
+    .collection("chats")
+    .where("responsePendingSince", "<=", cutoff)
+    .limit(100)
+    .get();
+
+  let notified = 0;
+  for (const document of snapshot.docs) {
+    const chat = document.data();
+    const assignedTo = typeof chat.assignedTo === "string" ? chat.assignedTo : "";
+    if (!assignedTo || chat.archived === true || chat.status === "resolved") continue;
+
+    const pendingValue = chat.responsePendingSince;
+    const pendingMillis = pendingValue && typeof pendingValue.toMillis === "function"
+      ? pendingValue.toMillis()
+      : pendingValue instanceof Date ? pendingValue.getTime() : NaN;
+    if (!Number.isFinite(pendingMillis) || pendingMillis > Date.now() - 5 * 60 * 1000) continue;
+
+    const chatRef = document.ref;
+    const claimed = await db.runTransaction(async (transaction) => {
+      const latest = await transaction.get(chatRef);
+      if (!latest.exists) return false;
+      const current = latest.data();
+      const currentPending = current.responsePendingSince;
+      const currentMillis = currentPending && typeof currentPending.toMillis === "function"
+        ? currentPending.toMillis()
+        : currentPending instanceof Date ? currentPending.getTime() : NaN;
+      if (currentMillis !== pendingMillis || current.assignedTo !== assignedTo ||
+          current.archived === true || current.status === "resolved" ||
+          current.slaOverdueNotifiedFor === pendingMillis) return false;
+      transaction.update(chatRef, {
+        slaOverdueNotifiedFor: pendingMillis,
+        slaOverdueNotifiedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return true;
+    });
+    if (!claimed) continue;
+
+    try {
+      const member = await db.collection("organizations").doc(organization.id)
+        .collection("members").doc(assignedTo).get();
+      if (member.exists && member.get("status") === "active" &&
+          ["owner", "admin", "agent"].includes(member.get("role"))) {
+        await sendTenantSlaOverdueNotification(
+          organization.id,
+          assignedTo,
+          document.id,
+          String(chat.customerName || chat.customerPhone || document.id)
+        );
+        notified += 1;
+      }
+    } catch (error) {
+      await db.runTransaction(async (transaction) => {
+        const latest = await transaction.get(chatRef);
+        if (latest.exists && latest.get("slaOverdueNotifiedFor") === pendingMillis) {
+          transaction.update(chatRef, {
+            slaOverdueNotifiedFor: admin.firestore.FieldValue.delete(),
+            slaOverdueNotifiedAt: admin.firestore.FieldValue.delete()
+          });
+        }
+      });
+      throw error;
+    }
+  }
+  return jsonResponse(event, 200, { success: true, notified });
 }
 
 async function removeTenantFcmToken(event) {
@@ -2087,6 +2166,14 @@ exports.handler = async (event) => {
       );
     } finally {
       logLatency("lambda_send_ms", startedAt);
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/sla/check")) {
+    try { return await checkTenantSlaAlerts(event); }
+    catch (error) {
+      console.error("Tenant SLA alert check failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "SLA alerts could not be checked." });
     }
   }
 
