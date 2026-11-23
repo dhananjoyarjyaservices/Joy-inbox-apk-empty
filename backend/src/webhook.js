@@ -4,7 +4,7 @@ const { getDb } = require("./firebase");
 const { verifyMetaSignature, getRawBody } = require("./security");
 const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
-const { isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
+const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
 const { matchesAutomationRule } = require("./automationRules");
 
@@ -391,6 +391,12 @@ async function processWebhookPayload(payload) {
           // Re-apply suppression on webhook retries even when the inbound
           // message was already persisted before a previous suppression write failed.
           await recordCampaignOptOut(db, organization.id, phone, String(message.id || ""));
+          continue;
+        }
+        if (isWhatsAppOptInMessage(inboundText)) {
+          // START/UNSTOP is an explicit customer request to resume messages.
+          // Keep this as a compliance event, not a greeting/keyword trigger.
+          await recordCampaignOptIn(db, organization.id, phone, String(message.id || ""));
           continue;
         }
         if (created) {
