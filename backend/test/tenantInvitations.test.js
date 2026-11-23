@@ -140,3 +140,20 @@ test("lists and revokes pending invitations", async () => {
   const stored = [...values.entries()].find(([path]) => path.startsWith("organizations/org_1/invitations/"))?.[1];
   assert.equal(stored.status, "revoked");
 });
+
+test("rejects invalid invitation URL configuration before writing an invitation", async () => {
+  const { db, values } = createInvitationDb({ "organizations/org_1": { status: "active", name: "Joy Inbox" } });
+  await assert.rejects(createTenantInvitation(db, "org_1", { uid: "owner_1" }, {
+    email: "agent@example.com", role: "agent"
+  }, { frontendBaseUrl: "http://app.example.com" }), /HTTPS/);
+  assert.equal([...values.keys()].some(path => path.startsWith("organizations/org_1/invitations/")), false);
+});
+
+test("reports elapsed pending invitations as expired", async () => {
+  const { db } = createInvitationDb({ "organizations/org_1": { status: "active" } });
+  await createTenantInvitation(db, "org_1", { uid: "owner_1" }, {
+    email: "agent@example.com", role: "agent"
+  }, { now: () => new Date("2026-11-01T12:00:00.000Z") });
+  const listed = await listTenantInvitations(db, "org_1");
+  assert.equal(listed[0].status, "expired");
+});
