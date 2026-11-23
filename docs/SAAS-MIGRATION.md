@@ -182,3 +182,26 @@ The branch now includes a tenant Workspace Billing screen and a Stripe integrati
 - organization-scoped subscription status storage and customer consistency checks.
 
 Billing documents and Stripe webhook event records remain server-only under Firestore rules. Billing is not enabled until the Stripe account, test/live API secrets, webhook signing secret, recurring Price IDs and trusted return URLs are configured. Plan entitlements, quotas, taxes, invoices UI, trials/grace policy, and live-payment acceptance testing are still outstanding. See [docs/BILLING-STRIPE.md](BILLING-STRIPE.md).
+
+
+## Legacy data migration utility (dry-run first)
+
+A migration utility is now available at `backend/scripts/migrate-legacy-to-tenant.js`. It requires an existing active target organization and an active owner membership for the selected legacy owner UID.
+
+Dry-run (no writes):
+
+```sh
+node backend/scripts/migrate-legacy-to-tenant.js --organization=ORG_ID --owner=FIREBASE_UID
+```
+
+Execute only after a verified Firestore backup and explicit operator approval:
+
+```sh
+node backend/scripts/migrate-legacy-to-tenant.js --organization=ORG_ID --owner=FIREBASE_UID --execute
+```
+
+The utility copies legacy chats/messages, contacts, quick replies and greeting settings to organization-scoped paths using deterministic document IDs. It skips destination documents that already exist, so a partial run can be resumed without overwriting tenant edits. A completion marker is written only after all writes succeed.
+
+Customer media bytes, Firebase Storage paths, signed URLs and base64 media payloads are deliberately excluded. Meta media IDs and safe message metadata may be retained; old media without a Meta media ID is marked unavailable and must not be copied into tenant storage. Quick Reply image references are marked unavailable and need to be re-uploaded to the workspace.
+
+The script is not run automatically and has not been executed against any production data. Do not pass `--execute` until the dry-run counts, owner identity, target organization, backups and rollback plan have been reviewed.
