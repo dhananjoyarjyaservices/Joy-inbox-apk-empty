@@ -139,7 +139,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   const rulesSnapshot = await organization.ref.collection("automationRules").limit(100).get();
   const rules = rulesSnapshot.docs
     .map((document) => ({ id: document.id, ...document.data() }))
-    .filter((rule) => rule.enabled === true && typeof rule.keyword === "string" && typeof rule.response === "string")
+    .filter((rule) => rule.enabled === true && typeof rule.keyword === "string" && (typeof rule.response === "string" || (Array.isArray(rule.steps) && rule.steps.length > 0)))
     .sort((a, b) => Number(a.priority || 100) - Number(b.priority || 100));
   const rule = rules.find((item) => matchesAutomationRule(item, body));
   if (!rule) return;
@@ -167,37 +167,56 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   });
   if (!claimed || !withinWindow) return;
 
+  const steps = Array.isArray(rule.steps) && rule.steps.length
+    ? rule.steps.slice(0, 5).map((step) => String(step).trim()).filter(Boolean)
+    : [String(rule.response || "").trim()].filter(Boolean);
+  const responseMessageIds = [];
+  const chatRef = organization.ref.collection("chats").doc(phone);
   try {
-    const result = await sendWhatsAppText(phone, rule.response, undefined, credentials);
-    const timestamp = new Date();
-    const chatRef = organization.ref.collection("chats").doc(phone);
-    const batch = db.batch();
-    batch.set(chatRef.collection("messages").doc(result.messageId), {
-      messageId: result.messageId,
-      chatId: phone,
-      organizationId: organization.id,
-      direction: "outgoing",
-      type: "text",
-      text: rule.response,
-      timestamp,
-      status: "sent",
-      source: "automation",
-      automationRuleId: rule.id,
-      phoneNumberId: credentials.phoneNumberId || null,
-      sender: "system"
-    });
-    batch.set(chatRef, {
-      lastMessage: rule.response,
-      lastMessageAt: timestamp,
-      lastMessageDirection: "outgoing",
-      ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
-      updatedAt: timestamp
-    }, { merge: true });
-    batch.set(runRef, { status: "sent", responseMessageId: result.messageId, sentAt: timestamp, updatedAt: timestamp }, { merge: true });
-    await batch.commit();
+    for (let index = 0; index < steps.length; index += 1) {
+      const replyText = steps[index];
+      const result = await sendWhatsAppText(phone, replyText, undefined, credentials);
+      const timestamp = new Date();
+      const batch = db.batch();
+      batch.set(chatRef.collection("messages").doc(result.messageId), {
+        messageId: result.messageId,
+        chatId: phone,
+        organizationId: organization.id,
+        direction: "outgoing",
+        type: "text",
+        text: replyText,
+        timestamp,
+        status: "sent",
+        source: "automation",
+        automationRuleId: rule.id,
+        automationStep: index + 1,
+        phoneNumberId: credentials.phoneNumberId || null,
+        sender: "system"
+      });
+      batch.set(chatRef, {
+        lastMessage: replyText,
+        lastMessageAt: timestamp,
+        lastMessageDirection: "outgoing",
+        ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
+        updatedAt: timestamp
+      }, { merge: true });
+      responseMessageIds.push(result.messageId);
+      batch.set(runRef, {
+        status: index === steps.length - 1 ? "sent" : "sending",
+        responseMessageIds: [...responseMessageIds],
+        completedSteps: responseMessageIds.length,
+        totalSteps: steps.length,
+        ...(index === steps.length - 1 ? { sentAt: timestamp } : {}),
+        updatedAt: timestamp
+      }, { merge: true });
+      await batch.commit();
+    }
   } catch (error) {
     await runRef.set({
-      status: "failed",
+      status: responseMessageIds.length ? "partially_failed" : "failed",
+      responseMessageIds,
+      completedSteps: responseMessageIds.length,
+      totalSteps: steps.length,
       error: String(error?.message || "Automation reply failed.").slice(0, 300),
       updatedAt: new Date()
     }, { merge: true });
