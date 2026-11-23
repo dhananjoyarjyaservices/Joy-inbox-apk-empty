@@ -177,3 +177,21 @@ export async function deleteOrganisationQuickReply(orgId: string, shortcut: stri
     { method: "DELETE" },
   );
 }
+
+export async function updateOrganisationChatTags(orgId: string, chatId: string, tags: string[]) {
+  return request<{ success: boolean; result: { tags: string[] } }>(
+    `/organisations/${encodeURIComponent(orgId)}/chats/${encodeURIComponent(chatId)}/tags`,
+    { method: "POST", body: JSON.stringify({ tags }) },
+  );
+}
+
+export async function updateOrganisationChatStatus(
+  orgId: string,
+  chatId: string,
+  status: "open" | "pending" | "resolved",
+) {
+  return request<{ success: boolean; result: { status: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/chats/${encodeURIComponent(chatId)}/assignment`,
+    { method: "POST", body: JSON.stringify({ status }) },
+  );
+}
