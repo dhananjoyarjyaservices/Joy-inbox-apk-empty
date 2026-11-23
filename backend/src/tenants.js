@@ -718,7 +718,7 @@ async function handleTenantRoute(event) {
       return jsonResponse(event, 200, { success: true, connection: result });
     }
     if (membersMatch && method === "GET") {
-      await requireMembership(db, membersMatch[1], user.uid, ["owner", "admin", "manager"]);
+      await requireMembership(db, membersMatch[1], user.uid, ["owner", "admin", "manager", "agent"]);
       const snapshot = await db.collection("organisations").doc(membersMatch[1]).collection("members").where("status", "==", "active").get();
       const members = snapshot.docs.map((doc) => ({
         uid: doc.id,
