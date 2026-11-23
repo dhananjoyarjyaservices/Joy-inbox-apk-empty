@@ -82,6 +82,7 @@ export interface WhatsAppConnection {
   displayPhoneNumber?: string;
   verifiedName?: string;
   status?: string;
+  webhookVerifyToken?: string;
 }
 
 export async function getOrganisationWhatsAppConnection(orgId: string) {
