@@ -1,4 +1,4 @@
-import { getMessaging, getToken, isSupported } from "firebase/messaging";
+import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { auth, firebaseApp } from "../firebase/config";
 import { getActiveOrganizationId } from "./activeOrganization";
 
@@ -134,6 +134,11 @@ export async function syncPushToken(): Promise<void> {
   const organizationId = getActiveOrganizationId();
   if (!organizationId) throw new Error("Please select an organization before enabling notifications.");
   await authenticatedRequest("/organizations/fcm-tokens/register", { token, installationId, organizationId });
+}
+
+export async function listenForForegroundPush(callback: (data: Record<string, string>) => void): Promise<() => void> {
+  if (!(await isSupported())) return () => undefined;
+  return onMessage(getMessaging(firebaseApp), payload => callback(payload.data || {}));
 }
 
 export async function disablePushNotifications(): Promise<void> {
