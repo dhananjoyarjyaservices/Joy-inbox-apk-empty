@@ -188,7 +188,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       queueBatch.set(queueRef, {
         runId, ruleId: rule.id, organizationId: organization.id, customerPhone: phone,
         phoneNumberId: credentials.phoneNumberId || null, stepIndex: index,
-        totalSteps: steps.length, text: steps[index].message,
+        totalSteps: steps.length, previousStepQueued: index > immediateCount, text: steps[index].message,
         delaySeconds: steps[index].delaySeconds, dueAt: new Date(dueAt),
         windowExpiresAt: new Date(inboundTimestamp.getTime() + 24 * 60 * 60 * 1000),
         status: "queued", attempts: 0, createdAt: timestamp, updatedAt: timestamp
