@@ -67,7 +67,7 @@ The organization-scoped opt-out/suppression list is implemented for inbound STOP
 
 Inbound text replies matching standard opt-out keywords (STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, REMOVE and OPT OUT) create an organization-scoped suppression record. The webhook does not run greeting or keyword automation for that opt-out message. Campaign draft creation checks suppression records in bounded batches and excludes opted-out recipients while increasing the skipped-recipient count. Suppression is scoped to the organization and keyed by a SHA-256 hash of the normalized phone number.
 
-This is a compliance safeguard for campaign preparation; a complete sending worker, campaign controls, and delivery reconciliation are still required before campaigns can be launched.
+The worker rechecks this organization-scoped suppression record immediately before each send. Meta delivery status webhooks update the campaign recipient's delivery status and the campaign's delivered/read/failed counters. These paths still require staging acceptance tests before production use.
 
 
 ### Explicit WhatsApp re-subscription
