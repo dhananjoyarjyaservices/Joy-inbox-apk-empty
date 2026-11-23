@@ -4,7 +4,7 @@ import { ArrowLeft, Megaphone, RefreshCw, Users } from "lucide-react";
 import {
   createOrganisationCampaign,
   listOrganisationCampaigns,
-  previewOrganisationCampaign,
+  previewOrganisationCampaign,\n  updateOrganisationContactConsent,
   type OrganisationCampaign,
 } from "../services/organisations";
 
@@ -16,7 +16,7 @@ export default function Campaigns() {
   const [templateName, setTemplateName] = useState("");
   const [language, setLanguage] = useState("en_US");
   const [parameters, setParameters] = useState("");
-  const [tags, setTags] = useState("");
+  const [tags, setTags] = useState("");\n  const [consentPhone, setConsentPhone] = useState("");\n  const [consentSource, setConsentSource] = useState("");\n  const [consentEvidence, setConsentEvidence] = useState("");\n  const [consentStatus, setConsentStatus] = useState<"opted_in" | "opted_out">("opted_in");
   const [preview, setPreview] = useState<Record<string, { eligibleCount: number; excludedCount: number; message: string }> >({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -42,6 +42,22 @@ export default function Campaigns() {
       await refresh();
       setNotice("Draft campaign created. Preview the audience before any future sending.");
     } catch (e) { setError(e instanceof Error ? e.message : "Campaign could not be created."); }
+    finally { setBusy(false); }
+  }
+
+
+  async function saveConsent(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await updateOrganisationContactConsent(orgId, consentPhone, {
+        status: consentStatus, source: consentSource, evidence: consentEvidence,
+      });
+      setNotice(consentStatus === "opted_in"
+        ? "Consent record saved. This contact may appear in eligible campaign previews."
+        : "Opt-out recorded. This contact will be excluded from campaign previews.");
+      setConsentPhone(""); setConsentSource(""); setConsentEvidence("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Consent could not be saved."); }
     finally { setBusy(false); }
   }
 
@@ -74,6 +90,17 @@ export default function Campaigns() {
             <input value={parameters} onChange={e=>setParameters(e.target.value)} placeholder="Template body values separated by |" className="h-11 rounded-xl border border-gray-200 px-3 text-sm"/>
             <input value={tags} onChange={e=>setTags(e.target.value)} placeholder="Required contact tags (comma separated)" className="h-11 rounded-xl border border-gray-200 px-3 text-sm md:col-span-2"/>
             <button disabled={busy} className="rounded-xl bg-[#075e54] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 md:col-span-2">{busy ? "Please wait..." : "Save campaign draft"}</button>
+          </form>
+        </section>
+        <section className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
+          <h2 className="mb-1 font-semibold">WhatsApp consent records</h2>
+          <p className="mb-4 text-xs leading-5 text-gray-500">Record opt-in only when you have real customer permission. Enter the source and evidence reference. Customer STOP / UNSUBSCRIBE messages are recorded as opt-outs automatically.</p>
+          <form onSubmit={saveConsent} className="grid gap-3 md:grid-cols-2">
+            <input required value={consentPhone} onChange={e=>setConsentPhone(e.target.value)} placeholder="Customer phone with country code" className="h-11 rounded-xl border border-gray-200 px-3 text-sm"/>
+            <select value={consentStatus} onChange={e=>setConsentStatus(e.target.value as "opted_in" | "opted_out")} className="h-11 rounded-xl border border-gray-200 px-3 text-sm"><option value="opted_in">Record opt-in</option><option value="opted_out">Record opt-out</option></select>
+            <input value={consentSource} onChange={e=>setConsentSource(e.target.value)} placeholder="Source (website form, paper form, etc.)" className="h-11 rounded-xl border border-gray-200 px-3 text-sm md:col-span-2"/>
+            {consentStatus === "opted_in" && <textarea required value={consentEvidence} onChange={e=>setConsentEvidence(e.target.value)} maxLength={500} rows={2} placeholder="Evidence reference / description of customer's consent" className="rounded-xl border border-gray-200 p-3 text-sm md:col-span-2"/>}
+            <button disabled={busy} className="rounded-xl bg-[#075e54] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 md:col-span-2">{busy ? "Please wait..." : "Save consent record"}</button>
           </form>
         </section>
         <section className="rounded-2xl bg-white p-5 shadow-sm">
