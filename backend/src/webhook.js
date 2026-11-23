@@ -178,51 +178,54 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   const chatRef = organization.ref.collection("chats").doc(phone);
   const firstDelayedIndex = steps.findIndex((step, index) => index > 0 && step.delaySeconds > 0);
   const immediateCount = firstDelayedIndex < 0 ? steps.length : firstDelayedIndex;
+  const timestamp = new Date();
   try {
-    let lastMessage = "";
-    let lastTimestamp = new Date();
-    const batch = db.batch();
-    for (let index = 0; index < immediateCount; index += 1) {
-      const replyText = steps[index].message;
-      const result = await sendWhatsAppText(phone, replyText, undefined, credentials);
-      lastTimestamp = new Date();
-      lastMessage = replyText;
-      responseMessageIds.push(result.messageId);
-      batch.set(chatRef.collection("messages").doc(result.messageId), {
-        messageId: result.messageId, chatId: phone, organizationId: organization.id,
-        direction: "outgoing", type: "text", text: replyText, timestamp: lastTimestamp, status: "sent",
-        source: "automation", automationRuleId: rule.id, automationStep: index + 1,
-        phoneNumberId: credentials.phoneNumberId || null, sender: "system"
-      });
-    }
-    batch.set(chatRef, {
-      lastMessage, lastMessageAt: lastTimestamp, lastMessageDirection: "outgoing",
-      ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}), updatedAt: lastTimestamp
-    }, { merge: true });
-    const runUpdates = {
-      responseMessageIds: [...responseMessageIds],
-      completedSteps: immediateCount,
-      totalSteps: steps.length,
-      status: immediateCount === steps.length ? "sent" : "sending",
-      updatedAt: lastTimestamp,
-      ...(immediateCount === steps.length ? { sentAt: lastTimestamp } : {})
-    };
-    batch.set(runRef, runUpdates, { merge: true });
-    let dueAt = lastTimestamp.getTime();
+    const queueBatch = db.batch();
+    let dueAt = timestamp.getTime();
     for (let index = immediateCount; index < steps.length; index += 1) {
       dueAt += steps[index].delaySeconds * 1000;
       const queueRef = organization.ref.collection("automationQueue").doc(`${runId}_${index + 1}`);
-      batch.set(queueRef, {
+      queueBatch.set(queueRef, {
         runId, ruleId: rule.id, organizationId: organization.id, customerPhone: phone,
         phoneNumberId: credentials.phoneNumberId || null, stepIndex: index,
         totalSteps: steps.length, text: steps[index].message,
-        delaySeconds: steps[index].delaySeconds,
-        dueAt: new Date(dueAt),
+        delaySeconds: steps[index].delaySeconds, dueAt: new Date(dueAt),
         windowExpiresAt: new Date(inboundTimestamp.getTime() + 24 * 60 * 60 * 1000),
-        status: "queued", attempts: 0, createdAt: lastTimestamp, updatedAt: lastTimestamp
+        status: "queued", attempts: 0, createdAt: timestamp, updatedAt: timestamp
       });
     }
-    await batch.commit();
+    queueBatch.set(runRef, {
+      responseMessageIds: [], completedSteps: 0, totalSteps: steps.length,
+      status: "sending", updatedAt: timestamp
+    }, { merge: true });
+    await queueBatch.commit();
+
+    for (let index = 0; index < immediateCount; index += 1) {
+      const replyText = steps[index].message;
+      const result = await sendWhatsAppText(phone, replyText, undefined, credentials);
+      const sentAt = new Date();
+      responseMessageIds.push(result.messageId);
+      const messageBatch = db.batch();
+      messageBatch.set(chatRef.collection("messages").doc(result.messageId), {
+        messageId: result.messageId, chatId: phone, organizationId: organization.id,
+        direction: "outgoing", type: "text", text: replyText, timestamp: sentAt, status: "sent",
+        source: "automation", automationRuleId: rule.id, automationStep: index + 1,
+        phoneNumberId: credentials.phoneNumberId || null, sender: "system"
+      });
+      messageBatch.set(chatRef, {
+        lastMessage: replyText, lastMessageAt: sentAt, lastMessageDirection: "outgoing",
+        ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}), updatedAt: sentAt
+      }, { merge: true });
+      messageBatch.set(runRef, {
+        responseMessageIds: [...responseMessageIds],
+        completedSteps: index + 1,
+        totalSteps: steps.length,
+        status: index + 1 === steps.length ? "sent" : "sending",
+        updatedAt: sentAt,
+        ...(index + 1 === steps.length ? { sentAt } : {})
+      }, { merge: true });
+      await messageBatch.commit();
+    }
   } catch (error) {
     await runRef.set({
       status: responseMessageIds.length ? "partially_failed" : "failed",
