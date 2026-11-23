@@ -101,6 +101,10 @@ export async function listWhatsAppTemplates(organizationId: string, phoneNumberI
   const result = await request(`/whatsapp/templates?${query.toString()}`);
   return Array.isArray(result.templates) ? result.templates : [];
 }
+export async function checkTenantSlaAlerts(organizationId: string): Promise<{ notified: number }> {
+  return request("/organizations/sla/check", "POST", { organizationId });
+}
+
 export async function checkWhatsAppConnectionHealth(organizationId: string): Promise<WhatsAppConnectionHealthResult[]> {
   const result = await request("/whatsapp/connection-health", "POST", { organizationId });
   return Array.isArray(result.results) ? result.results : [];
