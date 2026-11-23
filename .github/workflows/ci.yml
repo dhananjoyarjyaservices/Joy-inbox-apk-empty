@@ -25,9 +25,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install backend dependencies
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies from lockfile
         working-directory: backend
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Run backend tests
         working-directory: backend
         run: npm test
