@@ -401,6 +401,45 @@ async function listOrganisationNotes(db, user, orgId, chatId) {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
+
+async function listOrganisationQuickReplies(db, user, orgId) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager", "agent"]);
+  const snapshot = await db.collection("organisations").doc(orgId)
+    .collection("quickReplies").orderBy("shortcut").limit(500).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+async function saveOrganisationQuickReply(db, user, orgId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  const shortcut = String(body.shortcut || "").trim().replace(/^\/+/, "").toLowerCase();
+  const title = String(body.title || "").trim();
+  const text = String(body.text || "").trim();
+  if (!/^[a-z0-9_-]{2,32}$/.test(shortcut)) fail("Shortcut must be 2-32 letters, numbers, underscores or hyphens.");
+  if (!title || title.length > 80 || !text || text.length > 4096) {
+    fail("A title (max 80) and reply text (max 4096) are required.");
+  }
+  const ref = db.collection("organisations").doc(orgId).collection("quickReplies").doc(shortcut);
+  const now = new Date();
+  await ref.set({
+    shortcut, title, text,
+    createdBy: user.uid,
+    updatedBy: user.uid,
+    updatedAt: now,
+    createdAt: now
+  }, { merge: true });
+  return { id: shortcut, shortcut, title, text };
+}
+
+async function deleteOrganisationQuickReply(db, user, orgId, shortcut) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager"]);
+  if (!/^[a-z0-9_-]{2,32}$/.test(shortcut)) fail("Invalid quick reply shortcut.");
+  const ref = db.collection("organisations").doc(orgId).collection("quickReplies").doc(shortcut);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) fail("Quick reply was not found.", 404);
+  await ref.delete();
+  return { deleted: shortcut };
+}
+
 async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
@@ -411,7 +450,8 @@ async function handleTenantRoute(event) {
   const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
   const orgMessagesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages$/);
   const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgChatActionMatch)) return null;
+  const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgChatActionMatch || quickRepliesMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -433,6 +473,19 @@ async function handleTenantRoute(event) {
       return jsonResponse(event, 200, { success: true, membership: result });
     }
 
+
+    if (quickRepliesMatch && method === "GET" && !quickRepliesMatch[2]) {
+      const quickReplies = await listOrganisationQuickReplies(db, user, quickRepliesMatch[1]);
+      return jsonResponse(event, 200, { quickReplies });
+    }
+    if (quickRepliesMatch && method === "POST" && !quickRepliesMatch[2]) {
+      const quickReply = await saveOrganisationQuickReply(db, user, quickRepliesMatch[1], parseBody(event));
+      return jsonResponse(event, 201, { success: true, quickReply });
+    }
+    if (quickRepliesMatch && method === "DELETE" && quickRepliesMatch[2]) {
+      const result = await deleteOrganisationQuickReply(db, user, quickRepliesMatch[1], quickRepliesMatch[2]);
+      return jsonResponse(event, 200, { success: true, result });
+    }
     if (orgChatActionMatch && orgChatActionMatch[3] === "notes" && method === "GET") {
       const notes = await listOrganisationNotes(db, user, orgChatActionMatch[1], orgChatActionMatch[2]);
       return jsonResponse(event, 200, { notes });
