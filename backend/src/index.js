@@ -711,10 +711,12 @@ async function sendTenantTemplate(event) {
   const templateName = String(body.templateName || "").trim();
   const language = String(body.language || "").trim();
   const variables = body.variables === undefined ? [] : body.variables;
+  const headerVariables = body.headerVariables === undefined ? [] : body.headerVariables;
+  const buttonVariables = body.buttonVariables === undefined ? [] : body.buttonVariables;
+  const validVariables = values => Array.isArray(values) && values.length <= 100 && values.every(value => typeof value === "string" && value.trim() && value.length <= 1024);
   if (!/^[a-z0-9_]{1,512}$/.test(templateName) || !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(language) ||
-      !Array.isArray(variables) || variables.length > 100 ||
-      variables.some(value => typeof value !== "string" || !value.trim() || value.length > 1024)) {
-    return jsonResponse(event, 400, { error: "Template name, language or body variables are invalid." });
+      !validVariables(variables) || !validVariables(headerVariables) || !validVariables(buttonVariables)) {
+    return jsonResponse(event, 400, { error: "Template name, language or template variables are invalid." });
   }
   const db = getDb();
   const wabaId = String(body.wabaId || "").trim();
@@ -730,17 +732,32 @@ async function sendTenantTemplate(event) {
   if (!templateResponse.ok) return jsonResponse(event, 502, { error: templatePayload.error?.message || "Meta could not verify this template. Check WABA ID and token permissions." });
   const approvedTemplate = (Array.isArray(templatePayload.data) ? templatePayload.data : []).find(item => item.name === templateName && item.language === language && item.status === "APPROVED");
   if (!approvedTemplate) return jsonResponse(event, 400, { error: "This template is not approved for the selected language." });
-  const bodyText = (Array.isArray(approvedTemplate.components) ? approvedTemplate.components : []).find(item => item.type === "BODY")?.text || "";
-  const expectedVariables = [...bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
-  const expectedCount = expectedVariables.length ? Math.max(...expectedVariables) : 0;
-  if (variables.length !== expectedCount) return jsonResponse(event, 400, { error: `This template requires ${expectedCount} body variable(s).` });
+  const templateComponents = Array.isArray(approvedTemplate.components) ? approvedTemplate.components : [];
+  const placeholderCount = value => {
+    const indexes = [...String(value || "").matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
+    return indexes.length ? Math.max(...indexes) : 0;
+  };
+  const bodyCount = placeholderCount(templateComponents.find(item => item.type === "BODY")?.text);
+  const headerComponent = templateComponents.find(item => item.type === "HEADER" && item.format === "TEXT");
+  const headerCount = placeholderCount(headerComponent?.text);
+  const urlButtons = templateComponents.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button, index) => ({ ...button, index })) : []).filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
+  if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length) {
+    return jsonResponse(event, 400, { error: `This template needs ${bodyCount} body, ${headerCount} header and ${urlButtons.length} URL button variable(s).` });
+  }
   const clientMessageId = getClientMessageId(body.clientMessageId);
   const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId: credentials.phoneNumberId || null, to, templateName, language, variables });
   const claim = await claimTenantSendRequest(db, organization.id, to, clientMessageId, payloadHash);
   if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   const template = { name: templateName, language: { code: language } };
-  if (variables.length) template.components = [{ type: "body", parameters: variables.map(text => ({ type: "text", text: text.trim() })) }];
+  const components = [];
+  if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text: text.trim() })) });
+  if (variables.length) components.push({ type: "body", parameters: variables.map(text => ({ type: "text", text: text.trim() })) });
+  buttonVariables.forEach((value, index) => {
+    const button = urlButtons[index];
+    components.push({ type: "button", sub_type: "url", index: String(button.index), parameters: [{ type: "text", text: value.trim() }] });
+  });
+  if (components.length) template.components = components;
   let result;
   try {
     const version = process.env.GRAPH_API_VERSION || "v26.0";
@@ -769,7 +786,7 @@ async function sendTenantTemplate(event) {
     messageId: result.messageId, clientMessageId, chatId: to, organizationId: organization.id,
     direction: "outgoing", phoneNumberId: credentials.phoneNumberId || null,
     type: "template", text: preview, templateName, templateLanguage: language,
-    templateVariables: variables, timestamp, status: "sending", source: "template", sender: decoded.uid
+    templateVariables: { header: headerVariables, body: variables, buttons: buttonVariables }, timestamp, status: "sending", source: "template", sender: decoded.uid
   });
   batch.set(chatRef, {
     customerPhone: to, ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
