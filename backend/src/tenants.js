@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const { getHeader, jsonResponse } = require("./security");
-const { normalizePhoneNumber, sendWhatsAppText, sendWhatsAppMedia } = require("./whatsapp");
+const { normalizePhoneNumber, sendWhatsAppText, sendWhatsAppMedia, sendWhatsAppPayload } = require("./whatsapp");
 
 function getMethod(event) {
   return (event.requestContext?.http?.method || event.httpMethod || "GET").toUpperCase();
@@ -524,6 +524,117 @@ async function sendOrganisationMedia(db, user, orgId, body) {
   return { messageId: sent.messageId, chatId: to, status: "sent", mediaRetained: false };
 }
 
+
+async function getOrganisationCredentials(db, orgId) {
+  const snapshot = await db.collection("organisations").doc(orgId)
+    .collection("whatsappConnections").doc("primary").get();
+  if (!snapshot.exists || snapshot.data().status !== "credentials_verified") {
+    fail("This organisation has no verified WhatsApp Cloud API connection.", 409);
+  }
+  const connection = snapshot.data();
+  return { accessToken: decryptSecret(connection.accessTokenEncrypted), phoneNumberId: connection.phoneNumberId };
+}
+
+async function saveStructuredOutgoingMessage(db, user, orgId, to, messageId, type, text, payload) {
+  const timestamp = new Date();
+  const chatRef = db.collection("organisations").doc(orgId).collection("chats").doc(to);
+  await db.runTransaction(async (tx) => {
+    tx.create(chatRef.collection("messages").doc(messageId), {
+      messageId, chatId: to, direction: "outgoing", type, text, payload,
+      timestamp, status: "sent", source: "manual", sender: user.uid
+    });
+    tx.set(chatRef, {
+      organisationId: orgId, customerPhone: to,
+      lastMessage: text || (type === "template" ? "Template message" : "Interactive message"),
+      lastMessageAt: timestamp, lastMessageDirection: "outgoing", updatedAt: timestamp
+    }, { merge: true });
+  });
+}
+
+async function sendOrganisationTemplate(db, user, orgId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager", "agent"]);
+  const to = normalizePhoneNumber(body.to);
+  const name = String(body.name || "").trim();
+  const language = String(body.language || "en_US").trim();
+  const parameters = body.bodyParameters === undefined ? [] : body.bodyParameters;
+  if (!/^\\d{6,20}$/.test(to) || !/^[a-zA-Z0-9_]{1,512}$/.test(name) ||
+      !/^[a-z]{2,3}_[A-Z]{2}$/.test(language) || !Array.isArray(parameters) || parameters.length > 20 ||
+      parameters.some((value) => typeof value !== "string" || value.length > 1024)) {
+    fail("Provide a valid recipient, approved template name, language and up to 20 text parameters.");
+  }
+  const template = { name, language: { code: language } };
+  if (parameters.length) {
+    template.components = [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }];
+  }
+  const credentials = await getOrganisationCredentials(db, orgId);
+  const sent = await sendWhatsAppPayload(to, "template", template, credentials);
+  const preview = parameters.length ? parameters.join(" · ").slice(0, 500) : name;
+  await saveStructuredOutgoingMessage(db, user, orgId, to, sent.messageId, "template", preview, template);
+  return { messageId: sent.messageId, chatId: to, status: "sent" };
+}
+
+async function sendOrganisationInteractive(db, user, orgId, body) {
+  await requireMembership(db, orgId, user.uid, ["owner", "admin", "manager", "agent"]);
+  const to = normalizePhoneNumber(body.to);
+  const kind = String(body.kind || "");
+  const messageBody = String(body.body || "").trim();
+  const header = String(body.header || "").trim();
+  const footer = String(body.footer || "").trim();
+  if (!/^\\d{6,20}$/.test(to) || !["button", "list"].includes(kind) ||
+      !messageBody || messageBody.length > 1024 || header.length > 60 || footer.length > 60) {
+    fail("Provide a valid recipient and interactive message content.");
+  }
+  let interactive;
+  if (kind === "button") {
+    if (!Array.isArray(body.buttons) || body.buttons.length < 1 || body.buttons.length > 3) {
+      fail("Reply-button messages require 1 to 3 buttons.");
+    }
+    const buttons = body.buttons.map((button) => ({
+      type: "reply",
+      reply: { id: String(button.id || "").trim(), title: String(button.title || "").trim() }
+    }));
+    if (buttons.some((button) => !/^[A-Za-z0-9_-]{1,256}$/.test(button.reply.id) ||
+      !button.reply.title || button.reply.title.length > 20)) {
+      fail("Each reply button needs a unique short ID and a title of up to 20 characters.");
+    }
+    if (new Set(buttons.map((button) => button.reply.id)).size !== buttons.length) fail("Button IDs must be unique.");
+    interactive = { type: "button", body: { text: messageBody }, action: { buttons } };
+  } else {
+    const sections = body.sections;
+    if (!Array.isArray(sections) || sections.length < 1 || sections.length > 10) {
+      fail("List messages require 1 to 10 sections.");
+    }
+    let totalRows = 0;
+    const safeSections = sections.map((section, index) => {
+      const title = String(section.title || `Options ${index + 1}`).trim();
+      if (!Array.isArray(section.rows) || section.rows.length < 1 || title.length > 24) {
+        fail("Each list section needs rows and a title of up to 24 characters.");
+      }
+      const rows = section.rows.map((row) => ({
+        id: String(row.id || "").trim(),
+        title: String(row.title || "").trim(),
+        ...(row.description ? { description: String(row.description).trim() } : {})
+      }));
+      totalRows += rows.length;
+      if (rows.some((row) => !/^[A-Za-z0-9_-]{1,200}$/.test(row.id) ||
+        !row.title || row.title.length > 24 || (row.description && row.description.length > 72))) {
+        fail("List rows need a valid ID, title (up to 24) and description (up to 72).");
+      }
+      return { title, rows };
+    });
+    if (totalRows > 10) fail("A WhatsApp list can contain at most 10 rows in total.");
+    const buttonText = String(body.buttonText || "View options").trim();
+    if (!buttonText || buttonText.length > 20) fail("List button text must be 1 to 20 characters.");
+    interactive = { type: "list", body: { text: messageBody }, action: { button: buttonText, sections: safeSections } };
+  }
+  if (header) interactive.header = { type: "text", text: header };
+  if (footer) interactive.footer = { text: footer };
+  const credentials = await getOrganisationCredentials(db, orgId);
+  const sent = await sendWhatsAppPayload(to, "interactive", interactive, credentials);
+  await saveStructuredOutgoingMessage(db, user, orgId, to, sent.messageId, "interactive", messageBody, interactive);
+  return { messageId: sent.messageId, chatId: to, status: "sent" };
+}
+
 async function handleTenantRoute(event) {
   const method = getMethod(event);
   const path = getPath(event).replace(/\/$/, "") || "/";
@@ -536,7 +647,7 @@ async function handleTenantRoute(event) {
   const orgMediaMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/media$/);
   const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
-  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch)) return null;
+  if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgTemplateMatch || orgInteractiveMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch)) return null;
 
   try {
     const user = await authenticate(event);
@@ -579,6 +690,14 @@ async function handleTenantRoute(event) {
       const action = orgChatActionMatch[3] === "notes" ? "note" : orgChatActionMatch[3];
       const result = await updateOrganisationChat(db, user, orgChatActionMatch[1], orgChatActionMatch[2], parseBody(event), action);
       return jsonResponse(event, 200, { success: true, result });
+    }
+    if (orgTemplateMatch && method === "POST") {
+      const result = await sendOrganisationTemplate(db, user, orgTemplateMatch[1], parseBody(event));
+      return jsonResponse(event, 200, { success: true, message: result });
+    }
+    if (orgInteractiveMatch && method === "POST") {
+      const result = await sendOrganisationInteractive(db, user, orgInteractiveMatch[1], parseBody(event));
+      return jsonResponse(event, 200, { success: true, message: result });
     }
     if (orgMediaMatch && method === "POST") {
       const result = await sendOrganisationMedia(db, user, orgMediaMatch[1], parseBody(event));
