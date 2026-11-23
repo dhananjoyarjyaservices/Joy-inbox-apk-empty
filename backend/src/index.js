@@ -958,7 +958,8 @@ async function checkTenantSlaAlerts(event) {
           organization.id,
           assignedTo,
           document.id,
-          String(chat.customerName || chat.customerPhone || document.id)
+          String(chat.customerName || chat.customerPhone || document.id),
+          notificationPreferences
         );
         if (delivered > 0) {
           notified += 1;
