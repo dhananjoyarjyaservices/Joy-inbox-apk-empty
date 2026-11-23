@@ -33,7 +33,7 @@ export default function OrganizationInvitations({ organizationId, actorRole }: P
   useEffect(() => {
     activeOrganizationId.current = organizationId;
     requestId.current += 1;
-    setItems([]); setInviteUrl(""); setNotice(""); setError("");
+    setItems([]); setInviteUrl(""); setNotice(""); setError(""); setBusy(false);
     void refresh();
   }, [organizationId, refresh]);
 
