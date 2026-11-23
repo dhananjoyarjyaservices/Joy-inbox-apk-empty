@@ -1871,6 +1871,17 @@ exports.handler = async (event) => {
     }
   }
 
+  if (method === "POST" && path.endsWith("/organizations/retry-template")) {
+    try { return await retryTenantFailedTemplate(event); }
+    catch (error) {
+      console.error("Tenant failed template retry error:", error);
+      return jsonResponse(event, error.statusCode || 500, {
+        error: error.statusCode ? error.message : "Template retry could not be sent.",
+        retryable: error.retryable ?? !error.definitive
+      });
+    }
+  }
+
   if (method === "POST" && path.endsWith("/organizations/retry")) {
     try { return await retryTenantFailedText(event); }
     catch (error) {
