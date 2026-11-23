@@ -140,3 +140,5 @@ The Notification Center summarizes the latest 100 per-device delivery records: d
 
 Workspace owners and admins can request `GET /organizations/notifications/team-deliveries?organizationId=...`. The endpoint is restricted to owner/admin roles and reports per-active-member push delivery aggregates (delivered, failed, retried records, attempts, and delivery rate). It reads at most 50 member documents and the latest 100 delivery records for each member. The UI displays this table in Notification Center; agents continue to see only their own delivery history. This is an independently sampled recent window per member, not a lifetime or cross-member time-aligned total. FCM delivery success does not establish that a recipient opened or read a notification.
 
+The team analytics endpoint also accepts optional inclusive `from=YYYY-MM-DD` and `to=YYYY-MM-DD` query parameters. The UI date controls request the selected range from the API and can export the currently displayed per-member aggregates to CSV. Each member query is bounded to 500 records in the selected range; the UI should be understood as a sampled report when this cap is reached, not a lifetime total.
+
