@@ -1,4 +1,5 @@
 
+const crypto = require("crypto");
 const { getDb } = require("./firebase");
 const { verifyMetaSignature, getRawBody } = require("./security");
 const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
@@ -55,7 +56,15 @@ async function verifyWebhook(event) {
     };
   }
 
-  if (mode === "subscribe" && token === verifyToken) {
+  let validToken = Boolean(verifyToken && token === verifyToken);
+  if (!validToken && mode === "subscribe" && token) {
+    const tokenHash = crypto.createHash("sha256").update(String(token)).digest("hex");
+    const matches = await getDb().collectionGroup("whatsappConnections")
+      .where("webhookVerifyTokenHash", "==", tokenHash).limit(1).get();
+    validToken = !matches.empty;
+  }
+
+  if (mode === "subscribe" && validToken) {
     return {
       statusCode: 200,
       body: challenge || ""
@@ -340,10 +349,95 @@ async function updateMessageStatus(status) {
   });
 }
 
+
+async function processOrganisationWebhookChange(orgId, value) {
+  const db = getDb();
+  const orgRef = db.collection("organisations").doc(orgId);
+  const contacts = value.contacts || [];
+
+  for (const message of value.messages || []) {
+    const phone = normalizePhoneNumber(message.from);
+    if (!phone || !message.id) continue;
+    const contact = contacts.find((item) => item.wa_id === message.from);
+    const contactName = String(contact?.profile?.name || message.from || phone).slice(0, 100);
+    const media = message[message.type] || {};
+    const text = message.type === "text"
+      ? String(message.text?.body || "").slice(0, 4096)
+      : String(media.caption || media.title || (message.type === "location" && message.location
+        ? String(message.location.latitude) + ", " + String(message.location.longitude)
+        : String(message.type || "Unsupported") + " message")).slice(0, 4096);
+    const timestamp = message.timestamp ? new Date(Number(message.timestamp) * 1000) : new Date();
+    if (Number.isNaN(timestamp.getTime())) continue;
+
+    const chatRef = orgRef.collection("chats").doc(phone);
+    const messageRef = chatRef.collection("messages").doc(message.id);
+    await db.runTransaction(async (tx) => {
+      const [existing, chat] = await Promise.all([tx.get(messageRef), tx.get(chatRef)]);
+      if (existing.exists) return;
+      const previousUnread = chat.exists ? Number(chat.data().unreadCount || 0) : 0;
+      tx.create(messageRef, {
+        messageId: message.id,
+        chatId: phone,
+        direction: "incoming",
+        type: String(message.type || "unknown"),
+        text,
+        timestamp,
+        status: "received",
+        source: "whatsapp",
+        sender: phone,
+        mediaRetained: false
+      });
+      tx.set(chatRef, {
+        organisationId: orgId,
+        customerPhone: phone,
+        customerName: contactName,
+        lastMessage: text,
+        lastMessageAt: timestamp,
+        lastMessageDirection: "incoming",
+        unreadCount: previousUnread + 1,
+        updatedAt: new Date()
+      }, { merge: true });
+    });
+
+    await orgRef.collection("contacts").doc(phone).set({
+      phone: "+" + phone,
+      phoneId: phone,
+      name: contactName,
+      source: "whatsapp",
+      lastSeenAt: new Date(),
+      updatedAt: new Date()
+    }, { merge: true });
+  }
+
+  for (const status of value.statuses || []) {
+    const phone = normalizePhoneNumber(status.recipient_id);
+    const messageId = String(status.id || "");
+    const nextStatus = status.status;
+    if (!phone || !messageId || !["sent", "delivered", "read", "failed"].includes(nextStatus)) continue;
+    const messageRef = orgRef.collection("chats").doc(phone).collection("messages").doc(messageId);
+    await db.runTransaction(async (tx) => {
+      const snapshot = await tx.get(messageRef);
+      if (!snapshot.exists) return;
+      const rank = { failed: 0, sent: 1, delivered: 2, read: 3 };
+      const current = snapshot.data().status;
+      if ((rank[nextStatus] ?? -1) <= (rank[current] ?? -1)) return;
+      tx.update(messageRef, { status: nextStatus, statusUpdatedAt: new Date() });
+    });
+  }
+}
+
 async function processWebhookPayload(payload) {
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
       const value = change.value || {};
+      const phoneNumberId = String(value.metadata?.phone_number_id || "");
+      if (phoneNumberId) {
+        const mapping = await getDb().collection("whatsappPhoneNumbers").doc(phoneNumberId).get();
+        if (mapping.exists && mapping.data().orgId) {
+          await processOrganisationWebhookChange(mapping.data().orgId, value);
+          continue;
+        }
+      }
 
       const contacts = value.contacts || [];
       const messages = value.messages || [];
