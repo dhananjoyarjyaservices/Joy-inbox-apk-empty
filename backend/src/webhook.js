@@ -148,6 +148,9 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
     ? new Date(Number(inboundMessage.timestamp) * 1000) : new Date();
   const withinWindow = inboundTimestamp.getTime() <= Date.now() + 5 * 60 * 1000 &&
     Date.now() - inboundTimestamp.getTime() < 24 * 60 * 60 * 1000;
+  const steps = Array.isArray(rule.steps) && rule.steps.length
+    ? rule.steps.slice(0, 5).map((step) => String(step).trim()).filter(Boolean)
+    : [String(rule.response || "").trim()].filter(Boolean);
   const runId = crypto.createHash("sha256").update(String(inboundMessage.id || "") + ":" + rule.id).digest("hex");
   const runRef = organization.ref.collection("automationRuns").doc(runId);
   const claimed = await db.runTransaction(async (transaction) => {
@@ -159,6 +162,8 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       inboundMessageId: String(inboundMessage.id || "").slice(0, 256),
       customerPhone: phone,
       status: withinWindow ? "sending" : "skipped",
+      totalSteps: steps.length,
+      completedSteps: 0,
       reason: withinWindow ? null : "outside_whatsapp_service_window",
       createdAt: new Date(),
       updatedAt: new Date()
@@ -167,9 +172,6 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   });
   if (!claimed || !withinWindow) return;
 
-  const steps = Array.isArray(rule.steps) && rule.steps.length
-    ? rule.steps.slice(0, 5).map((step) => String(step).trim()).filter(Boolean)
-    : [String(rule.response || "").trim()].filter(Boolean);
   const responseMessageIds = [];
   const chatRef = organization.ref.collection("chats").doc(phone);
   try {
