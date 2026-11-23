@@ -2520,9 +2520,6 @@ async function handleTenantCampaigns(event) {
     }
     const campaignRef = campaigns.doc(campaignId);
     const now = new Date();
-    const snapshot = await campaignRef.get();
-    if (!snapshot.exists) return jsonResponse(event, 404, { error: "Campaign was not found." });
-    const currentStatus = String(snapshot.get("status") || "draft");
     const transitions = {
       start: { from: ["draft"], to: "queued" },
       schedule: { from: ["draft"], to: "scheduled" },
@@ -2532,9 +2529,6 @@ async function handleTenantCampaigns(event) {
     };
     const transition = transitions[body.action];
     if (!transition) return jsonResponse(event, 400, { error: "Unsupported campaign action." });
-    if (!transition.from.includes(currentStatus)) {
-      return jsonResponse(event, 409, { error: `Campaign cannot ${body.action} while status is ${currentStatus}.` });
-    }
     const patch = { status: transition.to, updatedAt: now, updatedBy: decoded.uid };
     if (body.action === "start" || body.action === "resume") patch.queuedAt = now;
     if (body.action === "schedule") {
@@ -2546,8 +2540,19 @@ async function handleTenantCampaigns(event) {
     }
     if (body.action === "cancel") patch.cancelledAt = now;
     if (body.action === "pause") patch.pausedAt = now;
-    await campaignRef.set(patch, { merge: true });
-    return jsonResponse(event, 200, { success: true, campaignId, status: transition.to });
+    const transitionResult = await getDb().runTransaction(async transaction => {
+      const snapshot = await transaction.get(campaignRef);
+      if (!snapshot.exists) return { status: "not_found" };
+      const currentStatus = String(snapshot.get("status") || "draft");
+      if (!transition.from.includes(currentStatus)) return { status: "conflict", currentStatus };
+      transaction.update(campaignRef, patch);
+      return { status: transition.to };
+    });
+    if (transitionResult.status === "not_found") return jsonResponse(event, 404, { error: "Campaign was not found." });
+    if (transitionResult.status === "conflict") {
+      return jsonResponse(event, 409, { error: `Campaign cannot ${body.action} while status is ${transitionResult.currentStatus}.` });
+    }
+    return jsonResponse(event, 200, { success: true, campaignId, status: transitionResult.status });
   }
 
   const definition = normalizeCampaignDefinition(body);
