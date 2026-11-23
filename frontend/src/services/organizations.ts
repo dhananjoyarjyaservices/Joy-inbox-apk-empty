@@ -222,6 +222,9 @@ export interface OrganizationCampaign {
   sentCount?: number;
   failedCount?: number;
   uncertainCount?: number;
+  deliveredCount?: number;
+  readCount?: number;
+  deliveryFailedCount?: number;
   skippedCount?: number;
   scheduledAt?: string | null;
   createdAt: string | null;
