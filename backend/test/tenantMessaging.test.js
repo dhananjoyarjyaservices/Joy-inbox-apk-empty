@@ -93,6 +93,37 @@ test("tenant reply lookup cannot read another organization's message", async () 
   );
 });
 
+test("tenant reply lookup rejects malformed and conflicting message identifiers", async () => {
+  const db = fakeDb();
+  for (const body of [
+    { replyToMessageId: "" },
+    { replyToMessageId: "invalid id with spaces" },
+    { replyToMessageId: "wamid.one", contextMessageId: "wamid.two" }
+  ]) {
+    await assert.rejects(
+      () => resolveTenantReplyContext(db, "org_one", "15551234567", body),
+      { statusCode: 400 }
+    );
+  }
+});
+
+test("tenant reply context uses the WhatsApp message ID while storing a local quote preview", async () => {
+  const db = fakeDb();
+  await getTenantMessageRef(db, "org_one", "15551234567", "local-document-id").set({
+    messageId: "wamid.remote-id",
+    direction: "outgoing",
+    text: "Agent response",
+    type: "text"
+  });
+  const reply = await resolveTenantReplyContext(db, "org_one", "15551234567", {
+    replyToMessageId: "local-document-id"
+  });
+  assert.equal(reply.contextMessageId, "wamid.remote-id");
+  assert.equal(reply.messageDocumentId, "local-document-id");
+  assert.equal(reply.sender, "You");
+  assert.equal(reply.text, "Agent response");
+});
+
 test("only failed outgoing text messages with their original WhatsApp number are retryable", () => {
   const retryable = getRetryableTenantTextMessage({
     direction: "outgoing",
