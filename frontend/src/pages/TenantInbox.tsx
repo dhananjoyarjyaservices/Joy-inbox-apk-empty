@@ -5,7 +5,7 @@ import { LogOut, MessageCircle, Send, Settings, RefreshCw, Paperclip, FileText, 
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
 import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
-import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, checkTenantSlaAlerts, listWhatsAppTemplates, sendTenantTemplate, sendTenantText, retryTenantFailedText, retryTenantFailedTemplate, getOrganizationSlaSettings, saveOrganizationSlaSettings, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult, type WhatsAppTemplate, listOrganizationNotifications, listOrganizationAutomationRules, listOrganizationAutomationRuns, getOrganizationAutomationQueueHealth, type OrganizationAutomationQueueHealth, saveOrganizationAutomationRule, deleteOrganizationAutomationRule, type OrganizationAutomationRule, type OrganizationAutomationRun, markOrganizationNotificationRead, markAllOrganizationNotificationsRead, getOrganizationNotificationPreferences, saveOrganizationNotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, type OrganizationNotificationPreferences, type OrganizationNotification, listOrganizationCampaigns, createOrganizationCampaign, updateOrganizationCampaign, type OrganizationCampaign, type OrganizationCampaignAction, getOrganizationBilling, createOrganizationBillingCheckout, openOrganizationBillingPortal, type OrganizationBillingState } from "../services/organizations";
+import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, checkTenantSlaAlerts, listWhatsAppTemplates, sendTenantTemplate, sendTenantText, retryTenantFailedText, retryTenantFailedTemplate, getOrganizationSlaSettings, saveOrganizationSlaSettings, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult, type WhatsAppTemplate, listOrganizationNotifications, listOrganizationAutomationRules, listOrganizationAutomationRuns, getOrganizationAutomationQueueHealth, type OrganizationAutomationQueueHealth, saveOrganizationAutomationRule, deleteOrganizationAutomationRule, type OrganizationAutomationRule, type OrganizationAutomationRun, markOrganizationNotificationRead, markAllOrganizationNotificationsRead, getOrganizationNotificationPreferences, saveOrganizationNotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, type OrganizationNotificationPreferences, type OrganizationNotification, listOrganizationCampaigns, createOrganizationCampaign, updateOrganizationCampaign, type OrganizationCampaign, type OrganizationCampaignAction, getOrganizationCampaignRecipients, type OrganizationCampaignRecipient, getOrganizationBilling, createOrganizationBillingCheckout, openOrganizationBillingPortal, type OrganizationBillingState } from "../services/organizations";
 import OrganizationMembers from "../components/OrganizationMembers";
 import { listOrganizationMembers, updateOrganizationChatAssignment, listChatAssignmentAudit, listHistoricalAgentPerformance, type OrganizationMember, type ChatAssignmentAuditEvent, type HistoricalAgentPerformance } from "../services/organizationMembers";
 import { listenToTenantChats, listenToTenantMessages, loadOlderTenantMessages } from "../services/tenantChats";
@@ -173,6 +173,10 @@ export default function TenantInbox() {
   const [campaignLoading, setCampaignLoading] = useState(false);
   const [campaignSaving, setCampaignSaving] = useState(false);
   const [campaignActionLoading, setCampaignActionLoading] = useState("");
+  const [campaignReportId, setCampaignReportId] = useState("");
+  const [campaignReportRecipients, setCampaignReportRecipients] = useState<OrganizationCampaignRecipient[]>([]);
+  const [campaignReportCursor, setCampaignReportCursor] = useState<string | null>(null);
+  const [campaignReportLoading, setCampaignReportLoading] = useState(false);
   const [billing, setBilling] = useState<OrganizationBillingState | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingAction, setBillingAction] = useState("");
@@ -692,6 +696,26 @@ export default function TenantInbox() {
     } catch (error) {
       setError(error instanceof Error ? error.message : "Billing portal could not be opened.");
       setBillingAction("");
+    }
+  }
+
+  async function loadCampaignRecipientReport(campaignId: string, cursor?: string) {
+    if (!organization || campaignReportLoading) return;
+    setCampaignReportLoading(true);
+    setError("");
+    try {
+      const result = await getOrganizationCampaignRecipients(organization.id, campaignId, cursor);
+      if (cursor && campaignReportId === campaignId) {
+        setCampaignReportRecipients(current => [...current, ...result.recipients]);
+      } else {
+        setCampaignReportId(campaignId);
+        setCampaignReportRecipients(result.recipients);
+      }
+      setCampaignReportCursor(result.nextCursor);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Campaign recipient report could not load.");
+    } finally {
+      setCampaignReportLoading(false);
     }
   }
 
