@@ -59,6 +59,13 @@ export type TeamNotificationDeliveryAnalytics = {
   byType: Record<string, TeamNotificationTypeStats>; lastActivityAt: string | null;
 };
 
+export type MemberNotificationDeliveryReport = {
+  member: { uid: string; name: string; role: string };
+  summary: { total: number; delivered: number; failed: number; retried: number; attempts: number; rate: number; byType: Record<string, TeamNotificationTypeStats> };
+  deliveries: NotificationDelivery[];
+  capped: boolean; limit: number; from: string | null; to: string | null;
+};
+
 export type RegisteredPushDevice = {
   installationId: string; deviceName: string; platform: string; userAgent: string;
   createdAt: string | null; updatedAt: string | null;
@@ -190,6 +197,20 @@ export async function listTeamNotificationDeliveryAnalytics(
     `/organizations/notifications/team-deliveries?${params.toString()}`
   );
   return Array.isArray(result.agents) ? result.agents : [];
+}
+
+export async function getMemberNotificationDeliveryReport(
+  organizationId: string,
+  uid: string,
+  range: { from?: string; to?: string } = {},
+): Promise<MemberNotificationDeliveryReport> {
+  const params = new URLSearchParams({ organizationId, uid });
+  if (range.from) params.set("from", range.from);
+  if (range.to) params.set("to", range.to);
+  const result = await authenticatedGet<MemberNotificationDeliveryReport>(
+    `/organizations/notifications/member-deliveries?${params.toString()}`
+  );
+  return result;
 }
 
 export async function listRegisteredPushDevices(organizationId: string): Promise<RegisteredPushDevice[]> {
