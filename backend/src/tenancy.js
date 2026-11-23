@@ -73,7 +73,7 @@ async function saveWhatsAppConnection(db, organization, input) {
   const settingsRef = organization.ref.collection("settings").doc("whatsapp");
   await db.runTransaction(async (transaction) => {
     const existing = await transaction.get(phoneRef);
-    if (existing.exists && existing.data().organizationId !== organization.id) {
+    if (existing.exists && existing.data().status !== "disconnected" && existing.data().organizationId !== organization.id) {
       throw httpError("This WhatsApp phone number is already connected to another organization.", 409);
     }
     const connectionData = {
