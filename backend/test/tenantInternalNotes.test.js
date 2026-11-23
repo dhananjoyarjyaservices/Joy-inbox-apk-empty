@@ -55,7 +55,7 @@ test("creates a private note with authenticated author metadata", async () => {
   const db = {
     collection() {
       return { doc() {
-        return { collection() {
+        return { async get() { return { exists: true }; }, collection() {
           return { doc() {
             return { id: "note_123", async set(value) { saved = value; } };
           } };
