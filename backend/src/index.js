@@ -794,8 +794,13 @@ async function sendTenantTemplate(event) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.messages?.[0]?.id) {
-      const error = new Error(payload.error?.message || "Meta rejected this template message.");
-      error.statusCode = 502; error.definitive = true; error.retryable = false;
+      const error = new Error(payload.error?.message || "Meta did not confirm template message delivery.");
+      error.statusCode = 502;
+      // Explicit 4xx rejects are definitive, except 408. Server errors,
+      // timeouts, and successful responses without a message ID are ambiguous.
+      error.definitive = !response.ok &&
+        response.status >= 400 && response.status < 500 && response.status !== 408;
+      error.retryable = false;
       throw error;
     }
     result = { messageId: payload.messages[0].id };
