@@ -187,6 +187,7 @@ test("multiple WhatsApp numbers keep separate credentials and tenant mappings", 
 test("disconnect marks only the selected WhatsApp number inactive and preserves credentials", async () => {
   const db = fakeTenantDb();
   process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 6).toString("base64");
+  db.docs.set("organizations/org_disconnect", { status: "active" });
   const organization = { id: "org_disconnect", ref: db.collection("organizations").doc("org_disconnect") };
   await saveWhatsAppConnection(db, organization, {
     phoneNumberId: "333333333333333",
