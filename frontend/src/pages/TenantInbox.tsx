@@ -59,6 +59,10 @@ export default function TenantInbox() {
   const [teamMembers, setTeamMembers] = useState<OrganizationMember[]>([]);
   const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [transferTarget, setTransferTarget] = useState("");
+  const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
+  const [bulkAssignmentTarget, setBulkAssignmentTarget] = useState("");
+  const [bulkAssignmentSaving, setBulkAssignmentSaving] = useState(false);
+  const [bulkAssignmentResult, setBulkAssignmentResult] = useState("");
   const [showAssignmentHistory, setShowAssignmentHistory] = useState(false);
   const [assignmentHistory, setAssignmentHistory] = useState<ChatAssignmentAuditEvent[]>([]);
   const [assignmentHistoryLoading, setAssignmentHistoryLoading] = useState(false);
@@ -435,6 +439,33 @@ export default function TenantInbox() {
     } catch (e) { setError(e instanceof Error ? e.message : "Chat action failed."); }
   }
 
+  async function bulkAssignChats() {
+    if (!organization || !bulkAssignmentTarget || !selectedChatIds.length || bulkAssignmentSaving) return;
+    setBulkAssignmentSaving(true);
+    setBulkAssignmentResult("");
+    let succeeded = 0;
+    const failed: string[] = [];
+    for (const chatId of selectedChatIds) {
+      try {
+        await updateOrganizationChatAssignment(organization.id, { chatId, assignedTo: bulkAssignmentTarget });
+        succeeded += 1;
+      } catch {
+        failed.push(chatId);
+      }
+    }
+    const member = teamMembers.find(item => item.uid === bulkAssignmentTarget);
+    setChats(items => items.map(chat => selectedChatIds.includes(chat.id) && !failed.includes(chat.id) ? {
+      ...chat,
+      assignedTo: bulkAssignmentTarget,
+      assigneeName: member?.displayName || member?.email || "Assigned"
+    } : chat));
+    setBulkAssignmentResult(failed.length
+      ? `Assigned ${succeeded}; failed ${failed.length}. Failed chats remain selected.`
+      : `Successfully assigned ${succeeded} conversation(s).`);
+    setSelectedChatIds(failed);
+    setBulkAssignmentSaving(false);
+  }
+
   async function loadAssignmentHistory() {
     if (!organization || !currentChat || assignmentHistoryLoading) return;
     setAssignmentHistoryLoading(true);
@@ -621,10 +652,19 @@ export default function TenantInbox() {
         <div className="flex items-center justify-between border-b p-4"><h2 className="font-semibold">{showArchived ? "Archived chats" : "Chats"}</h2><button onClick={() => setShowArchived(value => !value)} className="mr-2 text-xs text-[#075e54]">{showArchived ? "Inbox" : "Archived"}</button><button onClick={() => setError("")} title="Clear error"><RefreshCw size={16}/></button></div>
         <div className="border-b px-3 py-2"><input value={chatSearch} onChange={e => setChatSearch(e.target.value)} placeholder="Search chats by name, number or message..." className="w-full rounded-full border px-3 py-2 text-sm outline-none focus:border-[#075e54]"/><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-[10px] text-gray-500">From<input type="date" value={chatDateFrom} max={chatDateTo || undefined} onChange={e => setChatDateFrom(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs"/></label><label className="text-[10px] text-gray-500">To<input type="date" value={chatDateTo} min={chatDateFrom || undefined} onChange={e => setChatDateTo(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs"/></label></div></div>
         {!showArchived && <div className="flex gap-2 overflow-x-auto border-b px-3 py-2">{([{id:"all",label:"All"},{id:"unread",label:"Unread"},{id:"unassigned",label:"Unassigned"},{id:"mine",label:"My Chats"},{id:"open",label:"Open"},{id:"pending",label:"Pending"},{id:"resolved",label:"Resolved"}] as const).map(filter => <button key={filter.id} type="button" onClick={() => setChatFilter(filter.id)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${chatFilter === filter.id ? "bg-[#075e54] text-white" : "bg-gray-100 text-gray-600"}`}>{filter.label}</button>)}</div>}
-        {visibleChats.length ? visibleChats.map((chat) => <button key={chat.id} onClick={() => setSelected(chat.id)} className={`w-full border-b border-gray-100 p-4 text-left hover:bg-gray-50 ${selected === chat.id ? "bg-[#effaf3]" : ""}`}>
+        {!showArchived && <div className="border-b bg-white p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" aria-label="Select all visible conversations" checked={visibleChats.length > 0 && visibleChats.every(chat => selectedChatIds.includes(chat.id))} onChange={event => setSelectedChatIds(event.target.checked ? Array.from(new Set([...selectedChatIds, ...visibleChats.map(chat => chat.id)])) : selectedChatIds.filter(id => !visibleChats.some(chat => chat.id === id)))} />Select visible ({selectedChatIds.length} selected)</label>
+            <select aria-label="Assign selected conversations to" value={bulkAssignmentTarget} onChange={event => setBulkAssignmentTarget(event.target.value)} className="min-w-0 flex-1 rounded-lg border bg-white px-2 py-2 text-xs"><option value="">Choose teammate...</option>{teamMembers.map(member => <option key={member.uid} value={member.uid}>{member.displayName || member.email || member.uid}</option>)}</select>
+            <button type="button" disabled={!selectedChatIds.length || !bulkAssignmentTarget || bulkAssignmentSaving} onClick={() => void bulkAssignChats()} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-medium text-white disabled:opacity-50">{bulkAssignmentSaving ? "Assigning..." : "Bulk assign"}</button>
+            <button type="button" disabled={!selectedChatIds.length || bulkAssignmentSaving} onClick={() => setSelectedChatIds([])} className="rounded-lg border px-3 py-2 text-xs disabled:opacity-50">Clear</button>
+          </div>
+          {bulkAssignmentResult && <p role="status" className="mt-2 text-xs text-gray-600">{bulkAssignmentResult}</p>}
+        </div>}
+        {visibleChats.length ? visibleChats.map((chat) => <div key={chat.id} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(chat.id); } }} onClick={() => setSelected(chat.id)} className={`flex w-full cursor-pointer items-start gap-2 border-b border-gray-100 p-4 text-left hover:bg-gray-50 ${selected === chat.id ? "bg-[#effaf3]" : ""}`}><input type="checkbox" aria-label={`Select conversation ${chat.customerPhone || chat.id}`} checked={selectedChatIds.includes(chat.id)} onClick={event => event.stopPropagation()} onChange={event => setSelectedChatIds(ids => event.target.checked ? [...ids, chat.id] : ids.filter(id => id !== chat.id))} className="mt-1 shrink-0" /><div className="min-w-0 flex-1">
           <div className="flex justify-between gap-2"><span className="flex min-w-0 items-center gap-1 truncate font-medium">{chat.pinned && <span title="Pinned" className="text-[#075e54]">📌</span>}{chat.customerName || contacts.find(contact => contact.phone.replace(/[^0-9]/g, "") === (chat.customerPhone || chat.id).replace(/[^0-9]/g, ""))?.name || chat.customerPhone || chat.id}</span><span className="flex shrink-0 items-center gap-2 text-xs text-gray-400">{Number(chat.unreadCount || 0) > 0 && <span className="rounded-full bg-[#25d366] px-2 py-0.5 font-semibold text-white">{chat.unreadCount}</span>}{timeLabel(chat.lastMessageAt)}</span></div>
           <p className="mt-1 truncate text-sm text-gray-500">{chat.lastMessage || "No message preview"}</p><div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-500"><span>{chat.assigneeName || (chat.assignedTo ? teamMembers.find(member => member.uid === chat.assignedTo)?.displayName || "Assigned" : "Unassigned")}</span><span className="capitalize">· {chat.status || "open"}</span></div><div className="mt-2 flex gap-3 text-xs text-gray-500"><span onClick={(e) => { e.stopPropagation(); void chatAction("pin", chat); }} className="cursor-pointer">{(chat as TenantChat & { pinned?: boolean }).pinned ? "Unpin" : "Pin"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("archive", chat); }} className="cursor-pointer">{(chat as TenantChat & { archived?: boolean }).archived ? "Unarchive" : "Archive"}</span><span onClick={(e) => { e.stopPropagation(); void chatAction("read", chat); }} className="cursor-pointer">Read</span><span onClick={(e) => { e.stopPropagation(); void chatAction("delete", chat); }} className="cursor-pointer text-red-600">Delete</span></div>
-        </button>) : <p className="p-6 text-sm text-gray-500">No conversations yet. New WhatsApp messages will appear here.</p>}
+        </div></div>) : <p className="p-6 text-sm text-gray-500">No conversations yet. New WhatsApp messages will appear here.</p>}
       </aside>
       <section className={`flex min-w-0 flex-1 flex-col ${selected ? "flex" : "hidden md:flex"}`}>
         {currentChat ? <>
