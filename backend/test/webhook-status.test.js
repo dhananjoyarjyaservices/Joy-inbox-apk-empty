@@ -38,13 +38,13 @@ test("unknown message statuses are rejected", () => {
 
 function fakeStatusOrganization(initialStatus = "sent") {
   const writes = [];
-  const message = { status: initialStatus };
+  const message = initialStatus === null ? null : { status: initialStatus };
   const ref = {
     firestore: {
       async runTransaction(callback) {
         return callback({
           async get() {
-            return { exists: true, data: () => ({ ...message }) };
+            return { exists: Boolean(message), data: () => message ? ({ ...message }) : undefined };
           },
           update(_ref, value) {
             writes.push(value);
@@ -106,4 +106,18 @@ test("invalid status event identifiers, recipients and status values are ignored
   await updateTenantMessageStatus(organization, { id: "wamid.status.1", recipient_id: "not-a-phone", status: "read" });
   await updateTenantMessageStatus(organization, { id: "wamid.status.1", recipient_id: "15551234567", status: "queued" });
   assert.equal(writes.length, 0);
+});
+
+
+test("missing outgoing message causes a retryable webhook error instead of dropping its status", async () => {
+  const { updateTenantMessageStatus } = require("../src/webhook");
+  const { organization } = fakeStatusOrganization(null);
+  await assert.rejects(
+    updateTenantMessageStatus(organization, {
+      id: "wamid.status.1",
+      recipient_id: "15551234567",
+      status: "delivered"
+    }),
+    (error) => error.statusCode === 503 && error.retryable === true
+  );
 });
