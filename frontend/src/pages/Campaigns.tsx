@@ -4,7 +4,8 @@ import { ArrowLeft, Megaphone, RefreshCw, Users } from "lucide-react";
 import {
   createOrganisationCampaign,
   listOrganisationCampaigns,
-  previewOrganisationCampaign,\n  updateOrganisationContactConsent,
+  previewOrganisationCampaign,
+  updateOrganisationContactConsent,
   type OrganisationCampaign,
 } from "../services/organisations";
 
@@ -16,7 +17,11 @@ export default function Campaigns() {
   const [templateName, setTemplateName] = useState("");
   const [language, setLanguage] = useState("en_US");
   const [parameters, setParameters] = useState("");
-  const [tags, setTags] = useState("");\n  const [consentPhone, setConsentPhone] = useState("");\n  const [consentSource, setConsentSource] = useState("");\n  const [consentEvidence, setConsentEvidence] = useState("");\n  const [consentStatus, setConsentStatus] = useState<"opted_in" | "opted_out">("opted_in");
+  const [tags, setTags] = useState("");
+  const [consentPhone, setConsentPhone] = useState("");
+  const [consentSource, setConsentSource] = useState("");
+  const [consentEvidence, setConsentEvidence] = useState("");
+  const [consentStatus, setConsentStatus] = useState<"opted_in" | "opted_out">("opted_in");
   const [preview, setPreview] = useState<Record<string, { eligibleCount: number; excludedCount: number; message: string }> >({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
