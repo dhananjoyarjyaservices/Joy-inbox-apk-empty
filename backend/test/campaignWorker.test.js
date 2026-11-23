@@ -140,6 +140,22 @@ test("revalidates template approval and reads the approved body variable count",
   );
   assert.equal(count, 2);
   assert.match(requestedUrl, /message_templates/);
+  await assert.rejects(
+    verifyApprovedTemplate(
+      { wabaId: "123456789", templateName: "media_update", language: "en", category: "UTILITY" },
+      { accessToken: "server-secret" },
+      async () => ({
+        ok: true,
+        async json() {
+          return { data: [{
+            name: "media_update", language: "en", status: "APPROVED", category: "UTILITY",
+            components: [{ type: "HEADER", format: "IMAGE" }, { type: "BODY", text: "Hello" }]
+          }] };
+        }
+      })
+    ),
+    /header or button parameter not supported/i
+  );
 });
 
 function createCampaignHarness(suppressionStatus = null) {
