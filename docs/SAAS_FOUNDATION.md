@@ -120,3 +120,15 @@ The organisation inbox now exposes tenant-scoped endpoints for:
 - Team directory lookup for active organisation members and conversation assignment. Agents may assign only to themselves; managers/admins/owners may assign to any active member.
 
 Structured outgoing message metadata is stored in the organisation chat history. Template and interactive messages are submitted through the connected organisation's encrypted WhatsApp Cloud API credentials. These endpoints have CI syntax/build coverage; real delivery still requires Meta configuration and end-to-end testing.
+
+
+## Broadcast campaign foundation (draft and preview only)
+
+Organisation managers can create and list campaign drafts using an already approved WhatsApp template. Campaign audience preview counts only contacts that have an explicit `whatsappOptIn: true` flag and a recorded `whatsappOptInAt` timestamp. Optional campaign tags further narrow the audience. Contacts without consent metadata are excluded.
+
+Endpoints:
+- `GET /organisations/{orgId}/campaigns` — list recent drafts.
+- `POST /organisations/{orgId}/campaigns` — create a draft with title, approved template name, language and body parameters.
+- `GET /organisations/{orgId}/campaigns/{campaignId}/preview` — preview eligible and excluded contact counts.
+
+**Delivery is deliberately disabled.** Preview returns `sendingEnabled: false`; no messages are sent. The current contact onboarding flow does not yet collect and verify WhatsApp opt-in evidence, so the campaign feature must not be used for live broadcasts until consent capture, suppression/opt-out handling, rate limits, batching, delivery status tracking and an auditable send worker are implemented.
