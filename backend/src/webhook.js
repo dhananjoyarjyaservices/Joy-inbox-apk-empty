@@ -49,13 +49,6 @@ async function verifyWebhook(event) {
 
   const verifyToken = getVerifyToken();
 
-  if (!verifyToken) {
-    return {
-      statusCode: 500,
-      body: "Webhook verify token is not configured."
-    };
-  }
-
   let validToken = Boolean(verifyToken && token === verifyToken);
   if (!validToken && mode === "subscribe" && token) {
     const tokenHash = crypto.createHash("sha256").update(String(token)).digest("hex");
