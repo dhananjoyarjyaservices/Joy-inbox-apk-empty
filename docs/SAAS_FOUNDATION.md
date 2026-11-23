@@ -177,3 +177,18 @@ The organisation setup page displays the latest 100 team events to owners and ad
 - Invitation records track only delivery state/provider message ID and last attempt time. The API key remains in Lambda environment configuration.
 - Delivery is best-effort: a provider failure does not invalidate or delete the invitation. The admin can retry or share the invitation IDs securely.
 - Email acceptance links prefill the organisation and invitation IDs on the setup page; email verification and matching invitation email are still enforced by the backend.
+
+
+## Scheduled campaign delivery worker (guarded implementation)
+
+A separate AWS Lambda handler is available at `backend/src/campaign-worker.js`. Configure this file as a dedicated Lambda handler and invoke it from EventBridge on a short recurring schedule. The worker:
+
+- Does nothing unless `CAMPAIGN_DELIVERY_ENABLED=true`; the default is disabled.
+- Scans due scheduled campaigns, verifies the organisation is active and has a verified per-organisation WhatsApp connection, and checks that the named template and language are currently APPROVED in WhatsApp Manager.
+- Claims queued recipients transactionally, rechecks the current contact opt-in, opt-out and required audience tags immediately before sending, and cancels recipients that no longer qualify or whose campaign was cancelled.
+- Sends only approved template messages, writes the outgoing message and WhatsApp message ID to the organisation chat, and records sent/failed state on the recipient queue.
+- Retries transient failures with bounded exponential backoff (up to four attempts); definitive 4xx failures are marked failed. Each run is bounded to 10 campaigns and 20 recipients per campaign.
+
+Required Lambda environment variables: `CAMPAIGN_DELIVERY_ENABLED=false` initially, `WHATSAPP_CREDENTIALS_ENCRYPTION_KEY`, and `GRAPH_API_VERSION` (optional; defaults to v26.0), plus the existing Firebase Admin credentials. Set the Lambda handler to `src/campaign-worker.handler` (or the packaged equivalent) and configure an EventBridge schedule only after validating the deployment and Meta setup.
+
+**Safety/rollout:** keep delivery disabled until a production test plan and business consent review are complete. A worker crash after Meta accepts a message but before Firestore records the response can create an ambiguous outcome; the WhatsApp send API does not provide a general exactly-once guarantee. Delivery/read webhook reconciliation and recovery of expired in-progress leases remain follow-up hardening tasks. This worker has unit coverage for the disabled-by-default guard and retry backoff, but it has not been tested against a live Meta account or Firestore emulator. No campaign messages have been sent by this code change.
