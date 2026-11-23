@@ -125,3 +125,25 @@ test("legacy migration dry-run validates organization ownership and performs no 
   assert.deepEqual(result.source, { chats: 2, messages: 0, contacts: 3, quickReplies: 4, greetingSettings: 1 });
   assert.equal(writes, 0);
 });
+
+test("legacy migration refuses a target user who is not an active organization owner", async () => {
+  const organizationRef = {
+    async get() { return { exists: true, data: () => ({ status: "active" }) }; },
+    collection(name) {
+      assert.equal(name, "members");
+      return { doc() { return { async get() {
+        return { exists: true, data: () => ({ status: "active", role: "agent" }) };
+      } }; } };
+    }
+  };
+  const db = {
+    collection(name) {
+      assert.equal(name, "organizations");
+      return { doc() { return organizationRef; } };
+    }
+  };
+  await assert.rejects(
+    runLegacyMigration(db, { organizationId: "org_123", ownerUid: "uid_123", execute: true }),
+    /active owner/
+  );
+});
