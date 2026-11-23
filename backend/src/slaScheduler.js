@@ -56,7 +56,10 @@ async function checkOrganization(db, admin, organizationId) {
         const member = await db.collection("organizations").doc(organizationId)
           .collection("members").doc(assignedTo).get();
         if (!member.exists || member.get("status") !== "active" ||
-            !["owner", "admin", "agent"].includes(member.get("role"))) continue;
+            !["owner", "admin", "agent"].includes(member.get("role"))) {
+          await clearClaim(db, admin, chatRef, pendingMillis);
+          continue;
+        }
 
         const delivered = await sendTenantSlaOverdueNotification(
           organizationId,
