@@ -185,7 +185,7 @@ export default function TenantInbox() {
   }, [organization?.id]);
 
   useEffect(() => {
-    if (!organization || view !== "notifications") return;
+    if (!organization) return;
     let active = true;
     setNotificationsLoading(true);
     listOrganizationNotifications(organization.id)
@@ -193,7 +193,7 @@ export default function TenantInbox() {
       .catch(error => { if (active) setError(error instanceof Error ? error.message : "Notifications could not load."); })
       .finally(() => { if (active) setNotificationsLoading(false); });
     return () => { active = false; };
-  }, [organization?.id, view]);
+  }, [organization?.id]);
 
   async function openNotification(item: OrganizationNotification) {
     if (!organization) return;
