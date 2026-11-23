@@ -229,7 +229,7 @@ test("checkout completion webhook stores subscription state in the correct organ
     }
   };
   const result = await processStripeWebhookEvent(db, {
-    id: "evt_checkout_123456789",
+    id: "evt_12345678901234567890",
     type: "checkout.session.completed",
     data: { object: {
       id: "cs_123",
