@@ -16,6 +16,7 @@ test("legacy message migration strips durable media paths and raw media bytes", 
     mediaId: "meta-media-123",
     mediaStoragePath: "customer-uploads/private.jpg",
     imageStoragePath: "customer-uploads/another-private.jpg",
+    imageUrl: "https://storage.example/customer-profile.jpg",
     signedUrl: "https://storage.example/private",
     base64: "aGVsbG8=",
     mimeType: "image/jpeg",
@@ -25,6 +26,7 @@ test("legacy message migration strips durable media paths and raw media bytes", 
   assert.equal(result.mediaId, "meta-media-123");
   assert.equal(result.mediaStoragePath, undefined);
   assert.equal(result.imageStoragePath, undefined);
+  assert.equal(result.imageUrl, undefined);
   assert.equal(result.signedUrl, undefined);
   assert.equal(result.base64, undefined);
   assert.equal(result.migratedFromLegacy, true);
