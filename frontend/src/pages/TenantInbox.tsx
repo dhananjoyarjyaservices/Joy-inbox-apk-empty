@@ -219,7 +219,7 @@ export default function TenantInbox() {
 
   useEffect(() => {
     let active = true;
-    let unsubscribe = () => undefined;
+    let unsubscribe: () => void = () => {};
     listenForForegroundPush(data => {
       if (!active || data.type !== "tenant_sla_overdue" || !data.chatId || typeof Notification === "undefined" || Notification.permission !== "granted") return;
       const notification = new Notification(data.title || "First reply SLA overdue", {
