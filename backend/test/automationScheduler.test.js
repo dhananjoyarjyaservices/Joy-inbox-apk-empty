@@ -29,6 +29,7 @@ test("scheduled automation delegates to the lease-aware queue worker", async () 
     skipped: 0,
     deferred: 0,
     retried: 0,
-    claimed: 0
+    claimed: 0,
+    uncertain: 0
   });
 });
