@@ -243,12 +243,23 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
   try {
     requiredVariables = await verifyApprovedTemplate(campaign, credentials, fetchImpl);
   } catch (error) {
+    const verificationError = String(error.message || "Template verification failed.").slice(0, 300);
+    if (Number(error.metaStatusCode) === 429 || error.definitive !== true) {
+      // No recipient send has been attempted, so transient verification errors
+      // are safe to retry on the next scheduled worker invocation.
+      await campaignRef.set({
+        verificationError,
+        verificationRetryAt: now,
+        updatedAt: now
+      }, { merge: true });
+      return { campaignId: campaignRef.id, retryingVerification: true, error: verificationError };
+    }
     await campaignRef.set({
       status: "failed",
-      error: String(error.message || "Template verification failed.").slice(0, 300),
+      error: verificationError,
       updatedAt: now
     }, { merge: true });
-    return { campaignId: campaignRef.id, failed: true, error: String(error.message || "") };
+    return { campaignId: campaignRef.id, failed: true, error: verificationError };
   }
 
   const recipientsRef = campaignRef.collection("recipients");
