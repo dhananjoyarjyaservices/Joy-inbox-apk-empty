@@ -188,3 +188,14 @@ This is a conservative starter throughput limit, not a promise of a fixed Meta m
 
 The running application code currently uses Node.js 22, Firebase Admin, and Firestore. It does not currently include Python/Django/FastAPI, Go services, PostgreSQL/MySQL, Redis, RabbitMQ, Apache Kafka, Kubernetes, or autoscaling container clusters. For a later high-volume campaign pipeline, evaluate Amazon SQS with a dead-letter queue and controlled Lambda consumers before adopting Kafka or Kubernetes; use a relational database only when transactional reporting/billing requirements justify it. Redis can be added for measured cache or rate-limit needs, not as a mandatory first step.
 
+### CI checks and queue operations
+
+GitHub Actions workflow `.github/workflows/ci.yml` runs on pushes and pull requests targeting `feature/saas-foundation`:
+
+- Backend: Node.js 22 dependency install and `npm test`.
+- Frontend: locked dependency install from `frontend/package-lock.json`, TypeScript check, and Vite production build.
+
+The Owner/Admin Automation screen includes queue health counts for queued, sending, sent, failed, skipped, and uncertain jobs, plus due-now count and recent issues. The corresponding authenticated endpoint is `GET /organizations/automation-queue-health?organizationId=...`; it requires the existing `settings:manage` permission and returns only the selected tenant's queue data.
+
+Before production rollout, wait for GitHub Actions to finish successfully, deploy Firestore indexes, deploy the API and separate worker Lambda, then create the one-minute EventBridge schedule. Send a test inbound message that triggers a delayed step and verify: queue record created, due time reached, worker invocation logged, outgoing chat message saved, and run marked sent. Also test a deliberate rate-limit failure and an expired worker lease in a non-production workspace. Do not treat a committed workflow or worker file as proof of a live deployment.
+
