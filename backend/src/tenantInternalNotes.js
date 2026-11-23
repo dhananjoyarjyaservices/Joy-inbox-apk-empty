@@ -25,6 +25,7 @@ function getInternalNotesCollection(db, organizationId, chatId) {
 }
 
 async function requireTenantChat(db, organizationId, chatId) {
+  getInternalNotesCollection(db, organizationId, chatId);
   const chatRef = db.collection("organizations").doc(organizationId).collection("chats").doc(chatId);
   const chat = await chatRef.get();
   if (!chat.exists) throw httpError("Conversation was not found in this workspace.", 404);
