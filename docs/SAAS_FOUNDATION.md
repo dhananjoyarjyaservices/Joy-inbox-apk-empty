@@ -67,7 +67,7 @@ The GitHub Actions CI workflow is configured to run backend tests, backend synta
 The organisation setup screen now has a WhatsApp Cloud API connection form. The backend:
 
 - Requires owner/admin membership for credential changes and owner/admin/manager for viewing connection metadata.
-- Calls Meta Graph API to verify the supplied Phone Number ID and access token before saving.
+- Calls Meta Graph API to verify the supplied Phone Number ID and access token, then checks that the number appears under the supplied WABA ID before saving.
 - Encrypts the access token with AES-256-GCM using `WHATSAPP_CREDENTIALS_ENCRYPTION_KEY` (64 hex characters / 32 random bytes).
 - Stores the WABA ID, Phone Number ID, verified display name and encrypted token under the organisation's `whatsappConnections/primary` document.
 - Maintains a unique Phone Number ID to organisation mapping in the server-only `whatsappPhoneNumbers` collection.
