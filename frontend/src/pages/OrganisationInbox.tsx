@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ChangeEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
-import { ArrowLeft, MessageCircle, Send, RefreshCw, UserRoundCheck, StickyNote, Zap, Plus, X, Paperclip } from "lucide-react";
+import { ArrowLeft, MessageCircle, Send, RefreshCw, UserRoundCheck, StickyNote, Zap, Plus, X, Paperclip, Megaphone } from "lucide-react";
 import { db } from "../firebase/config";
 import {
   sendOrganisationWhatsAppText,
@@ -337,7 +337,7 @@ export default function OrganisationInbox() {
       <header className="flex items-center gap-3 bg-[#075e54] px-4 py-3 text-white">
         <button onClick={() => navigate("/setup")} aria-label="Back to business setup" className="rounded-lg p-2 hover:bg-white/10"><ArrowLeft size={19} /></button>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15"><MessageCircle size={21} /></div>
-        <div><h1 className="font-semibold">Joy Inbox</h1><p className="text-xs text-white/75">Organisation shared inbox</p></div>
+        <div className="min-w-0 flex-1"><h1 className="font-semibold">Joy Inbox</h1><p className="text-xs text-white/75">Organisation shared inbox</p></div><button onClick={() => navigate(`/org/${orgId}/campaigns`)} className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/20" aria-label="Open broadcast campaigns"><Megaphone size={16}/> Campaigns</button>
       </header>
 
       {error && <div role="alert" className="bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
