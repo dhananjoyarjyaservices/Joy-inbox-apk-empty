@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Mail, Lock, MessageCircle } from "lucide-react";
 
 import {
@@ -10,6 +10,11 @@ import {
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from;
+  const destination = from?.pathname && from.pathname.startsWith("/") && !from.pathname.startsWith("//")
+    ? from.pathname + (from.search || "") + (from.hash || "")
+    : "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +30,7 @@ export default function Login() {
     try {
       if (isRegister) await registerWithEmail(email, password);
       else await loginWithEmail(email, password);
-      navigate("/", { replace: true });
+      navigate(destination, { replace: true });
     } catch {
       setError(isRegister ? "Account create nahi hua. Email check karo aur password kam se kam 6 characters ka rakho." : "Login failed. Email aur password check karo.");
     } finally {
