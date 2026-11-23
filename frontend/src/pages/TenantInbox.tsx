@@ -5,7 +5,7 @@ import { LogOut, MessageCircle, Send, Settings, RefreshCw, Paperclip, FileText, 
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
 import { getActiveOrganizationId } from "../services/activeOrganization";
-import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, checkTenantSlaAlerts, listWhatsAppTemplates, sendTenantTemplate, sendTenantText, retryTenantFailedText, retryTenantFailedTemplate, getOrganizationSlaSettings, saveOrganizationSlaSettings, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult, type WhatsAppTemplate, listOrganizationNotifications, listOrganizationAutomationRules, listOrganizationAutomationRuns, saveOrganizationAutomationRule, deleteOrganizationAutomationRule, type OrganizationAutomationRule, type OrganizationAutomationRun, markOrganizationNotificationRead, markAllOrganizationNotificationsRead, getOrganizationNotificationPreferences, saveOrganizationNotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, type OrganizationNotificationPreferences, type OrganizationNotification } from "../services/organizations";
+import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, checkTenantSlaAlerts, listWhatsAppTemplates, sendTenantTemplate, sendTenantText, retryTenantFailedText, retryTenantFailedTemplate, getOrganizationSlaSettings, saveOrganizationSlaSettings, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult, type WhatsAppTemplate, listOrganizationNotifications, listOrganizationAutomationRules, listOrganizationAutomationRuns, getOrganizationAutomationQueueHealth, type OrganizationAutomationQueueHealth, saveOrganizationAutomationRule, deleteOrganizationAutomationRule, type OrganizationAutomationRule, type OrganizationAutomationRun, markOrganizationNotificationRead, markAllOrganizationNotificationsRead, getOrganizationNotificationPreferences, saveOrganizationNotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, type OrganizationNotificationPreferences, type OrganizationNotification } from "../services/organizations";
 import OrganizationMembers from "../components/OrganizationMembers";
 import { listOrganizationMembers, updateOrganizationChatAssignment, listChatAssignmentAudit, listHistoricalAgentPerformance, type OrganizationMember, type ChatAssignmentAuditEvent, type HistoricalAgentPerformance } from "../services/organizationMembers";
 import { listenToTenantChats, listenToTenantMessages, loadOlderTenantMessages } from "../services/tenantChats";
@@ -157,6 +157,7 @@ export default function TenantInbox() {
   const [contactSaving, setContactSaving] = useState(false);
   const [automationRules, setAutomationRules] = useState<OrganizationAutomationRule[]>([]);
   const [automationRuns, setAutomationRuns] = useState<OrganizationAutomationRun[]>([]);
+  const [automationQueueHealth, setAutomationQueueHealth] = useState<OrganizationAutomationQueueHealth | null>(null);
   const [automationLoading, setAutomationLoading] = useState(false);
   const [automationSaving, setAutomationSaving] = useState(false);
   const [automationName, setAutomationName] = useState("");
@@ -235,12 +236,14 @@ export default function TenantInbox() {
     setAutomationLoading(true);
     Promise.all([
       listOrganizationAutomationRules(organization.id),
-      listOrganizationAutomationRuns(organization.id)
+      listOrganizationAutomationRuns(organization.id),
+      getOrganizationAutomationQueueHealth(organization.id)
     ])
-      .then(([rules, runs]) => {
+      .then(([rules, runs, queueHealth]) => {
         if (!active) return;
         setAutomationRules(rules);
         setAutomationRuns(runs);
+        setAutomationQueueHealth(queueHealth);
       })
       .catch(error => { if (active) setError(error instanceof Error ? error.message : "Automation data could not load."); })
       .finally(() => { if (active) setAutomationLoading(false); });
