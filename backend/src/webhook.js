@@ -213,11 +213,29 @@ async function updateTenantMessageStatus(organization, status) {
   });
 }
 
+function isValidMetaWebhookPayload(payload) {
+  return Boolean(payload && typeof payload === "object" && !Array.isArray(payload) &&
+    typeof payload.object === "string" && Array.isArray(payload.entry));
+}
+
+function isIgnorableWebhookRoutingError(error) {
+  return [400, 403, 404, 409].includes(Number(error?.statusCode));
+}
+
 async function processWebhookPayload(payload) {
+  if (!isValidMetaWebhookPayload(payload)) {
+    throw Object.assign(new Error("Invalid Meta webhook payload structure."), { statusCode: 400 });
+  }
+  if (payload.object !== "whatsapp_business_account") {
+    console.warn("Ignoring unsupported Meta webhook object:", payload.object);
+    return;
+  }
   const db = getDb();
-  for (const entry of payload.entry || []) {
-    for (const change of entry.changes || []) {
-      const value = change.value || {};
+  for (const entry of payload.entry) {
+    if (!entry || typeof entry !== "object" || !Array.isArray(entry.changes)) continue;
+    for (const change of entry.changes) {
+      if (!change || change.field !== "messages" || !change.value || typeof change.value !== "object") continue;
+      const value = change.value;
       const phoneNumberId = value.metadata?.phone_number_id;
       if (!phoneNumberId) {
         console.warn("Ignoring WhatsApp webhook change without metadata.phone_number_id.");
@@ -229,11 +247,14 @@ async function processWebhookPayload(payload) {
         organization = await resolvePhoneNumberOrganization(db, String(phoneNumberId));
         credentials = await getWhatsAppCredentials(db, organization.id, String(phoneNumberId));
       } catch (error) {
+        if (!isIgnorableWebhookRoutingError(error)) throw error;
         console.warn("Ignoring webhook for an unlinked or inactive WhatsApp number:", error.message);
         continue;
       }
-      const contacts = value.contacts || [];
-      for (const message of value.messages || []) {
+      const contacts = Array.isArray(value.contacts) ? value.contacts.filter((item) => item && typeof item === "object") : [];
+      const messages = Array.isArray(value.messages) ? value.messages : [];
+      for (const message of messages) {
+        if (!message || typeof message !== "object" || Array.isArray(message)) continue;
         const contact = contacts.find((item) => item.wa_id === message.from);
         const name = contact?.profile?.name || message.from;
         const created = await saveTenantIncomingMessage(db, organization, message, name, String(phoneNumberId));
@@ -254,7 +275,9 @@ async function processWebhookPayload(payload) {
           }
         }
       }
-      for (const status of value.statuses || []) {
+      const statuses = Array.isArray(value.statuses) ? value.statuses : [];
+      for (const status of statuses) {
+        if (!status || typeof status !== "object" || Array.isArray(status)) continue;
         await updateTenantMessageStatus(organization, status);
       }
     }
@@ -289,11 +312,7 @@ async function receiveWebhook(event) {
 
     payload = JSON.parse(rawBody);
 
-    if (
-      !payload ||
-      typeof payload !== "object" ||
-      Array.isArray(payload)
-    ) {
+    if (!isValidMetaWebhookPayload(payload)) {
       throw new Error("Invalid webhook payload.");
     }
   } catch (error) {
@@ -328,5 +347,7 @@ module.exports = {
   saveTenantIncomingMessage,
   updateTenantMessageStatus,
   shouldApplyMessageStatus,
+  isValidMetaWebhookPayload,
+  isIgnorableWebhookRoutingError,
   processWebhookPayload
 };
