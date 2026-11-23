@@ -136,10 +136,14 @@ async function processAutomationQueue(options = {}) {
   const db = options.db || getDb();
   const now = options.now || new Date();
   const limit = Math.max(1, Math.min(MAX_JOBS_PER_INVOCATION, Number(options.limit) || MAX_JOBS_PER_INVOCATION));
-  const staleSnapshot = await db.collectionGroup("automationQueue").where("status", "==", "sending").limit(limit * 4).get();
+  const staleSnapshot = await db.collectionGroup("automationQueue")
+    .where("status", "==", "sending")
+    .where("leaseUntil", "<=", now)
+    .orderBy("leaseUntil", "asc")
+    .limit(limit * 4)
+    .get();
   for (const stale of staleSnapshot.docs) {
     const data = stale.data();
-    if (!timestampMillis(data.leaseUntil) || timestampMillis(data.leaseUntil) > now.getTime()) continue;
     const organizationRef = stale.ref.parent.parent;
     if (!organizationRef || !data.runId) continue;
     const runRef = organizationRef.collection("automationRuns").doc(data.runId);
@@ -161,11 +165,13 @@ async function processAutomationQueue(options = {}) {
       }, { merge: true });
     });
   }
-  const snapshot = await db.collectionGroup("automationQueue").where("status", "==", "queued").limit(limit * 4).get();
-  const dueJobs = snapshot.docs
-    .filter((document) => timestampMillis(document.data().dueAt) <= now.getTime())
-    .sort((a, b) => timestampMillis(a.data().dueAt) - timestampMillis(b.data().dueAt))
-    .slice(0, limit);
+  const snapshot = await db.collectionGroup("automationQueue")
+    .where("status", "==", "queued")
+    .where("dueAt", "<=", now)
+    .orderBy("dueAt", "asc")
+    .limit(limit)
+    .get();
+  const dueJobs = snapshot.docs;
   const results = { scanned: snapshot.size, due: dueJobs.length, sent: 0, failed: 0, skipped: 0, deferred: 0, retried: 0, claimed: 0 };
   for (const document of dueJobs) {
     const organizationRef = document.ref.parent.parent;
