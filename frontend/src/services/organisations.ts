@@ -205,3 +205,43 @@ export async function sendOrganisationWhatsAppMedia(
     { method: "POST", body: JSON.stringify(details) },
   );
 }
+
+export async function sendOrganisationWhatsAppTemplate(
+  orgId: string,
+  details: { to: string; name: string; language: string; bodyParameters?: string[] },
+) {
+  return request<{ success: boolean; message: { messageId: string; chatId: string; status: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/messages/template`,
+    { method: "POST", body: JSON.stringify(details) },
+  );
+}
+
+export interface OrganisationInteractiveButton {
+  id: string;
+  title: string;
+}
+
+export interface OrganisationInteractiveRow {
+  id: string;
+  title: string;
+  description?: string;
+}
+
+export async function sendOrganisationInteractive(
+  orgId: string,
+  details: {
+    to: string;
+    kind: "button" | "list";
+    body: string;
+    header?: string;
+    footer?: string;
+    buttons?: OrganisationInteractiveButton[];
+    buttonText?: string;
+    sections?: Array<{ title: string; rows: OrganisationInteractiveRow[] }>;
+  },
+) {
+  return request<{ success: boolean; message: { messageId: string; chatId: string; status: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/messages/interactive`,
+    { method: "POST", body: JSON.stringify(details) },
+  );
+}
