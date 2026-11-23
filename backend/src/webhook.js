@@ -182,7 +182,8 @@ const MESSAGE_STATUS_RANK = { failed: 0, sent: 1, delivered: 2, read: 3 };
 
 function shouldApplyMessageStatus(currentStatus, nextStatus) {
   if (!Object.prototype.hasOwnProperty.call(MESSAGE_STATUS_RANK, nextStatus)) return false;
-  if (nextStatus === "failed") return !["failed", "delivered", "read"].includes(currentStatus);
+  if (currentStatus === "failed") return false;
+  if (nextStatus === "failed") return !["delivered", "read"].includes(currentStatus);
   if (currentStatus === "read") return false;
   if (currentStatus === "delivered") return nextStatus === "read";
   return MESSAGE_STATUS_RANK[nextStatus] > (MESSAGE_STATUS_RANK[currentStatus] ?? -1);
