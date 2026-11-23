@@ -92,3 +92,22 @@ export async function saveTenantGreeting(org: string, enabled: boolean, text: st
 export async function getTenantStatus(org: string) {
   return call("/organizations/status", "GET", undefined, org);
 }
+
+
+export interface TenantInternalNote {
+  id: string;
+  text: string;
+  authorUid: string;
+  authorName: string;
+  createdAt: string | { toDate?: () => Date } | Date;
+  visibility: "internal";
+}
+export async function listTenantInternalNotes(org: string, chatId: string): Promise<TenantInternalNote[]> {
+  const result = await call("/organizations/internal-notes", "GET", undefined, org, { chatId });
+  return Array.isArray(result.notes) ? result.notes : [];
+}
+export async function addTenantInternalNote(org: string, chatId: string, text: string): Promise<TenantInternalNote> {
+  const result = await call("/organizations/internal-notes", "POST", { organizationId: org, chatId, text });
+  if (!result.note?.id) throw new Error("Internal note could not be saved.");
+  return result.note;
+}
