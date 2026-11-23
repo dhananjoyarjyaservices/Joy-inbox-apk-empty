@@ -455,7 +455,7 @@ async function updateCampaignRecipientStatus(db, orgId, phone, messageId, nextSt
     .where("messageId", "==", messageId).limit(10).get();
   for (const recipientDoc of matches.docs) {
     const campaignRef = recipientDoc.ref.parent.parent;
-    if (!campaignRef || campaignRef.parent.id !== orgId) continue;
+    if (!campaignRef || campaignRef.parent.parent?.id !== orgId) continue;
     await db.runTransaction(async (tx) => {
       const [recipientSnap, campaignSnap] = await Promise.all([
         tx.get(recipientDoc.ref), tx.get(campaignRef)
@@ -694,5 +694,6 @@ async function receiveWebhook(event) {
 
 module.exports = {
   verifyWebhook,
-  receiveWebhook
+  receiveWebhook,
+  shouldAdvanceDeliveryStatus
 };
