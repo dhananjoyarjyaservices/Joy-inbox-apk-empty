@@ -801,7 +801,7 @@ async function sendTenantTemplate(event) {
     messageId: result.messageId, clientMessageId, chatId: to, organizationId: organization.id,
     direction: "outgoing", phoneNumberId: credentials.phoneNumberId || null,
     type: "template", text: preview, templateName, templateLanguage: language,
-    templateVariables: { header: headerVariables, body: variables, buttons: buttonVariables, headerMedia: headerMedia ? { mimeType: headerMedia.mimeType, filename: headerMedia.filename } : null }, timestamp, status: "sending", source: "template", sender: decoded.uid
+    templateVariables: { header: headerVariables, body: variables, buttons: buttonVariables, headerMedia: headerMedia ? { mediaId: uploadedHeaderMediaId, format: mediaHeaderFormat.toLowerCase(), mimeType: headerMedia.mimeType, filename: headerMedia.filename } : null }, wabaId, timestamp, status: "sending", source: "template", sender: decoded.uid
   });
   batch.set(chatRef, {
     customerPhone: to, ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
@@ -810,6 +810,82 @@ async function sendTenantTemplate(event) {
   batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
   await batch.commit();
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
+}
+
+async function retryTenantFailedTemplate(event) {
+  const body = parseBody(event);
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "messages:send");
+  const chatId = normalizePhoneNumber(body.chatId);
+  const originalMessageId = String(body.originalMessageId || "").trim();
+  if (!chatId || !/^[A-Za-z0-9._:-]{1,256}$/.test(originalMessageId)) return jsonResponse(event, 400, { error: "A valid chat and original template message ID are required." });
+  const db = getDb();
+  const chatRef = getTenantChatRef(db, organization.id, chatId);
+  const originalRef = getTenantMessageRef(db, organization.id, chatId, originalMessageId);
+  const originalSnapshot = await originalRef.get();
+  if (!originalSnapshot.exists) return jsonResponse(event, 404, { error: "Original template message was not found." });
+  const original = originalSnapshot.data();
+  if (original.type !== "template" || original.direction !== "outgoing" || original.status !== "failed" || !original.templateName || !original.templateLanguage) {
+    return jsonResponse(event, 400, { error: "Only failed outgoing template messages can be retried." });
+  }
+  const phoneNumberId = String(original.phoneNumberId || "");
+  const credentials = await getWhatsAppCredentials(db, organization.id, phoneNumberId);
+  const templateName = String(original.templateName);
+  const language = String(original.templateLanguage);
+  const saved = original.templateVariables || {};
+  const headerVariables = Array.isArray(saved.header) ? saved.header : [];
+  const variables = Array.isArray(saved.body) ? saved.body : [];
+  const buttonVariables = Array.isArray(saved.buttons) ? saved.buttons : [];
+  const mediaId = String(saved.headerMedia?.mediaId || "");
+  const mediaFormat = String(saved.headerMedia?.format || "").toLowerCase();
+  const wabaId = String(original.wabaId || "");
+  if (!/^\d{5,32}$/.test(wabaId)) return jsonResponse(event, 400, { error: "The original WABA ID is missing. Please send this template again manually." });
+  const version = process.env.GRAPH_API_VERSION || "v26.0";
+  const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
+  url.searchParams.set("fields", "name,status,language,components");
+  url.searchParams.set("name", templateName);
+  const check = await fetch(url.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
+  const checkPayload = await check.json().catch(() => ({}));
+  if (!check.ok) return jsonResponse(event, 502, { error: checkPayload.error?.message || "Meta could not verify the original template." });
+  const approved = (Array.isArray(checkPayload.data) ? checkPayload.data : []).find(item => item.name === templateName && item.language === language && item.status === "APPROVED");
+  if (!approved) return jsonResponse(event, 400, { error: "This template is no longer approved." });
+  const templateComponents = Array.isArray(approved.components) ? approved.components : [];
+  const count = value => { const matches = [...String(value || "").matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1])); return matches.length ? Math.max(...matches) : 0; };
+  const bodyCount = count(templateComponents.find(item => item.type === "BODY")?.text);
+  const header = templateComponents.find(item => item.type === "HEADER");
+  const headerCount = header?.format === "TEXT" ? count(header.text) : 0;
+  const urlButtons = templateComponents.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button,index)=>({...button,index})) : []).filter(button=>button.type==="URL" && String(button.url||"").includes("{{"));
+  if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length || (["IMAGE","VIDEO","DOCUMENT"].includes(header?.format) && (!mediaId || !mediaFormat))) {
+    return jsonResponse(event, 400, { error: "The original template parameters are incomplete. Please send the template again manually." });
+  }
+  const clientMessageId = getClientMessageId(body.clientMessageId);
+  const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId, to: chatId, retryOf: originalMessageId, templateName, language, headerVariables, variables, buttonVariables, mediaId });
+  const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
+  if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
+  const components = [];
+  if (mediaId) components.push({ type: "header", parameters: [{ type: mediaFormat, [mediaFormat]: { id: mediaId } }] });
+  if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text })) });
+  if (variables.length) components.push({ type: "body", parameters: variables.map(text => ({ type: "text", text })) });
+  buttonVariables.forEach((value,index)=>components.push({ type:"button",sub_type:"url",index:String(urlButtons[index].index),parameters:[{type:"text",text:value}]}));
+  try {
+    const response = await fetch(`https://graph.facebook.com/${version}/${encodeURIComponent(phoneNumberId)}/messages`, {
+      method:"POST", headers:{Authorization:`Bearer ${credentials.accessToken}`,"Content-Type":"application/json"},
+      body:JSON.stringify({messaging_product:"whatsapp",recipient_type:"individual",to:chatId,type:"template",template:{name:templateName,language:{code:language},...(components.length?{components}:{})}})
+    });
+    const payload = await response.json().catch(()=>({}));
+    if (!response.ok || !payload.messages?.[0]?.id) { const error=new Error(payload.error?.message||"Meta rejected the template retry."); error.statusCode=502; error.definitive=true; error.retryable=false; throw error; }
+    const newMessageId=payload.messages[0].id; const timestamp=new Date();
+    const newRef=getTenantMessageRef(db,organization.id,chatId,newMessageId);
+    const preview=`Template: ${templateName}`;
+    const batch=db.batch();
+    batch.set(newRef,{messageId:newMessageId,clientMessageId,chatId,organizationId:organization.id,direction:"outgoing",phoneNumberId,type:"template",text:preview,templateName,templateLanguage:language,templateVariables:saved,timestamp,status:"sending",source:"template-retry",retryOf:originalMessageId,sender:decoded.uid});
+    batch.set(chatRef,{customerPhone:chatId,phoneNumberId,lastMessage:preview,lastMessageAt:timestamp,lastMessageDirection:"outgoing",updatedAt:timestamp},{merge:true});
+    batch.set(claim.ref,{status:"completed",messageId:newMessageId,updatedAt:timestamp},{merge:true});
+    await batch.commit();
+    return jsonResponse(event,200,{success:true,messageId:newMessageId,clientMessageId});
+  } catch(error) { await markTenantSendRequestFailed(claim.ref,error); throw error; }
 }
 
 async function retryTenantFailedText(event) {
