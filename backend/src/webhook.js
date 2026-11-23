@@ -55,13 +55,24 @@ async function saveTenantIncomingMessage(db, organization, message, contactName,
   const messageRef = chatRef.collection("messages").doc(messageId);
   const timestamp = message.timestamp ? new Date(Number(message.timestamp) * 1000) : new Date();
   if (Number.isNaN(timestamp.getTime())) return false;
-  const mediaMessage = message[message.type] || {};
-  const text = message.type === "text"
-    ? String(message.text?.body || "")
-    : String(mediaMessage.caption || mediaMessage.title ||
-      (message.type === "location" && message.location
-        ? `${message.location.latitude}, ${message.location.longitude}`
-        : `${message.type || "Unsupported"} message`));
+  const messageType = typeof message.type === "string" ? message.type.slice(0, 40) : "unknown";
+  const mediaMessage = message[messageType] && typeof message[messageType] === "object" ? message[messageType] : {};
+  const rawText = messageType === "text"
+    ? (typeof message.text?.body === "string" ? message.text.body : "")
+    : (typeof mediaMessage.caption === "string" ? mediaMessage.caption
+      : typeof mediaMessage.title === "string" ? mediaMessage.title
+      : messageType === "location" && message.location
+        ? String(message.location.latitude ?? "") + ", " + String(message.location.longitude ?? "")
+        : messageType + " message");
+  // Bound untrusted webhook fields before writing Firestore documents.
+  const text = rawText.slice(0, 4096);
+  const safeContactName = typeof contactName === "string" ? contactName.slice(0, 100) : phone;
+  const mediaId = typeof mediaMessage.id === "string" ? mediaMessage.id.slice(0, 256) : null;
+  const mediaMimeType = typeof mediaMessage.mime_type === "string" ? mediaMessage.mime_type.slice(0, 128) : null;
+  const mediaFilename = typeof mediaMessage.filename === "string" ? mediaMessage.filename.slice(0, 180) : null;
+  const mediaSha256 = typeof mediaMessage.sha256 === "string" ? mediaMessage.sha256.slice(0, 128) : null;
+  const rawMediaSize = Number(mediaMessage.file_size);
+  const mediaSize = Number.isSafeInteger(rawMediaSize) && rawMediaSize > 0 ? rawMediaSize : null;
 
   return db.runTransaction(async (transaction) => {
     const existing = await transaction.get(messageRef);
@@ -90,23 +101,23 @@ async function saveTenantIncomingMessage(db, organization, message, contactName,
       organizationId: organization.id,
       phoneNumberId: String(phoneNumberId || ""),
       direction: "incoming",
-      type: String(message.type || "unknown"),
+      type: messageType,
       text,
       timestamp,
       status: "received",
       source: "whatsapp",
       sender: phone,
-      mediaId: mediaMessage.id || null,
-      mediaMimeType: mediaMessage.mime_type || null,
-      mediaSize: Number(mediaMessage.file_size) || null,
-      mediaFilename: String(mediaMessage.filename || "").slice(0, 180) || null,
-      mediaSha256: String(mediaMessage.sha256 || "").slice(0, 128) || null,
+      mediaId,
+      mediaMimeType,
+      mediaSize,
+      mediaFilename,
+      mediaSha256,
       ...replyFields
     });
     transaction.set(chatRef, {
       customerPhone: phone,
       ...(phoneNumberId ? { phoneNumberId: String(phoneNumberId) } : {}),
-      customerName: contactName || phone,
+      customerName: safeContactName || phone,
       lastMessage: text,
       lastMessageAt: timestamp,
       lastMessageDirection: "incoming",
