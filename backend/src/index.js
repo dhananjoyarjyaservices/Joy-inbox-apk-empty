@@ -699,6 +699,71 @@ async function sendTenantMessage(event) {
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
 
+async function sendTenantTemplate(event) {
+  const body = parseBody(event);
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "messages:send");
+  const to = normalizePhoneNumber(body.to);
+  if (typeof body.to !== "string" || !/^\\+?\\d{6,20}$/.test(body.to) || !to) {
+    return jsonResponse(event, 400, { error: "A valid customer phone number is required." });
+  }
+  const templateName = String(body.templateName || "").trim();
+  const language = String(body.language || "").trim();
+  const variables = body.variables === undefined ? [] : body.variables;
+  if (!/^[a-z0-9_]{1,512}$/.test(templateName) || !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(language) ||
+      !Array.isArray(variables) || variables.length > 100 ||
+      variables.some(value => typeof value !== "string" || !value.trim() || value.length > 1024)) {
+    return jsonResponse(event, 400, { error: "Template name, language or body variables are invalid." });
+  }
+  const db = getDb();
+  const credentials = await getWhatsAppCredentials(db, organization.id, body.phoneNumberId);
+  const clientMessageId = getClientMessageId(body.clientMessageId);
+  const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId: credentials.phoneNumberId || null, to, templateName, language, variables });
+  const claim = await claimTenantSendRequest(db, organization.id, to, clientMessageId, payloadHash);
+  if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
+  const template = { name: templateName, language: { code: language } };
+  if (variables.length) template.components = [{ type: "body", parameters: variables.map(text => ({ type: "text", text: text.trim() })) }];
+  let result;
+  try {
+    const version = process.env.GRAPH_API_VERSION || "v26.0";
+    const response = await fetch(`https://graph.facebook.com/${version}/${encodeURIComponent(credentials.phoneNumberId)}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to, type: "template", template })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.messages?.[0]?.id) {
+      const error = new Error(payload.error?.message || "Meta rejected this template message.");
+      error.statusCode = 502; error.definitive = true; error.retryable = false;
+      throw error;
+    }
+    result = { messageId: payload.messages[0].id };
+  } catch (error) {
+    await markTenantSendRequestFailed(claim.ref, error);
+    throw error;
+  }
+  const chatRef = getTenantChatRef(db, organization.id, to);
+  const messageRef = getTenantMessageRef(db, organization.id, to, result.messageId);
+  const timestamp = new Date();
+  const preview = `Template: ${templateName}`;
+  const batch = db.batch();
+  batch.set(messageRef, {
+    messageId: result.messageId, clientMessageId, chatId: to, organizationId: organization.id,
+    direction: "outgoing", phoneNumberId: credentials.phoneNumberId || null,
+    type: "template", text: preview, templateName, templateLanguage: language,
+    templateVariables: variables, timestamp, status: "sending", source: "template", sender: decoded.uid
+  });
+  batch.set(chatRef, {
+    customerPhone: to, ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}),
+    lastMessage: preview, lastMessageAt: timestamp, lastMessageDirection: "outgoing", updatedAt: timestamp
+  }, { merge: true });
+  batch.set(claim.ref, { status: "completed", messageId: result.messageId, updatedAt: timestamp }, { merge: true });
+  await batch.commit();
+  return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
+}
+
 async function retryTenantFailedText(event) {
   const body = parseBody(event);
   const decoded = await authenticateUser(event);
@@ -1672,6 +1737,14 @@ exports.handler = async (event) => {
   if (method === "POST" && path.endsWith("/organizations/send-quick-reply")) {
     try { return await sendTenantQuickReplyImage(event); }
     catch (error) { console.error("Quick Reply image send failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Quick Reply image could not be sent.", retryable: error.retryable ?? !error.definitive }); }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/send-template")) {
+    try { return await sendTenantTemplate(event); }
+    catch (error) {
+      console.error("Tenant template send failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Template message could not be sent.", retryable: error.retryable ?? !error.definitive });
+    }
   }
 
   if (method === "POST" && path.endsWith("/organizations/retry")) {
