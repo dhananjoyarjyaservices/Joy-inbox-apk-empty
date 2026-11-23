@@ -172,6 +172,7 @@ function createCampaignHarness(suppressionStatus = null) {
     variables: ["ORD-1"], updatedAt: new Date()
   };
   const writes = [];
+  const suppressionRef = { async get() { return { exists: Boolean(suppressionStatus), get: () => suppressionStatus }; } };
   const campaignRef = {
     id: "campaign_1",
     parent: { parent: null },
@@ -202,9 +203,7 @@ function createCampaignHarness(suppressionStatus = null) {
   const organizationRef = {
     collection(name) {
       if (name === "campaignSuppressions") {
-        return { doc() { return { async get() {
-          return { exists: Boolean(suppressionStatus), get: () => suppressionStatus };
-        } }; } };
+        return { doc() { return suppressionRef; } };
       }
       if (name === "chats") {
         return { doc(phone) {
@@ -229,6 +228,7 @@ function createCampaignHarness(suppressionStatus = null) {
     async runTransaction(callback) {
       return callback({
         async get(ref) {
+          if (ref === suppressionRef) return { exists: Boolean(suppressionStatus), get: () => suppressionStatus };
           const value = ref === campaignRef ? campaign : recipient;
           return { exists: true, data: () => value, get: key => value[key] };
         },
