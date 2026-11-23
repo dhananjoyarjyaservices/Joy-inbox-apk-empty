@@ -164,3 +164,27 @@ Owners and admins can read the latest 50 workflow runs through `GET /organizatio
 
 Before enabling the delayed runner, deploy the new composite index in `firestore.indexes.json` with `firebase deploy --only firestore:indexes`; wait until the index is ready in Firebase Console. Keyword automation steps can specify a wait in seconds before each later reply (0 to 86,400 seconds). A zero-second step is sent immediately in the inbound webhook when no earlier delayed step is pending; later steps after the first positive delay are stored in `organizations/{organizationId}/automationQueue` and delivered by `src/index.slaScheduledHandler`. Configure the EventBridge schedule above at `rate(1 minute)` for minute-level scheduling. A queued reply is skipped when its originating WhatsApp 24-hour customer-service window has expired. The scheduler processes up to 50 due steps per invocation and scans at most 200 queued records; increase capacity only after load testing. Failed queued steps are marked failed/partially_failed for operator review and are not automatically retried. A worker lease reduces concurrent duplicate processing, but external send success followed by a process crash before Firestore commit can still cause a duplicate on a later lease expiry; monitor CloudWatch and run history. This is scheduled delivery, not an exact-to-the-second timer.
 
+## Scheduled automation queue worker (deployment required)
+
+The backend now includes a separate scheduled worker at `backend/src/automationWorker.js`. It processes due Firestore documents in each organization's `automationQueue` subcollection. This worker is for delayed automation reply steps; it is not yet a general broadcast/campaign queue.
+
+Create a second AWS Lambda function using the same backend source bundle and Node.js 22 runtime:
+
+- Handler: `src/automationWorker.handler`
+- Trigger: Amazon EventBridge schedule, every 1 minute (`rate(1 minute)`)
+- Reserved concurrency: `1` for the initial conservative rollout
+- Timeout: 60 seconds
+- Memory: 512 MB to start; tune from CloudWatch metrics
+- Environment: use the same Firebase Admin and WhatsApp credential-encryption environment variables as the API Lambda
+- Network: outbound HTTPS access to Firestore and the Meta Graph API
+- Do not create a public Function URL for this worker. Invoke it only through EventBridge.
+- Grant the Lambda execution role permission to write CloudWatch logs. Firebase access is performed using the configured Firebase Admin service account.
+
+The worker processes at most 25 due jobs per invocation, claims each job transactionally, records sent messages and run progress, and retries only errors explicitly marked retryable (up to five attempts with exponential backoff). An expired in-flight lease is marked `uncertain` instead of automatically resent, because the worker may have crashed after Meta accepted the message; this avoids blindly duplicating customer messages. Inspect these runs manually.
+
+This is a conservative starter throughput limit, not a promise of a fixed Meta messages-per-second rate. Increase batch size/concurrency only after measuring Meta account limits, Lambda duration, Firestore contention, and delivery outcomes. Configure the EventBridge trigger and deploy the worker before expecting delayed automation steps to send. The worker code being committed does not mean the AWS resource is already deployed.
+
+### Current architecture boundary
+
+The running application code currently uses Node.js 22, Firebase Admin, and Firestore. It does not currently include Python/Django/FastAPI, Go services, PostgreSQL/MySQL, Redis, RabbitMQ, Apache Kafka, Kubernetes, or autoscaling container clusters. For a later high-volume campaign pipeline, evaluate Amazon SQS with a dead-letter queue and controlled Lambda consumers before adopting Kafka or Kubernetes; use a relational database only when transactional reporting/billing requirements justify it. Redis can be added for measured cache or rate-limit needs, not as a mandatory first step.
+
