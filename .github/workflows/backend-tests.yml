@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "firestore.rules"
       - ".github/workflows/backend-tests.yml"
   push:
     branches: [main, "feature/**"]
