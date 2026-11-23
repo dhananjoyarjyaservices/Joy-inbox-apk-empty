@@ -17,7 +17,7 @@ async function call(path: string, method: string, body?: unknown, organizationId
   if (!response.ok) throw new Error(result.error || "Workspace resource request failed.");
   return result;
 }
-export type TenantContact = { id: string; name: string; phone: string; email?: string; notes?: string; source?: "local" | "whatsapp" };
+export type TenantContact = { id: string; name: string; phone: string; email?: string; notes?: string; source?: "local" | "whatsapp"; tags?: string[] };
 export type TenantQuickReply = { id: string; title: string; shortcut: string; message: string; hasImage?: boolean; imageMimeType?: string };
 export async function listTenantContacts(org: string): Promise<TenantContact[]> {
   const result = await call("/organizations/contacts", "GET", undefined, org);
