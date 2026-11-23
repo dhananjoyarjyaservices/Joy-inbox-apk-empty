@@ -451,10 +451,10 @@ async function sendOrganisationMedia(db, user, orgId, body) {
   const to = normalizePhoneNumber(body.to);
   const type = String(body.type || "");
   const caption = String(body.caption || "").trim();
-  const filename = String(body.filename || "attachment").replace(/[\\\\/\\r\\n]/g, "_").slice(0, 180);
+  const filename = String(body.filename || "attachment").replace(/[\\\\/\r\n]/g, "_").slice(0, 180);
   const mimeType = String(body.mimeType || "");
   const encoded = String(body.fileBase64 || "");
-  if (!/^\\d{6,20}$/.test(to) || !["image", "video", "audio", "document"].includes(type)) {
+  if (!/^\d{6,20}$/.test(to) || !["image", "video", "audio", "document"].includes(type)) {
     fail("A valid recipient and supported media type are required.");
   }
   const allowed = {
@@ -533,6 +533,7 @@ async function handleTenantRoute(event) {
   const membersMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/members$/);
   const whatsappMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/whatsapp-connection$/);
   const orgMessagesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/messages$/);
+  const orgMediaMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/media$/);
   const orgChatActionMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/chats\/(\d{6,20})\/(assignment|notes|tags)$/);
   const quickRepliesMatch = path.match(/^\/organisations\/([A-Za-z0-9_-]{10,40})\/quick-replies(?:\/([a-z0-9_-]{2,32}))?$/);
   if (!(isCollection || inviteMatch || acceptMatch || membersMatch || whatsappMatch || orgMessagesMatch || orgMediaMatch || orgChatActionMatch || quickRepliesMatch)) return null;
@@ -579,7 +580,11 @@ async function handleTenantRoute(event) {
       const result = await updateOrganisationChat(db, user, orgChatActionMatch[1], orgChatActionMatch[2], parseBody(event), action);
       return jsonResponse(event, 200, { success: true, result });
     }
-    if (orgMediaMatch && method === "POST") {\n      const result = await sendOrganisationMedia(db, user, orgMediaMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, message: result });\n    }\n    if (orgMessagesMatch && method === "POST") {
+    if (orgMediaMatch && method === "POST") {\n      const result = await sendOrganisationMedia(db, user, orgMediaMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, message: result });\n    }\n    if (orgMediaMatch && method === "POST") {
+      const result = await sendOrganisationMedia(db, user, orgMediaMatch[1], parseBody(event));
+      return jsonResponse(event, 200, { success: true, message: result });
+    }
+    if (orgMessagesMatch && method === "POST") {
       const result = await sendOrganisationText(db, user, orgMessagesMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, message: result });
     }
