@@ -2,6 +2,8 @@
 
 const crypto = require("crypto");
 
+const OPT_IN_KEYWORDS = new Set(["start", "unstop", "subscribe"]);
+
 const OPT_OUT_KEYWORDS = new Set([
   "stop",
   "stopall",
@@ -33,6 +35,36 @@ function isWhatsAppOptOutMessage(value) {
   return /^(please)?(stop|unsubscribe|remove|optout)(sending|messages|me)?$/.test(token) ||
     /^(please)?stop(sending|messaging)(you|me)?(messages)?$/.test(token) ||
     /^(please)?(donot|dont)(send|message)(me)?$/.test(token);
+}
+
+function isWhatsAppOptInMessage(value) {
+  const text = String(value || "").normalize("NFKC").trim().toLowerCase();
+  if (!text || text.length > 40) return false;
+  return OPT_IN_KEYWORDS.has(text.replace(/[.!?,;:]+$/g, "").replace(/[\\s_-]+/g, ""));
+}
+
+async function recordCampaignOptIn(db, organizationId, phone, inboundMessageId) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(organizationId || ""))) {
+    throw new Error("A valid organization ID is required.");
+  }
+  const normalized = normalizePhone(phone);
+  const id = suppressionDocumentId(normalized);
+  const ref = db.collection("organizations").doc(organizationId)
+    .collection("campaignSuppressions").doc(id);
+  const now = new Date();
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const record = {
+      status: "active",
+      source: "whatsapp_inbound_explicit_opt_in",
+      optedInAt: now,
+      lastInboundMessageId: String(inboundMessageId || "").slice(0, 256),
+      updatedAt: now
+    };
+    if (snapshot.exists) transaction.set(ref, record, { merge: true });
+    else transaction.create(ref, { ...record, createdAt: now });
+  });
+  return { id, phone: normalized, status: "active" };
 }
 
 async function recordCampaignOptOut(db, organizationId, phone, inboundMessageId) {
