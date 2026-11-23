@@ -1,6 +1,6 @@
-# WhatsApp Campaign Draft API
+# WhatsApp Campaign API and Delivery Worker
 
-The campaign draft API is an organization-scoped foundation. It does not send messages yet.
+The campaign API is organization-scoped. It creates drafts; sending starts only after an owner/admin explicitly calls the start action. A separate scheduled Lambda worker sends approved template messages in bounded batches.
 
 ## Permissions
 
@@ -27,7 +27,7 @@ Optional campaign-level `variables` provide default BODY text variables. Each re
 
 The API removes duplicate phone numbers and skips recipients without valid consent evidence. It verifies that the selected number belongs to the organization and asks Meta to confirm the template is approved for the selected language and category. The first version supports BODY text variables only; media headers and dynamic URL buttons are rejected.
 
-New campaigns are saved as `draft`. Recipients are persisted under the campaign in batches of 400. The current endpoint does not enqueue, schedule, pause, or send a campaign.
+New campaigns are saved as `draft`. Recipients are persisted under the campaign in batches of 400; the campaign is not published as a draft until every recipient batch is stored successfully. Partial preparation failures are marked `failed`.
 
 ## List drafts
 
