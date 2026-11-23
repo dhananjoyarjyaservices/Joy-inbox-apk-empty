@@ -775,7 +775,10 @@ async function handleOrganizationNotifications(event) {
   for (const doc of slaSnapshot.docs) {
     const chat = doc.data() || {};
     if (chat.assignedTo !== decoded.uid || !chat.slaOverdueLastDeliveredAt) continue;
-    const id = `sla_${doc.id}_${timestampMillis(chat.slaOverdueLastDeliveredAt)}`;
+    const deliveredMillis = chat.slaOverdueLastDeliveredAt?.toMillis
+      ? chat.slaOverdueLastDeliveredAt.toMillis()
+      : new Date(chat.slaOverdueLastDeliveredAt).getTime();
+    const id = `sla_${doc.id}_${deliveredMillis}`;
     const createdAt = chat.slaOverdueLastDeliveredAt?.toDate
       ? chat.slaOverdueLastDeliveredAt.toDate().toISOString()
       : new Date(chat.slaOverdueLastDeliveredAt).toISOString();
