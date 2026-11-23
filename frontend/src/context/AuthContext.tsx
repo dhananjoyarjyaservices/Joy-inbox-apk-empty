@@ -10,7 +10,6 @@ import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase/config";
 
-const OWNER_UID = "Vy49nGnw74gR5SFHmjN0DOQ2QFE3";
 
 interface AuthContextType {
   user: User | null;
