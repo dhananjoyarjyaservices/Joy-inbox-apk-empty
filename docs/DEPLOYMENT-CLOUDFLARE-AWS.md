@@ -125,3 +125,8 @@ Each member can view and revoke up to 50 recently active browser/device registra
 ### Notification delivery monitoring
 
 Push delivery attempts for tenant incoming-message and SLA alerts are recorded per member at `organizations/{organizationId}/members/{uid}/notificationDeliveries`. The authenticated `GET /organizations/notifications/deliveries?organizationId=...` endpoint returns at most the latest 100 records for the requesting member, including delivered/failed status, attempt count, timestamp, notification type, and provider error code. FCM registration tokens are never included. Transient retries are reflected in the final per-device status; log-write failures are warned in CloudWatch and do not change FCM delivery outcomes.
+
+
+### Delivery log filters and CSV export
+
+The Notification Center delivery monitor supports client-side filtering by final status (delivered/failed), notification type (incoming message/SLA), text or error-code search, and inclusive local date range. Export CSV downloads only the currently filtered rows from the latest 100 entries returned by the API. The export is generated in the browser and is not uploaded to another service.
