@@ -45,6 +45,13 @@ export async function sendTenantText(organizationId: string, to: string, text: s
   });
 }
 
+export async function sendTenantTemplate(organizationId: string, to: string, phoneNumberId: string, wabaId: string, templateName: string, language: string, variables: string[]) {
+  return request("/organizations/send-template", "POST", {
+    organizationId, to, chatId: to, phoneNumberId, wabaId, templateName, language, variables,
+    clientMessageId: crypto.randomUUID()
+  });
+}
+
 export async function retryTenantFailedText(organizationId: string, chatId: string, originalMessageId: string) {
   return request("/organizations/retry", "POST", {
     organizationId, chatId, originalMessageId, clientMessageId: crypto.randomUUID()
