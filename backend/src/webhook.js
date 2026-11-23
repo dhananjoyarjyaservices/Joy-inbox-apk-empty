@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 
 const { getDb } = require("./firebase");
 const { verifyMetaSignature, getRawBody } = require("./security");
@@ -21,7 +22,13 @@ function verifyWebhook(event) {
   if (!expectedToken) {
     return { statusCode: 500, body: "Webhook verification token is not configured." };
   }
-  if (mode === "subscribe" && token === expectedToken && typeof challenge === "string" && challenge.length > 0) {
+  const received = typeof token === "string" ? Buffer.from(token, "utf8") : Buffer.alloc(0);
+  const expected = Buffer.from(expectedToken, "utf8");
+  const tokenMatches = received.length === expected.length &&
+    received.length > 0 &&
+    crypto.timingSafeEqual(received, expected);
+  if (mode === "subscribe" && tokenMatches &&
+      typeof challenge === "string" && challenge.length > 0 && challenge.length <= 4096) {
     return { statusCode: 200, body: challenge };
   }
   return { statusCode: 403, body: "Webhook verification failed." };
