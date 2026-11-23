@@ -406,6 +406,34 @@ async function saveTenantQuickReplyImage(event) {
   return jsonResponse(event, 200, { success: true, hasImage: true, imageMimeType: saved.mimeType });
 }
 
+async function recordTenantFirstResponse(db, organizationId, chatId, agentUid, agentEmail, respondedAt = new Date()) {
+  if (!agentUid || !chatId) return false;
+  const chatRef = getTenantChatRef(db, organizationId, chatId);
+  return db.runTransaction(async (transaction) => {
+    const chatSnapshot = await transaction.get(chatRef);
+    if (!chatSnapshot.exists) return false;
+    const chat = chatSnapshot.data() || {};
+    const pendingSince = chat.responsePendingSince?.toDate
+      ? chat.responsePendingSince.toDate()
+      : new Date(chat.responsePendingSince || 0);
+    if (!Number.isFinite(pendingSince.getTime()) || pendingSince.getTime() <= 0 ||
+        respondedAt.getTime() < pendingSince.getTime()) return false;
+    const responseMs = respondedAt.getTime() - pendingSince.getTime();
+    const metricRef = db.collection("organizations").doc(organizationId)
+      .collection("agentResponseMetrics").doc();
+    transaction.set(metricRef, {
+      organizationId, chatId, agentUid, agentEmail: String(agentEmail || "").slice(0, 254),
+      responseMs, inboundAt: pendingSince, respondedAt, createdAt: respondedAt
+    });
+    transaction.set(chatRef, {
+      responsePendingSince: null,
+      lastAgentResponseAt: respondedAt,
+      updatedAt: respondedAt
+    }, { merge: true });
+    return true;
+  });
+}
+
 async function handleTenantAgentPerformance(event) {
   const decoded = await authenticateUser(event);
   const params = event.queryStringParameters || {};
@@ -771,6 +799,7 @@ async function sendTenantMessage(event) {
     updatedAt: timestamp
   }, { merge: true });
   await batch.commit();
+  await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
 
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
