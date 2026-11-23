@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+
+process.env.CAMPAIGN_SUPPRESSION_HASH_KEY ||= Buffer.alloc(32, 1).toString("base64");
 const {
   suppressionDocumentId,
   isWhatsAppOptInMessage,
