@@ -47,7 +47,7 @@ test("lists only the bounded latest tenant internal notes", async () => {
   const result = await listTenantInternalNotes(db, "org_1", "chat_1", 1000);
   assert.equal(orderedBy, "createdAt:desc");
   assert.equal(requestedLimit, 100);
-  assert.deepEqual(result, [{ id: "note_1", text: "Private", visibility: "internal" }]);
+  assert.deepEqual(result, [{ id: "note_1", text: "Private", visibility: "internal", createdAt: null }]);
 });
 
 test("creates a private note with authenticated author metadata", async () => {
