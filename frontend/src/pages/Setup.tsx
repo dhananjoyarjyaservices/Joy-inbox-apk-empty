@@ -9,6 +9,8 @@ import {
   createOrganisation,
   listMembers,
   listOrganisations,
+  updateOrganisationMemberRole,
+  removeOrganisationMember,
   type Organisation,
   type OrganisationMember,
   getOrganisationWhatsAppConnection,
@@ -101,6 +103,32 @@ export default function Setup() {
       setNotice("Meta credentials verified and encrypted for this organisation. Webhook routing and live inbox activation are still pending.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "WhatsApp connection failed.");
+    } finally { setBusy(false); }
+  }
+
+
+  async function handleMemberRoleChange(member: OrganisationMember, role: "admin" | "manager" | "agent") {
+    if (!selected || member.uid === user?.uid || member.role === "owner") return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await updateOrganisationMemberRole(selected.id, member.uid, role);
+      setMembers((rows) => rows.map((row) => row.uid === member.uid ? { ...row, role } : row));
+      setNotice("Team member role update ho gaya.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Role update nahi hua.");
+    } finally { setBusy(false); }
+  }
+
+  async function handleRemoveMember(member: OrganisationMember) {
+    if (!selected || member.uid === user?.uid || member.role === "owner") return;
+    if (!window.confirm("Remove " + (member.email || member.uid) + " from this organisation?")) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await removeOrganisationMember(selected.id, member.uid);
+      setMembers((rows) => rows.filter((row) => row.uid !== member.uid));
+      setNotice("Team member access revoke kar diya gaya.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Member remove nahi hua.");
     } finally { setBusy(false); }
   }
 
@@ -283,7 +311,7 @@ export default function Setup() {
             )}
             {createdInvite && <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-700"><p className="font-semibold">Share these IDs securely with the invited email owner:</p><p className="mt-2 break-all">Organisation: {selected.id}</p><p className="mt-1 break-all">Invitation: {createdInvite}</p><button onClick={() => navigator.clipboard?.writeText(`Organisation ID: ${selected.id}
 Invitation ID: ${createdInvite}`)} className="mt-2 inline-flex items-center gap-2 font-semibold text-[#075e54]"><Copy size={13} /> Copy IDs</button><p className="mt-2 text-amber-700">Email delivery is not configured yet; send these IDs through a trusted channel only to the invited email address.</p></div>}
-            <div className="mt-5"><h3 className="mb-2 text-sm font-semibold text-gray-800">Team members</h3>{members.length ? <div className="divide-y divide-gray-100">{members.map((member) => <div key={member.uid} className="flex items-center justify-between py-2 text-sm"><span className="text-gray-700">{member.email || member.uid}</span><span className="rounded-full bg-gray-100 px-2 py-1 text-xs capitalize text-gray-600">{member.role}</span></div>)}</div> : <p className="text-xs text-gray-500">Member list unavailable for your role or no members found.</p>}</div>
+            <div className="mt-5"><h3 className="mb-2 text-sm font-semibold text-gray-800">Team members</h3>{members.length ? <div className="divide-y divide-gray-100">{members.map((member) => <div key={member.uid} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><span className="block truncate text-gray-700">{member.email || member.uid}</span><span className="text-xs text-gray-400">{member.uid}</span></div><div className="flex items-center gap-2"><span className="rounded-full bg-gray-100 px-2 py-1 text-xs capitalize text-gray-600">{member.role}</span>{selected && ["owner", "admin"].includes(selected.role) && member.role !== "owner" && member.uid !== user?.uid && <><select aria-label={"Role for " + (member.email || member.uid)} value={member.role} disabled={busy || (selected.role === "admin" && member.role === "admin")} onChange={(event) => handleMemberRoleChange(member, event.target.value as "admin" | "manager" | "agent")} className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs"><option value="agent">Agent</option><option value="manager">Manager</option>{selected.role === "owner" && <option value="admin">Admin</option>}</select><button type="button" disabled={busy} onClick={() => handleRemoveMember(member)} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-600 disabled:opacity-50">Remove</button></>}</div></div>)}</div> : <p className="text-xs text-gray-500">Member list unavailable for your role or no members found.</p>}</div>
           </section>
         )}
 
