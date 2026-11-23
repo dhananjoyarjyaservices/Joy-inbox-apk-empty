@@ -53,6 +53,7 @@ async function stripeRequest(path, options = {}) {
   const method = options.method || "GET";
   const headers = { Authorization: `Bearer ${secret}` };
   const requestOptions = { method, headers };
+  if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
   if (options.params) {
     headers["Content-Type"] = "application/x-www-form-urlencoded";
     requestOptions.body = new URLSearchParams(options.params).toString();
@@ -91,7 +92,11 @@ async function createCheckoutSession({ organization, decoded, planKey, env = pro
   };
   if (customerId) params.customer = customerId;
   else if (decoded.email) params.customer_email = String(decoded.email).slice(0, 254);
-  const session = await stripeRequest("/checkout/sessions", { method: "POST", params });
+  const session = await stripeRequest("/checkout/sessions", {
+    method: "POST",
+    params,
+    idempotencyKey: `joy-inbox-${organization.id}-${plan.key}-${Math.floor(Date.now() / 300000)}`
+  });
   if (!session.id || !validReturnUrl(session.url)) throw billingError("Stripe did not return a valid checkout URL.", 502);
   await subscriptionRef.set({
     checkoutSessionId: session.id,
@@ -144,8 +149,11 @@ async function claimStripeEvent(db, eventId, now = new Date()) {
     if (snapshot.exists) {
       const data = snapshot.data() || {};
       if (data.status === "processed") return { claimed: false, ref };
-      if (data.status === "processing" && data.leaseUntil?.toDate &&
-          data.leaseUntil.toDate().getTime() > now.getTime()) return { claimed: false, ref };
+      if (data.status === "processing") {
+        const leaseMillis = data.leaseUntil?.toDate ? data.leaseUntil.toDate().getTime() : new Date(data.leaseUntil || 0).getTime();
+        if (Number.isFinite(leaseMillis) && leaseMillis > now.getTime()) return { claimed: false, ref, reason: "processing" };
+      }
+      if (data.status === "processed") return { claimed: false, ref, reason: "processed" };
     }
     transaction.set(ref, {
       status: "processing",
@@ -163,7 +171,7 @@ async function processStripeWebhookEvent(db, event, dependencies = {}) {
   }
   const now = dependencies.now ? dependencies.now() : new Date();
   const claim = await claimStripeEvent(db, event.id, now);
-  if (!claim.claimed) return { duplicate: true, eventId: event.id };
+  if (!claim.claimed) return { duplicate: claim.reason === "processed", inProgress: claim.reason === "processing", eventId: event.id };
   try {
     const object = event.data.object;
     let subscription = null;
@@ -174,7 +182,7 @@ async function processStripeWebhookEvent(db, event, dependencies = {}) {
         subscription = await (dependencies.getSubscription || (id => stripeRequest(`/subscriptions/${encodeURIComponent(id)}`)))(subscriptionId);
         await writeOrganizationSubscription(db, organizationId, subscription);
       }
-    } else if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+    } else if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
       const organizationId = String(object.metadata?.organizationId || "");
       if (organizationId) await writeOrganizationSubscription(db, organizationId, object);
     } else if (event.type === "invoice.payment_failed") {
