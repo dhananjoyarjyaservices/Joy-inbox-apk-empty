@@ -386,6 +386,13 @@ async function processWebhookPayload(payload) {
         const created = await saveTenantIncomingMessage(db, organization, message, name, String(phoneNumberId));
         if (created) {
           const phone = normalizePhoneNumber(message.from);
+          const inboundText = message.type === "text" ? String(message.text?.body || "") : "";
+          if (isWhatsAppOptOutMessage(inboundText)) {
+            await recordCampaignOptOut(db, organization.id, phone, String(message.id || ""));
+            // A STOP-style reply is a compliance instruction, not a keyword
+            // automation or greeting trigger.
+            continue;
+          }
           await maybeSendTenantGreeting(db, organization, credentials, phone, message);
           try {
             await maybeRunTenantKeywordAutomation(db, organization, credentials, phone, message);
