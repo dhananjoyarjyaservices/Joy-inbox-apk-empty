@@ -341,29 +341,34 @@ async function updateOrganisationChat(db, user, orgId, chatId, body, action) {
   if (!chatSnapshot.exists) fail("Conversation was not found.", 404);
 
   if (action === "assignment") {
-    const assignedToUid = body.assignedToUid === null ? "" : String(body.assignedToUid || "");
-    if (membership.role === "agent" && assignedToUid !== user.uid) {
-      fail("Agents can only assign conversations to themselves.", 403);
+    const updates = { updatedAt: new Date() };
+    if (Object.prototype.hasOwnProperty.call(body, "assignedToUid")) {
+      const assignedToUid = body.assignedToUid === null ? "" : String(body.assignedToUid || "");
+      if (membership.role === "agent" && assignedToUid !== user.uid) {
+        fail("Agents can only assign conversations to themselves.", 403);
+      }
+      let assignedToEmail = "";
+      if (assignedToUid) {
+        const target = await getMembership(db, orgId, assignedToUid);
+        if (!target) fail("The selected team member is not active in this organisation.", 404);
+        assignedToEmail = target.email || "";
+      }
+      updates.assignedToUid = assignedToUid || null;
+      updates.assignedToEmail = assignedToEmail || null;
+      updates.assignedAt = new Date();
+      updates.assignedBy = user.uid;
     }
-    let assignedToEmail = "";
-    if (assignedToUid) {
-      const target = await getMembership(db, orgId, assignedToUid);
-      if (!target) fail("The selected team member is not active in this organisation.", 404);
-      assignedToEmail = target.email || "";
-    }
-    const updates = {
-      assignedToUid: assignedToUid || null,
-      assignedToEmail: assignedToEmail || null,
-      assignedAt: new Date(),
-      assignedBy: user.uid,
-      updatedAt: new Date()
-    };
     if (body.status !== undefined) {
       if (!["open", "pending", "resolved"].includes(body.status)) fail("Status must be open, pending or resolved.");
       updates.status = body.status;
     }
+    if (Object.keys(updates).length === 1) fail("No conversation assignment or status changes were provided.");
     await chatRef.set(updates, { merge: true });
-    return { assignedToUid: assignedToUid || null, assignedToEmail: assignedToEmail || null, status: updates.status || chatSnapshot.data().status || "open" };
+    return {
+      assignedToUid: updates.assignedToUid ?? chatSnapshot.data().assignedToUid ?? null,
+      assignedToEmail: updates.assignedToEmail ?? chatSnapshot.data().assignedToEmail ?? null,
+      status: updates.status || chatSnapshot.data().status || "open"
+    };
   }
 
   if (action === "note") {
