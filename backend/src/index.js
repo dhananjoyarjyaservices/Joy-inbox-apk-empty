@@ -113,7 +113,7 @@ async function authenticateUser(event) {
     throw error;
   }
   try {
-    return await getFirebaseAdmin().auth().verifyIdToken(idToken);
+    return await getFirebaseAdmin().auth().verifyIdToken(idToken, true);
   } catch {
     const error = new Error("Firebase ID token is invalid or expired.");
     error.statusCode = 401;
@@ -514,7 +514,7 @@ async function authenticateOwner(event) {
   const admin = getFirebaseAdmin();
   let decoded;
   try {
-    decoded = await admin.auth().verifyIdToken(idToken);
+    decoded = await admin.auth().verifyIdToken(idToken, true);
   } catch (error) {
     const authenticationError = new Error("Firebase ID token is invalid or expired.");
     authenticationError.statusCode = 401;
