@@ -24,6 +24,7 @@ jobs:
           node --check backend/src/index.js
           node --check backend/src/tenants.js
           node --check backend/src/webhook.js
+          node --check backend/scripts/cleanup-inbound-media.js
 
   frontend:
     runs-on: ubuntu-latest
