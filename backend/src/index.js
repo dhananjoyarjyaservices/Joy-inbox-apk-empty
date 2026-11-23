@@ -729,6 +729,66 @@ async function registerTenantFcmToken(event) {
   return jsonResponse(event, 200, { success: true });
 }
 
+async function handleOrganizationNotifications(event) {
+  const decoded = await authenticateUser(event);
+  const method = getMethod(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "chats:read");
+  const db = getDb();
+  const readRef = organization.ref.collection("members").doc(decoded.uid).collection("notificationReads");
+  if (method === "POST") {
+    if (typeof body.notificationId !== "string" || !/^[A-Za-z0-9_-]{1,180}$/.test(body.notificationId)) {
+      return jsonResponse(event, 400, { error: "A valid notification ID is required." });
+    }
+    await readRef.doc(body.notificationId).set({ readAt: new Date() }, { merge: true });
+    return jsonResponse(event, 200, { success: true });
+  }
+  const [auditSnapshot, slaSnapshot, readSnapshot] = await Promise.all([
+    organization.ref.collection("auditLogs").orderBy("createdAt", "desc").limit(100).get(),
+    organization.ref.collection("chats").orderBy("slaOverdueLastDeliveredAt", "desc").limit(50).get(),
+    readRef.get()
+  ]);
+  const readIds = new Set(readSnapshot.docs.map(doc => doc.id));
+  const notifications = [];
+  for (const doc of auditSnapshot.docs) {
+    const item = doc.data() || {};
+    const assignedTo = String(item.details?.assignedTo || item.targetUid || "");
+    const relevant = item.action === "chat.assigned" ? assignedTo === decoded.uid
+      : item.action === "chat.status_changed" && String(item.actorUid || "") !== decoded.uid;
+    if (!relevant) continue;
+    const createdAt = item.createdAt?.toDate ? item.createdAt.toDate().toISOString() : new Date(item.createdAt || 0).toISOString();
+    const chatId = String(item.details?.chatId || "");
+    const id = `audit_${doc.id}`;
+    notifications.push({
+      id, type: item.action === "chat.assigned" ? "assignment" : "status",
+      title: item.action === "chat.assigned" ? "Conversation assigned to you" : "Conversation status updated",
+      body: item.action === "chat.assigned" ? `Chat ${chatId} was assigned to you` : `Chat ${chatId} status changed to ${String(item.details?.status || "updated")}`,
+      chatId, createdAt, read: readIds.has(id)
+    });
+  }
+  for (const doc of slaSnapshot.docs) {
+    const chat = doc.data() || {};
+    if (chat.assignedTo !== decoded.uid || !chat.slaOverdueLastDeliveredAt) continue;
+    const id = `sla_${doc.id}_${timestampMillis(chat.slaOverdueLastDeliveredAt)}`;
+    const createdAt = chat.slaOverdueLastDeliveredAt?.toDate
+      ? chat.slaOverdueLastDeliveredAt.toDate().toISOString()
+      : new Date(chat.slaOverdueLastDeliveredAt).toISOString();
+    notifications.push({
+      id, type: "sla", title: "SLA response overdue",
+      body: `A customer conversation needs your reply: ${String(chat.customerName || chat.customerPhone || doc.id)}`,
+      chatId: doc.id, createdAt, read: readIds.has(id)
+    });
+  }
+  notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return jsonResponse(event, 200, { notifications: notifications.slice(0, 100) });
+}
+
 async function handleOrganizationSlaSettings(event) {
   const decoded = await authenticateUser(event);
   let body = {};
@@ -2238,6 +2298,11 @@ exports.handler = async (event) => {
     } finally {
       logLatency("lambda_send_ms", startedAt);
     }
+  }
+
+  if (["GET", "POST"].includes(method) && path.endsWith("/organizations/notifications")) {
+    try { return await handleOrganizationNotifications(event); }
+    catch (error) { return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Notifications could not be loaded." }); }
   }
 
   if (["GET", "PUT"].includes(method) && path.endsWith("/organizations/sla/settings")) {
