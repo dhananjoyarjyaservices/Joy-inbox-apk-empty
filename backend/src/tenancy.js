@@ -25,23 +25,118 @@ function requirePermission(organization, permission) {
   if (!organization || !ROLE_PERMISSIONS[organization.role]?.has(permission)) throw httpError("Insufficient organization permissions.", 403);
 }
 
-function encryptSecret(plaintext, keyValue = process.env.TENANT_SECRET_ENCRYPTION_KEY) {
-  if (!keyValue) throw new Error("TENANT_SECRET_ENCRYPTION_KEY is not configured.");
-  const key = Buffer.from(keyValue, "base64");
-  if (key.length !== 32) throw new Error("TENANT_SECRET_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
+function decodeEncryptionKey(value, label = "encryption key") {
+  if (typeof value !== "string" || !value) throw new Error(`Tenant secret ${label} is not configured.`);
+  const key = Buffer.from(value, "base64");
+  if (key.length !== 32 || key.toString("base64") !== value) {
+    throw new Error(`Tenant secret ${label} must be a base64-encoded 32-byte key.`);
+  }
+  return key;
+}
+
+function parseEncryptionKeyring(value = process.env.TENANT_SECRET_ENCRYPTION_KEYRING) {
+  if (!value) return null;
+  let config;
+  try { config = JSON.parse(value); }
+  catch { throw new Error("TENANT_SECRET_ENCRYPTION_KEYRING must be valid JSON."); }
+  if (!config || typeof config !== "object" || Array.isArray(config) ||
+      typeof config.activeKeyId !== "string" ||
+      !/^[A-Za-z0-9_-]{1,64}$/.test(config.activeKeyId) ||
+      !config.keys || typeof config.keys !== "object" || Array.isArray(config.keys)) {
+    throw new Error("Tenant secret keyring configuration is invalid.");
+  }
+  const keys = {};
+  for (const [keyId, encoded] of Object.entries(config.keys)) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(keyId)) throw new Error("Tenant secret keyring contains an invalid key ID.");
+    keys[keyId] = decodeEncryptionKey(encoded, `key ${keyId}`);
+  }
+  if (!keys[config.activeKeyId]) throw new Error("Tenant secret keyring activeKeyId is not present in keys.");
+  return { activeKeyId: config.activeKeyId, keys };
+}
+
+function encryptWithKey(plaintext, key, keyId) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const ciphertext = Buffer.concat([cipher.update(String(plaintext), "utf8"), cipher.final()]);
-  return { version: 1, algorithm: "aes-256-gcm", iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), ciphertext: ciphertext.toString("base64") };
+  return {
+    version: 2,
+    algorithm: "aes-256-gcm",
+    keyId,
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    ciphertext: ciphertext.toString("base64")
+  };
 }
 
-function decryptSecret(record, keyValue = process.env.TENANT_SECRET_ENCRYPTION_KEY) {
-  if (!keyValue) throw new Error("TENANT_SECRET_ENCRYPTION_KEY is not configured.");
-  const key = Buffer.from(keyValue, "base64");
-  if (key.length !== 32 || record?.algorithm !== "aes-256-gcm" || record.version !== 1) throw new Error("Tenant secret format or encryption key is invalid.");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(record.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(record.tag, "base64"));
-  return Buffer.concat([decipher.update(Buffer.from(record.ciphertext, "base64")), decipher.final()]).toString("utf8");
+function encryptSecret(plaintext, keyValue) {
+  if (arguments.length > 1) {
+    return encryptWithKey(plaintext, decodeEncryptionKey(keyValue), "default");
+  }
+  const keyring = parseEncryptionKeyring();
+  if (keyring) return encryptWithKey(plaintext, keyring.keys[keyring.activeKeyId], keyring.activeKeyId);
+  return encryptWithKey(plaintext, decodeEncryptionKey(process.env.TENANT_SECRET_ENCRYPTION_KEY), "default");
+}
+
+function decryptWithKey(record, key) {
+  if (!record || record.algorithm !== "aes-256-gcm" ||
+      typeof record.iv !== "string" || typeof record.tag !== "string" ||
+      typeof record.ciphertext !== "string") {
+    throw new Error("Tenant secret format or encryption key is invalid.");
+  }
+  const iv = Buffer.from(record.iv, "base64");
+  const tag = Buffer.from(record.tag, "base64");
+  const ciphertext = Buffer.from(record.ciphertext, "base64");
+  if (iv.length !== 12 || tag.length !== 16 ||
+      iv.toString("base64") !== record.iv || tag.toString("base64") !== record.tag ||
+      ciphertext.toString("base64") !== record.ciphertext) {
+    throw new Error("Tenant secret format or encryption key is invalid.");
+  }
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+}
+
+function decryptSecret(record, keyValue) {
+  if (!record || ![1, 2].includes(record.version)) {
+    throw new Error("Tenant secret format or encryption key is invalid.");
+  }
+  if (record.version === 1) {
+    const legacyValue = arguments.length > 1 ? keyValue : process.env.TENANT_SECRET_ENCRYPTION_KEY;
+    return decryptWithKey(record, decodeEncryptionKey(legacyValue));
+  }
+  if (arguments.length > 1) {
+    return decryptWithKey(record, decodeEncryptionKey(keyValue));
+  }
+  const keyring = parseEncryptionKeyring();
+  if (keyring) {
+    const key = keyring.keys[record.keyId];
+    if (!key) throw new Error(`Tenant secret encryption key "${String(record.keyId || "unknown")}" is unavailable.`);
+    return decryptWithKey(record, key);
+  }
+  if (record.keyId !== "default") {
+    throw new Error(`Tenant secret encryption key "${String(record.keyId)}" is unavailable.`);
+  }
+  return decryptWithKey(record, decodeEncryptionKey(process.env.TENANT_SECRET_ENCRYPTION_KEY));
+}
+
+function rotateEncryptedSecret(record, options = {}) {
+  const plaintext = options.sourceKeyValue === undefined
+    ? decryptSecret(record)
+    : decryptSecret(record, options.sourceKeyValue);
+  if (typeof options.targetKeyring === "string") {
+    const target = parseEncryptionKeyring(options.targetKeyring);
+    return encryptWithKey(plaintext, target.keys[target.activeKeyId], target.activeKeyId);
+  }
+  if (options.targetKeyring && typeof options.targetKeyring === "object") {
+    const { activeKeyId, keys } = options.targetKeyring;
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(activeKeyId || "") || !keys || !keys[activeKeyId]) {
+      throw new Error("Target tenant secret keyring is invalid.");
+    }
+    const key = Buffer.isBuffer(keys[activeKeyId]) ? keys[activeKeyId] : decodeEncryptionKey(keys[activeKeyId], `key ${activeKeyId}`);
+    if (key.length !== 32) throw new Error("Target tenant secret key must contain 32 bytes.");
+    return encryptWithKey(plaintext, key, activeKeyId);
+  }
+  throw new Error("A target tenant secret keyring is required for rotation.");
 }
 
 async function resolvePhoneNumberOrganization(db, phoneNumberId) {
@@ -173,4 +268,4 @@ async function listWhatsAppConnections(db, organizationId) {
   return items;
 }
 
-module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections };
+module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, parseEncryptionKeyring, rotateEncryptedSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections };
