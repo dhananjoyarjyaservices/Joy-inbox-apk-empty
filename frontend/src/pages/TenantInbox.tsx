@@ -159,7 +159,13 @@ export default function TenantInbox() {
     setMessageCursor(null); setHasOlderMessages(false); setMessageSearch(""); setMessageDateFrom(""); setMessageDateTo("");
     if (!organization || !selected) { setMessages([]); return; }
     return listenToTenantMessages(organization.id, selected, (items, cursor, hasOlder) => {
-      setMessages(items as TenantMessage[]); setMessageCursor(cursor); setHasOlderMessages(hasOlder);
+      setMessages(current => {
+        const recentIds = new Set(items.map(item => item.id));
+        const newestLoaded = asDate(items[0]?.timestamp as TenantMessage["timestamp"]);
+        const olderLoaded = current.filter(item => !recentIds.has(item.id) && Boolean(newestLoaded && asDate(item.timestamp) && asDate(item.timestamp)! < newestLoaded));
+        return [...olderLoaded, ...(items as TenantMessage[])];
+      });
+      setMessageCursor(current => current || cursor); setHasOlderMessages(current => current || hasOlder);
     }, (e) => setError(e.message));
   }, [organization, selected]);
 
