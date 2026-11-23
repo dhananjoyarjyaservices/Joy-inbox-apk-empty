@@ -18,6 +18,12 @@ test("late failure cannot overwrite delivered or read status", () => {
   assert.equal(shouldApplyMessageStatus("read", "failed"), false);
 });
 
+test("a failed WhatsApp delivery status is terminal and cannot return to sent", () => {
+  assert.equal(shouldApplyMessageStatus("failed", "sent"), false);
+  assert.equal(shouldApplyMessageStatus("failed", "delivered"), false);
+  assert.equal(shouldApplyMessageStatus("failed", "read"), false);
+});
+
 test("WhatsApp message status cannot move backwards", () => {
   assert.equal(shouldApplyMessageStatus("read", "delivered"), false);
   assert.equal(shouldApplyMessageStatus("delivered", "sent"), false);
