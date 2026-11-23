@@ -31,7 +31,8 @@ type ChatRow = {
   unreadCount?: number;
   status?: "open" | "pending" | "resolved";
   tags?: string[];
-  assignedToEmail?: string | null;\n  assignedToUid?: string | null;
+  assignedToEmail?: string | null;
+  assignedToUid?: string | null;
 };
 
 type MessageRow = {
