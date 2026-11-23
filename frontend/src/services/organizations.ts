@@ -207,3 +207,43 @@ export async function listOrganizationAutomationRuns(organizationId: string): Pr
   const result = await request(`/organizations/automation-runs?organizationId=${encodeURIComponent(organizationId)}`);
   return Array.isArray(result.runs) ? result.runs : [];
 }
+
+
+export interface OrganizationCampaign {
+  id: string;
+  name: string;
+  templateName: string;
+  language: string;
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION" | string;
+  phoneNumberId: string;
+  status: "draft" | "scheduled" | "queued" | "sending" | "paused" | "completed" | "failed" | "cancelled" | string;
+  recipientCount: number;
+  skippedRecipients: number;
+  createdAt: string | null;
+}
+export interface OrganizationCampaignRecipient {
+  phone: string;
+  optedIn: true;
+  consentAt: string;
+  consentSource: string;
+  variables?: string[];
+}
+export interface CreateOrganizationCampaignInput {
+  name: string;
+  templateName: string;
+  language: string;
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+  phoneNumberId: string;
+  wabaId: string;
+  variables?: string[];
+  recipients: OrganizationCampaignRecipient[];
+}
+export async function listOrganizationCampaigns(organizationId: string): Promise<OrganizationCampaign[]> {
+  const result = await request(`/organizations/campaigns?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.campaigns) ? result.campaigns : [];
+}
+export async function createOrganizationCampaign(organizationId: string, campaign: CreateOrganizationCampaignInput): Promise<OrganizationCampaign> {
+  const result = await request("/organizations/campaigns", "POST", { organizationId, ...campaign });
+  if (!result.campaign?.id) throw new Error("Campaign draft could not be created.");
+  return result.campaign;
+}
