@@ -406,6 +406,53 @@ async function saveTenantQuickReplyImage(event) {
   return jsonResponse(event, 200, { success: true, hasImage: true, imageMimeType: saved.mimeType });
 }
 
+async function handleTenantAgentPerformance(event) {
+  const decoded = await authenticateUser(event);
+  const params = event.queryStringParameters || {};
+  const organization = await requireOrganization(getDb(), decoded, params.organizationId);
+  requirePermission(organization, "chats:read");
+  const rawDays = Number(params.days || 30);
+  const days = [7, 30, 90].includes(rawDays) ? rawDays : 30;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const snapshot = await organization.ref.collection("auditLogs")
+    .where("action", "in", ["chat.assigned", "chat.status_changed"])
+    .get();
+  const stats = new Map();
+  const getStats = (uid, email = "") => {
+    if (!uid) return null;
+    if (!stats.has(uid)) stats.set(uid, {
+      uid, email: String(email || ""), assignedCount: 0, resolvedCount: 0,
+      lastActivityAt: null
+    });
+    const item = stats.get(uid);
+    if (email && !item.email) item.email = String(email);
+    return item;
+  };
+  for (const doc of snapshot.docs) {
+    const item = doc.data() || {};
+    const createdAt = item.createdAt?.toDate ? item.createdAt.toDate() : new Date(item.createdAt || 0);
+    if (Number.isNaN(createdAt.getTime()) || createdAt < since) continue;
+    if (item.action === "chat.assigned") {
+      const targetUid = String(item.details?.assignedTo || item.targetUid || "");
+      const target = getStats(targetUid, item.targetEmail);
+      if (target) target.assignedCount += 1;
+      const actor = getStats(String(item.actorUid || ""), item.actorEmail);
+      if (actor && (!actor.lastActivityAt || createdAt > actor.lastActivityAt)) actor.lastActivityAt = createdAt;
+      if (target && (!target.lastActivityAt || createdAt > target.lastActivityAt)) target.lastActivityAt = createdAt;
+    } else if (item.action === "chat.status_changed" && item.details?.status === "resolved") {
+      const actor = getStats(String(item.actorUid || ""), item.actorEmail);
+      if (actor) {
+        actor.resolvedCount += 1;
+        if (!actor.lastActivityAt || createdAt > actor.lastActivityAt) actor.lastActivityAt = createdAt;
+      }
+    }
+  }
+  const agents = [...stats.values()].sort((a, b) =>
+    (b.assignedCount + b.resolvedCount) - (a.assignedCount + a.resolvedCount)
+  );
+  return jsonResponse(event, 200, { days, since: since.toISOString(), agents });
+}
+
 async function handleTenantChatAssignmentAudit(event) {
   const decoded = await authenticateUser(event);
   const params = event.queryStringParameters || {};
@@ -2119,6 +2166,14 @@ exports.handler = async (event) => {
           ? error.message
           : "Media could not be retrieved."
       });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/agent-performance")) {
+    try { return await handleTenantAgentPerformance(event); }
+    catch (error) {
+      console.error("Agent performance load failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Agent performance could not be loaded." });
     }
   }
 
