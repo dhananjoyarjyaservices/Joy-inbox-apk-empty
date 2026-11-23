@@ -55,7 +55,7 @@ export async function createInvitation(
   email: string,
   role: "admin" | "manager" | "agent",
 ) {
-  return request<{ invitation: { invitationId: string; email: string; role: string; expiresAt: string } }>(
+  return request<{ invitation: { invitationId: string; email: string; role: string; expiresAt: string; emailSent: boolean } }>(
     `/organisations/${encodeURIComponent(orgId)}/invitations`,
     { method: "POST", body: JSON.stringify({ email, role }) },
   );
@@ -345,6 +345,8 @@ export interface OrganisationInvitation {
   createdAt?: { toDate?: () => Date } | Date | string | null;
   expiresAt?: { toDate?: () => Date } | Date | string | null;
   createdBy?: string;
+  emailDelivery?: "sent" | "failed" | string;
+  emailLastAttemptAt?: { toDate?: () => Date } | Date | string;
 }
 
 export async function listOrganisationInvitations(orgId: string) {
@@ -352,6 +354,14 @@ export async function listOrganisationInvitations(orgId: string) {
     `/organisations/${encodeURIComponent(orgId)}/invitations`,
   );
   return result.invitations || [];
+}
+
+
+export async function resendOrganisationInvitationEmail(orgId: string, invitationId: string) {
+  return request<{ success: boolean; invitation: { invitationId: string; email: string; emailSent: boolean; reason?: string | null } }>(
+    `/organisations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(invitationId)}/send`,
+    { method: "POST" },
+  );
 }
 
 export async function revokeOrganisationInvitation(orgId: string, invitationId: string) {
