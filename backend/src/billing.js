@@ -16,7 +16,7 @@ function getConfiguredBillingPlans(env = process.env) {
     { key: "starter", name: "Starter", priceId: env.STRIPE_PRICE_STARTER || "" },
     { key: "growth", name: "Growth", priceId: env.STRIPE_PRICE_GROWTH || "" },
     { key: "business", name: "Business", priceId: env.STRIPE_PRICE_BUSINESS || "" }
-  ].filter(plan => Boolean(plan.priceId));
+  ].filter(plan => /^price_[A-Za-z0-9]+$/.test(plan.priceId));
 }
 
 function validReturnUrl(value) {
@@ -220,7 +220,13 @@ async function writeOrganizationSubscription(db, organizationId, subscription) {
   const organization = await organizationRef.get();
   if (!organization.exists) throw billingError("Stripe event references an unknown organization.", 404);
   const details = extractSubscriptionFields(subscription);
-  await organizationRef.collection("billing").doc("subscription").set({
+  const subscriptionRef = organizationRef.collection("billing").doc("subscription");
+  const existing = await subscriptionRef.get();
+  const existingCustomerId = existing.exists ? String(existing.get("stripeCustomerId") || "") : "";
+  if (existingCustomerId && details.stripeCustomerId && existingCustomerId !== details.stripeCustomerId) {
+    throw billingError("Stripe customer does not match the customer already linked to this workspace.", 409);
+  }
+  await subscriptionRef.set({
     ...details,
     updatedAt: new Date()
   }, { merge: true });
