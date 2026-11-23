@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import OrganizationInvitations from "./OrganizationInvitations";
 import { UserPlus, RefreshCw, Shield, Trash2, Search, History } from "lucide-react";
 import { addOrganizationMember, listOrganizationMembers, removeOrganizationMember, updateOrganizationMemberRole, type OrganizationMember, listOrganizationMemberAudit, type OrganizationMemberAuditEvent } from "../services/organizationMembers";
 
@@ -161,6 +162,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
   return <section className="flex-1 overflow-y-auto bg-white p-4">
     <div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Workspace members</h2><p className="text-sm text-gray-500">Manage who can access this business inbox.</p></div><div className="flex gap-2">{canManage && <button onClick={() => void toggleAudit()} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" aria-expanded={showAudit}><History size={15}/>{showAudit ? "Hide activity" : "Activity history"}</button>}<button onClick={() => void refresh()} className="rounded-lg border p-2" aria-label="Refresh members"><RefreshCw size={17}/></button></div></div>
     {showAudit && <div className="mb-5 rounded-xl border p-3"><h3 className="mb-2 text-sm font-semibold">Recent member activity</h3>{auditLoading ? <p className="py-3 text-sm text-gray-500">Loading activity...</p> : auditError ? <div className="py-3"><p role="alert" className="mb-2 text-sm text-red-700">{auditError}</p><button type="button" onClick={() => void loadAudit()} className="rounded-lg border px-3 py-2 text-xs">Retry loading activity</button></div> : auditEvents.length ? <div className="divide-y">{auditEvents.map(event => <div key={event.id} className="py-2"><p className="text-sm">{auditDescription(event)}</p><p className="text-xs text-gray-500">By {event.actorEmail || event.actorUid || "Unknown"} · {event.actorRole || "member"} · {event.createdAt && typeof event.createdAt === "object" && "toDate" in event.createdAt && typeof event.createdAt.toDate === "function" ? event.createdAt.toDate().toLocaleString() : event.createdAt ? new Date(String(event.createdAt)).toLocaleString() : "Time unavailable"}</p></div>)}{auditCursor && <div className="pt-3 text-center"><button type="button" disabled={auditLoading} onClick={() => void loadMoreAudit()} className="rounded-lg border px-4 py-2 text-xs disabled:opacity-50">{auditLoading ? "Loading..." : "Load more activity"}</button></div>}</div> : <p className="py-3 text-sm text-gray-500">No member activity recorded yet.</p>}</div>}
+    {canManage && <OrganizationInvitations organizationId={organizationId} actorRole={actorRole} />}
     {canManage && <form onSubmit={add} className="mb-5 grid gap-2 rounded-xl border bg-gray-50 p-3 sm:grid-cols-[1fr_140px_auto]">
       <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Existing Joy Inbox account email" className="min-w-0 rounded-lg border bg-white px-3 py-2 text-sm"/>
       <select value={role} onChange={e => setRole(e.target.value as "admin" | "agent")} className="rounded-lg border bg-white px-3 py-2 text-sm">
@@ -168,7 +170,7 @@ export default function OrganizationMembers({ organizationId, actorRole }: Props
       </select>
       <button disabled={busy} className="flex items-center justify-center gap-2 rounded-lg bg-[#075e54] px-4 py-2 text-sm text-white disabled:opacity-50"><UserPlus size={16}/> Add member</button>
     </form>}
-    <p className="mb-3 text-xs text-gray-500">Members must already have a Joy Inbox account. This does not send an email invitation.</p>
+    {canManage && <p className="mb-3 text-xs text-gray-500">You can also add an existing Joy Inbox account directly by email.</p>}
     {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     <div className="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_140px]">
       <label className="relative block"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search loaded members by name, email or ID" aria-label="Search loaded members" className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm"/></label>
