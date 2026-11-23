@@ -293,6 +293,12 @@ async function processWebhookPayload(payload) {
   }
 }
 
+function getWebhookProcessingStatusCode(error) {
+  const statusCode = Number(error?.statusCode);
+  return Number.isInteger(statusCode) && statusCode >= 500 && statusCode <= 599
+    ? statusCode : 500;
+}
+
 async function receiveWebhook(event) {
   // Handle signature verification errors safely.
   try {
@@ -343,9 +349,7 @@ async function receiveWebhook(event) {
   } catch (error) {
     console.error("Webhook processing failed:", error);
 
-    const requestedStatus = Number(error?.statusCode);
-    const statusCode = requestedStatus >= 500 && requestedStatus <= 599
-      ? requestedStatus : 500;
+    const statusCode = getWebhookProcessingStatusCode(error);
     return {
       statusCode,
       body: "Webhook processing failed."
@@ -361,5 +365,6 @@ module.exports = {
   shouldApplyMessageStatus,
   isValidMetaWebhookPayload,
   isIgnorableWebhookRoutingError,
-  processWebhookPayload
+  processWebhookPayload,
+  getWebhookProcessingStatusCode
 };
