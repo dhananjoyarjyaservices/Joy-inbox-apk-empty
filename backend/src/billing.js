@@ -148,7 +148,6 @@ async function claimStripeEvent(db, eventId, now = new Date()) {
     const snapshot = await transaction.get(ref);
     if (snapshot.exists) {
       const data = snapshot.data() || {};
-      if (data.status === "processed") return { claimed: false, ref };
       if (data.status === "processing") {
         const leaseMillis = data.leaseUntil?.toDate ? data.leaseUntil.toDate().getTime() : new Date(data.leaseUntil || 0).getTime();
         if (Number.isFinite(leaseMillis) && leaseMillis > now.getTime()) return { claimed: false, ref, reason: "processing" };
