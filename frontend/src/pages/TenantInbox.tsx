@@ -60,7 +60,7 @@ function slaState(chat: TenantChat, now: number, targetMinutes = 5) {
   const remaining = Math.max(0, targetMs - elapsed);
   const overdue = elapsed > targetMs;
   const minutes = Math.floor(Math.abs(overdue ? elapsed - targetMs : remaining) / 60000);
-  const seconds = Math.floor((Math.abs(overdue ? elapsed - TENANT_FIRST_RESPONSE_SLA_MS : remaining) % 60000) / 1000);
+  const seconds = Math.floor((Math.abs(overdue ? elapsed - targetMs : remaining) % 60000) / 1000);
   return { overdue, remaining, elapsed, label: overdue ? `Overdue ${minutes}m ${seconds}s` : `Reply in ${minutes}m ${seconds}s` };
 }
 
