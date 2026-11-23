@@ -132,3 +132,12 @@ Endpoints:
 - `GET /organisations/{orgId}/campaigns/{campaignId}/preview` — preview eligible and excluded contact counts.
 
 **Delivery is deliberately disabled.** Preview returns `sendingEnabled: false`; no messages are sent. The current contact onboarding flow does not yet collect and verify WhatsApp opt-in evidence, so the campaign feature must not be used for live broadcasts until consent capture, suppression/opt-out handling, rate limits, batching, delivery status tracking and an auditable send worker are implemented.
+
+
+## Organisation automations
+
+Organisation owners, admins and managers can configure greeting messages, away messages and up to 20 keyword replies from the Automation page. Settings are isolated by organisation. Away replies are throttled to at most once per customer per 24 hours; greeting replies are sent once per contact. Automation send attempts are idempotently claimed per inbound WhatsApp message and successful automated replies are recorded in the organisation chat history. Automated replies use the organisation's encrypted WhatsApp credentials. Live delivery still requires Lambda deployment, Meta webhook configuration and real-number testing.
+
+## Consent records and broadcast suppression
+
+Campaign managers can record WhatsApp opt-in or opt-out for an individual contact. Opt-in requires a source and evidence description; each change is written to a restricted consent audit subcollection with the actor and timestamp. Incoming exact STOP, UNSUBSCRIBE, CANCEL, END or QUIT text messages automatically mark the contact opted out and create an audit event. Contacts marked opted out, or without explicit opt-in and opt-in timestamp, are excluded from campaign audience previews. Consent records do not themselves prove legal validity; businesses must retain the underlying customer permission evidence and comply with applicable WhatsApp and local laws. Campaign sending remains disabled.
