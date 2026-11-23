@@ -15,6 +15,7 @@ test("rejects invalid rule input and oversized replies", () => {
   assert.throws(() => normalizeAutomationRule({ name: "", keyword: "hi", response: "hello" }), { statusCode: 400 });
   assert.throws(() => normalizeAutomationRule({ name: "Rule", keyword: "hi", response: "x".repeat(1025) }), { statusCode: 400 });
   assert.throws(() => normalizeAutomationRule({ name: "Rule", keyword: "hi", response: "hello", enabled: "yes" }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({ name: "Rule", keyword: "hi\\nthere", response: "hello" }), { statusCode: 400 });
 });
 
 test("matches contains, exact and starts_with case-insensitively", () => {
