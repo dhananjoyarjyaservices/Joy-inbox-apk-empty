@@ -24,10 +24,17 @@ function getInternalNotesCollection(db, organizationId, chatId) {
     .collection("chats").doc(chatId).collection("internalNotes");
 }
 
+async function requireTenantChat(db, organizationId, chatId) {
+  const chatRef = db.collection("organizations").doc(organizationId).collection("chats").doc(chatId);
+  const chat = await chatRef.get();
+  if (!chat.exists) throw httpError("Conversation was not found in this workspace.", 404);
+  return chatRef.collection("internalNotes");
+}
+
 async function listTenantInternalNotes(db, organizationId, chatId, limit = 100) {
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 100));
-  const snapshot = await getInternalNotesCollection(db, organizationId, chatId)
-    .orderBy("createdAt", "desc").limit(safeLimit).get();
+  const collection = await requireTenantChat(db, organizationId, chatId);
+  const snapshot = await collection.orderBy("createdAt", "desc").limit(safeLimit).get();
   return snapshot.docs.map(document => {
     const value = document.data() || {};
     const createdAt = value.createdAt?.toDate ? value.createdAt.toDate().toISOString()
@@ -40,7 +47,8 @@ async function addTenantInternalNote(db, organizationId, chatId, input, actor) {
   const { text } = normalizeInternalNote(input);
   if (!actor?.uid) throw httpError("Authentication required.", 401);
   const now = new Date();
-  const ref = getInternalNotesCollection(db, organizationId, chatId).doc();
+  const collection = await requireTenantChat(db, organizationId, chatId);
+  const ref = collection.doc();
   const note = {
     text,
     authorUid: String(actor.uid),
@@ -55,6 +63,7 @@ async function addTenantInternalNote(db, organizationId, chatId, input, actor) {
 module.exports = {
   normalizeInternalNote,
   getInternalNotesCollection,
+  requireTenantChat,
   listTenantInternalNotes,
   addTenantInternalNote
 };
