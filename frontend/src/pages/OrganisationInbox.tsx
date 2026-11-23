@@ -58,9 +58,9 @@ export default function OrganisationInbox() {
   const [showQuickReplyForm, setShowQuickReplyForm] = useState(false);
   const [quickReplyTitle, setQuickReplyTitle] = useState("");
   const [quickReplyShortcut, setQuickReplyShortcut] = useState("");
-  const [savingQuickReply, setSavingQuickReply] = useState(false);
+  const [savingQuickReply, setSavingQuickReply] = useState(false);\n  const [chatSearch, setChatSearch] = useState("");\n  const [tagDraft, setTagDraft] = useState("");\n  const [savingTags, setSavingTags] = useState(false);\n  const [changingStatus, setChangingStatus] = useState(false);
 
-  const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
+  const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);\n  const filteredChats = useMemo(() => { const term = chatSearch.trim().toLowerCase(); return term ? chats.filter((chat) => [chat.customerName, chat.customerPhone, chat.lastMessage, ...(chat.tags || [])].some((value) => String(value || "").toLowerCase().includes(term))) : chats; }, [chats, chatSearch]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -118,6 +118,23 @@ export default function OrganisationInbox() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Internal note save nahi hua.");
     } finally { setSavingNote(false); }
+  }
+
+  async function handleStatusChange(status: "open" | "pending" | "resolved") {
+    if (!selectedChat) return;
+    setChangingStatus(true);
+    try { await updateOrganisationChatStatus(orgId, selectedChat.id, status); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Status update nahi hua."); }
+    finally { setChangingStatus(false); }
+  }
+
+  async function handleSaveTags() {
+    if (!selectedChat) return;
+    const tags = [...new Set(tagDraft.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
+    setSavingTags(true);
+    try { await updateOrganisationChatTags(orgId, selectedChat.id, tags); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Tags save nahi hue. Manager permission required ho sakti hai."); }
+    finally { setSavingTags(false); }
   }
 
   async function handleAssignToMe() {
@@ -189,8 +206,8 @@ export default function OrganisationInbox() {
 
       <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[320px_1fr]">
         <aside className={`min-h-0 overflow-y-auto bg-white ${selectedChat ? "hidden md:block" : "block"}`}>
-          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3"><h2 className="font-semibold text-gray-800">Chats</h2><button onClick={() => setError("")} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" aria-label="Clear error"><RefreshCw size={16} /></button></div>
-          {loading ? <p className="p-4 text-sm text-gray-500">Loading chats...</p> : chats.length === 0 ? <p className="p-4 text-sm text-gray-500">Abhi koi message nahi aaya. Meta webhook subscription configure karne ke baad incoming chats yahan dikhenge.</p> : chats.map((chat) => (
+          <div className="border-b border-gray-100 px-4 py-3"><div className="mb-2 flex items-center justify-between"><h2 className="font-semibold text-gray-800">Chats</h2><button onClick={() => setError("")} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" aria-label="Clear error"><RefreshCw size={16} /></button></div><input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search name, number, message or tag" className="h-9 w-full rounded-lg border border-gray-200 px-3 text-xs outline-none focus:border-[#075e54]" /></div>
+          {loading ? <p className="p-4 text-sm text-gray-500">Loading chats...</p> : chats.length === 0 ? <p className="p-4 text-sm text-gray-500">Abhi koi message nahi aaya. Meta webhook subscription configure karne ke baad incoming chats yahan dikhenge.</p> : filteredChats.length === 0 ? <p className="p-4 text-sm text-gray-500">No matching conversations.</p> : filteredChats.map((chat) => (
             <button key={chat.id} onClick={() => setSelectedChatId(chat.id)} className={`w-full border-b border-gray-100 px-4 py-3 text-left hover:bg-gray-50 ${selectedChatId === chat.id ? "bg-[#f0f2f5]" : "bg-white"}`}>
               <div className="flex items-center justify-between gap-2"><span className="truncate font-medium text-gray-900">{chat.customerName || chat.customerPhone}</span><span className="text-[11px] text-gray-400">{toDate(chat.lastMessageAt)?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) || ""}</span></div>
               <p className="mt-1 truncate text-sm text-gray-500">{chat.lastMessage || chat.customerPhone}</p>
@@ -205,6 +222,9 @@ export default function OrganisationInbox() {
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d9fdd3] font-semibold text-[#075e54]">{(selectedChat.customerName || selectedChat.customerPhone || "?").slice(0, 1).toUpperCase()}</div>
               <div className="min-w-0 flex-1"><h2 className="truncate font-semibold text-gray-900">{selectedChat.customerName || selectedChat.customerPhone}</h2><p className="text-xs text-gray-500">{selectedChat.customerPhone}</p></div>
               <button type="button" onClick={handleAssignToMe} disabled={assigning || !user} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-2 text-xs font-medium text-gray-600 disabled:opacity-50"><UserRoundCheck size={14} /> {assigning ? "Assigning" : "Assign to me"}</button>
+              <select aria-label="Conversation status" value={selectedChat.status || "open"} disabled={changingStatus} onChange={(event) => handleStatusChange(event.target.value as "open" | "pending" | "resolved")} className="max-w-[112px] rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-700">
+                <option value="open">Open</option><option value="pending">Pending</option><option value="resolved">Resolved</option>
+              </select>
             </div>
             <div className="flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6">
               {messages.map((message) => <div key={message.id} className={`flex ${message.direction === "outgoing" ? "justify-end" : "justify-start"}`}>
@@ -213,6 +233,10 @@ export default function OrganisationInbox() {
                   <p className="mt-1 text-right text-[10px] text-gray-500">{toDate(message.timestamp)?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) || ""}{message.direction === "outgoing" && message.status ? " · " + message.status : ""}</p>
                 </div>
               </div>)}
+            </div>
+            <div className="flex items-center gap-2 border-t border-gray-200 bg-white px-3 py-2">
+              <input value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="Tags separated by commas" className="h-8 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-xs" />
+              <button type="button" onClick={handleSaveTags} disabled={savingTags} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 disabled:opacity-50">{savingTags ? "Saving" : "Save tags"}</button>
             </div>
             <div className="max-h-36 overflow-y-auto border-t border-gray-200 bg-white px-3 py-2">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-600"><StickyNote size={14} /> Internal notes (team only)</div>
