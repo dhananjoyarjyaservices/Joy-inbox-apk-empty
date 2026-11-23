@@ -423,7 +423,8 @@ async function recordTenantFirstResponse(db, organizationId, chatId, agentUid, a
       .collection("agentResponseMetrics").doc();
     transaction.set(metricRef, {
       organizationId, chatId, agentUid, agentEmail: String(agentEmail || "").slice(0, 254),
-      responseMs, inboundAt: pendingSince, respondedAt, createdAt: respondedAt
+      responseMs, slaTargetMs: 5 * 60 * 1000, slaMet: responseMs <= 5 * 60 * 1000,
+      inboundAt: pendingSince, respondedAt, createdAt: respondedAt
     });
     transaction.set(chatRef, {
       responsePendingSince: null,
@@ -475,7 +476,27 @@ async function handleTenantAgentPerformance(event) {
       }
     }
   }
-  const agents = [...stats.values()].sort((a, b) =>
+  const responseSnapshot = await organization.ref.collection("agentResponseMetrics")
+    .where("respondedAt", ">=", since).get();
+  for (const doc of responseSnapshot.docs) {
+    const response = doc.data() || {};
+    const agent = getStats(String(response.agentUid || ""), response.agentEmail);
+    const responseMs = Number(response.responseMs);
+    if (!agent || !Number.isFinite(responseMs) || responseMs < 0) continue;
+    agent.responseCount = (agent.responseCount || 0) + 1;
+    agent.totalResponseMs = (agent.totalResponseMs || 0) + responseMs;
+    const met = typeof response.slaMet === "boolean"
+      ? response.slaMet : responseMs <= 5 * 60 * 1000;
+    if (met) agent.slaMetCount = (agent.slaMetCount || 0) + 1;
+    else agent.slaBreachCount = (agent.slaBreachCount || 0) + 1;
+  }
+  const agents = [...stats.values()].map(agent => ({
+    ...agent,
+    averageResponseMs: agent.responseCount ? Math.round(agent.totalResponseMs / agent.responseCount) : null,
+    slaMetCount: agent.slaMetCount || 0,
+    slaBreachCount: agent.slaBreachCount || 0,
+    slaMetPercent: agent.responseCount ? Math.round((agent.slaMetCount || 0) / agent.responseCount * 100) : null
+  })).sort((a, b) =>
     (b.assignedCount + b.resolvedCount) - (a.assignedCount + a.resolvedCount)
   );
   return jsonResponse(event, 200, { days, since: since.toISOString(), agents });
