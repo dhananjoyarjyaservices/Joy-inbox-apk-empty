@@ -47,6 +47,11 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /quickReplies/{quickReplyId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if false;
+      }
+
       match /whatsappConnections/{connectionId} {
         allow read, write: if false;
       }
