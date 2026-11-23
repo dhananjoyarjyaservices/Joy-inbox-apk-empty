@@ -779,13 +779,25 @@ async function checkTenantSlaAlerts(event) {
         .collection("members").doc(assignedTo).get();
       if (member.exists && member.get("status") === "active" &&
           ["owner", "admin", "agent"].includes(member.get("role"))) {
-        await sendTenantSlaOverdueNotification(
+        const delivered = await sendTenantSlaOverdueNotification(
           organization.id,
           assignedTo,
           document.id,
           String(chat.customerName || chat.customerPhone || document.id)
         );
-        notified += 1;
+        if (delivered > 0) {
+          notified += 1;
+        } else {
+          await db.runTransaction(async (transaction) => {
+            const latest = await transaction.get(chatRef);
+            if (latest.exists && latest.get("slaOverdueNotifiedFor") === pendingMillis) {
+              transaction.update(chatRef, {
+                slaOverdueNotifiedFor: admin.firestore.FieldValue.delete(),
+                slaOverdueNotifiedAt: admin.firestore.FieldValue.delete()
+              });
+            }
+          });
+        }
       }
     } catch (error) {
       await db.runTransaction(async (transaction) => {
