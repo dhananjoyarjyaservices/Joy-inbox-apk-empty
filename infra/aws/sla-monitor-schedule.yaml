@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: EventBridge schedule for the Joy Inbox tenant SLA monitor.
+
+Parameters:
+  SlaMonitorLambdaArn:
+    Type: String
+    Description: ARN of the deployed Lambda whose handler is src/index.slaScheduledHandler.
+
+Resources:
+  SlaMonitorSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: joy-inbox-sla-monitor-every-five-minutes
+      Description: Checks tenant inbox conversations for overdue first-response SLAs.
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Id: JoyInboxSlaMonitor
+          Arn: !Ref SlaMonitorLambdaArn
+
+  AllowEventBridgeInvokeSlaMonitor:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SlaMonitorLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SlaMonitorSchedule.Arn
+
+Outputs:
+  SlaMonitorScheduleArn:
+    Description: EventBridge rule ARN. Deploy after the SLA monitor Lambda is configured.
+    Value: !GetAtt SlaMonitorSchedule.Arn
