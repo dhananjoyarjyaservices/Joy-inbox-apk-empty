@@ -283,3 +283,39 @@ export async function previewOrganisationCampaign(orgId: string, campaignId: str
   );
   return result.preview;
 }
+
+
+export interface OrganisationCampaign {
+  id: string;
+  title: string;
+  templateName: string;
+  language: string;
+  bodyParameters: string[];
+  audience: { consentRequired: boolean; tags: string[] };
+  status: "draft" | string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export async function listOrganisationCampaigns(orgId: string) {
+  const result = await request<{ campaigns: OrganisationCampaign[] }>(
+    `/organisations/${encodeURIComponent(orgId)}/campaigns`,
+  );
+  return result.campaigns || [];
+}
+
+export async function createOrganisationCampaign(
+  orgId: string,
+  details: { title: string; templateName: string; language: string; bodyParameters: string[]; tags: string[] },
+) {
+  return request<{ success: boolean; campaign: OrganisationCampaign }>(
+    `/organisations/${encodeURIComponent(orgId)}/campaigns`,
+    { method: "POST", body: JSON.stringify(details) },
+  );
+}
+
+export async function previewOrganisationCampaign(orgId: string, campaignId: string) {
+  return request<{ preview: { campaignId: string; eligibleCount: number; excludedCount: number; requiresExplicitConsent: boolean; sendingEnabled: boolean; message: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/campaigns/${encodeURIComponent(campaignId)}/preview`,
+  );
+}
