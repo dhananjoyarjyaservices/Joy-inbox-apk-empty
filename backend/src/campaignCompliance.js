@@ -40,7 +40,7 @@ function isWhatsAppOptOutMessage(value) {
 function isWhatsAppOptInMessage(value) {
   const text = String(value || "").normalize("NFKC").trim().toLowerCase();
   if (!text || text.length > 40) return false;
-  return OPT_IN_KEYWORDS.has(text.replace(/[.!?,;:]+$/g, "").replace(/[\\s_-]+/g, ""));
+  return OPT_IN_KEYWORDS.has(text.replace(/[.!?,;:]+$/g, "").replace(/[\s_-]+/g, ""));
 }
 
 async function recordCampaignOptIn(db, organizationId, phone, inboundMessageId) {
