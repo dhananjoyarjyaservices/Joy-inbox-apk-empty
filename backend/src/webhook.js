@@ -343,8 +343,11 @@ async function receiveWebhook(event) {
   } catch (error) {
     console.error("Webhook processing failed:", error);
 
+    const requestedStatus = Number(error?.statusCode);
+    const statusCode = requestedStatus >= 500 && requestedStatus <= 599
+      ? requestedStatus : 500;
     return {
-      statusCode: 500,
+      statusCode,
       body: "Webhook processing failed."
     };
   }
