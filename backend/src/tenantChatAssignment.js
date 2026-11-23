@@ -68,6 +68,8 @@ async function updateTenantChatAssignment(db, organization, actor, input) {
       if (chatSnapshot.get("assignedTo") !== parsed.assignedTo) {
         updates.slaOverdueNotifiedFor = null;
         updates.slaOverdueNotifiedAt = null;
+        updates.slaOverdueRetryAfter = null;
+        updates.slaOverdueAttemptCount = 0;
       }
       updates.assignedTo = parsed.assignedTo;
       updates.assignedBy = actor.uid;
