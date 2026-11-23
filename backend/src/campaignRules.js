@@ -54,7 +54,7 @@ function normalizeCampaignRecipients(input) {
       skipped += 1;
       continue;
     }
-    const phone = String(item.phone || item.to || "").replace(/\\D/g, "");
+    const phone = String(item.phone || item.to || "").replace(/\D/g, "");
     const consentAt = item.consentAt;
     const consentSource = String(item.consentSource || "").trim().slice(0, 120);
     const validConsentDate = typeof consentAt === "string" && !Number.isNaN(Date.parse(consentAt));
