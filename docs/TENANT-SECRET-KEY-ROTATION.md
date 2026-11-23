@@ -43,3 +43,14 @@ Every key must decode to exactly 32 bytes. Keep old keys in the keyring while an
 ## Rotation API
 
 `rotateEncryptedSecret(record, { sourceKeyValue, targetKeyring })` returns a new version 2 encrypted record. `targetKeyring` can be the JSON keyring string or an object containing `activeKeyId` and a `keys` map. The helper does not write to Firestore; callers must persist the returned record safely.
+
+## Tenant migration helper
+
+The backend exports `rotateOrganizationWhatsAppCredentials(db, organizationId, targetKeyring, options)`. It scans only the explicitly supplied organization's legacy primary WhatsApp settings document and its per-phone-number credential documents.
+
+- The default is `dryRun: true`: credentials are checked for decryptability and counted, but no Firestore writes occur.
+- After reviewing the dry-run summary, invoke with `{ dryRun: false }` to rotate the selected organization's stored records.
+- Each credential is re-read and updated in its own Firestore transaction. Re-running is safe: records already encrypted with the target active key are skipped.
+- The returned summary contains counts only; token plaintext is never returned.
+- Do not expose this helper as a public HTTP endpoint. Run it only from a trusted administrative migration job with backend credentials.
+- Run one organization at a time, monitor failures, and retain every source key until all organizations have been migrated and verified.
