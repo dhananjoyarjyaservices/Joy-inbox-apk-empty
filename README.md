@@ -54,3 +54,11 @@ Do not deploy AWS Lambda, Firebase rules, storage policies or Meta webhook setti
 - `backend/` — Node.js Lambda API, WhatsApp integration and tests
 - `firestore.rules`, `storage.rules` — existing Firebase security rules
 - `docs/SAAS-MIGRATION.md` — SaaS architecture and phased migration plan
+
+## Latest SaaS implementation notes
+
+The tenant webhook path now resolves inbound WhatsApp events through Meta's phone-number mapping and writes tenant messages below the organization chat path. Customer media is retained as bounded metadata and Meta media IDs only; inbound media bytes are not copied to Firebase Storage. The separate legacy owner-only media routes still exist and must remain disabled for tenant traffic until the migration is complete.
+
+Campaign creation currently validates Meta-approved templates and recorded opt-in evidence, then saves a draft only. Organization-scoped STOP/UNSUBSCRIBE suppression is applied to campaign drafts; explicit inbound START/UNSTOP/SUBSCRIBE reactivates a suppression record. Campaign preparation is marked as preparing until every recipient batch has been persisted, and becomes failed if preparation fails. No campaign messages are sent by this workflow.
+
+These improvements do not change the overall release gate: all legacy routes, tenant frontend actions, billing, migration/rollback, staging Meta/Firebase tests, and production deployment configuration still require completion and review.
