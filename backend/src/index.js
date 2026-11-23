@@ -752,6 +752,73 @@ async function listTenantNotificationDeliveries(event) {
   return jsonResponse(event, 200, { deliveries });
 }
 
+async function listTenantMemberNotificationDeliveries(event) {
+  const decoded = await authenticateUser(event);
+  const organization = await requireOrganization(getDb(), decoded, event.queryStringParameters?.organizationId);
+  requirePermission(organization, "chats:read");
+  if (!["owner", "admin"].includes(organization.role)) {
+    const error = new Error("Only workspace owners and admins can view another member's delivery history.");
+    error.statusCode = 403;
+    throw error;
+  }
+  const query = event.queryStringParameters || {};
+  const uid = String(query.uid || "");
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(uid)) return jsonResponse(event, 400, { error: "A valid team member ID is required." });
+  const memberRef = organization.ref.collection("members").doc(uid);
+  const memberDoc = await memberRef.get();
+  if (!memberDoc.exists) return jsonResponse(event, 404, { error: "Team member was not found in this workspace." });
+  const parseDate = (value, endOfDay = false) => {
+    if (!value) return null;
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return undefined;
+    const date = new Date(value + (endOfDay ? "T23:59:59.999" : "T00:00:00.000"));
+    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? undefined : date;
+  };
+  const from = parseDate(query.from);
+  const to = parseDate(query.to, true);
+  if (from === undefined || to === undefined || (from && to && from > to)) {
+    return jsonResponse(event, 400, { error: "Use valid date filters with From on or before To." });
+  }
+  let deliveriesQuery = memberRef.collection("notificationDeliveries").orderBy("createdAt", "desc");
+  if (from) deliveriesQuery = deliveriesQuery.where("createdAt", ">=", from);
+  if (to) deliveriesQuery = deliveriesQuery.where("createdAt", "<=", to);
+  const snapshot = await deliveriesQuery.limit(200).get();
+  const deliveries = snapshot.docs.map(document => {
+    const value = document.data() || {};
+    return {
+      id: document.id,
+      type: String(value.type || "notification"),
+      status: value.status === "delivered" ? "delivered" : "failed",
+      attempts: Math.max(1, Number(value.attempts || 1)),
+      errorCode: value.errorCode ? String(value.errorCode).slice(0, 120) : null,
+      createdAt: value.createdAt?.toDate ? value.createdAt.toDate().toISOString() : null
+    };
+  });
+  const total = deliveries.length;
+  const delivered = deliveries.filter(item => item.status === "delivered").length;
+  const failed = total - delivered;
+  const retried = deliveries.filter(item => item.attempts > 1).length;
+  const attempts = deliveries.reduce((sum, item) => sum + item.attempts, 0);
+  const byType = {};
+  for (const item of deliveries) {
+    if (!byType[item.type]) byType[item.type] = { total: 0, delivered: 0, failed: 0, retried: 0, attempts: 0 };
+    const stats = byType[item.type];
+    stats.total += 1;
+    stats[item.status] += 1;
+    if (item.attempts > 1) stats.retried += 1;
+    stats.attempts += item.attempts;
+  }
+  const member = memberDoc.data() || {};
+  return jsonResponse(event, 200, {
+    member: { uid, name: String(member.displayName || member.name || member.email || "Team member").slice(0, 100), role: String(member.role || "agent") },
+    summary: { total, delivered, failed, retried, attempts, rate: total ? Math.round(delivered / total * 100) : 0, byType },
+    deliveries,
+    capped: snapshot.size === 200,
+    limit: 200,
+    from: query.from || null,
+    to: query.to || null
+  });
+}
+
 async function listTenantTeamNotificationDeliveries(event) {
   const decoded = await authenticateUser(event);
   const organization = await requireOrganization(getDb(), decoded, event.queryStringParameters?.organizationId);
@@ -2501,6 +2568,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Tenant SLA alert check failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "SLA alerts could not be checked." });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/notifications/member-deliveries")) {
+    try { return await listTenantMemberNotificationDeliveries(event); }
+    catch (error) {
+      console.error("Member notification delivery history failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Member delivery history could not be loaded." });
     }
   }
 
