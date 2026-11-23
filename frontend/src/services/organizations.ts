@@ -123,3 +123,12 @@ export async function saveOrganizationSlaSettings(organizationId: string, settin
   const result = await request("/organizations/sla/settings", "PUT", { organizationId, ...settings });
   return result.settings;
 }
+
+export interface OrganizationNotification { id: string; type: "assignment" | "status" | "sla"; title: string; body: string; chatId: string; createdAt: string; read: boolean; }
+export async function listOrganizationNotifications(organizationId: string): Promise<OrganizationNotification[]> {
+  const result = await request(`/organizations/notifications?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.notifications) ? result.notifications : [];
+}
+export async function markOrganizationNotificationRead(organizationId: string, notificationId: string): Promise<void> {
+  await request("/organizations/notifications", "POST", { organizationId, notificationId });
+}
