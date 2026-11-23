@@ -7,6 +7,7 @@ const CONFIRM = process.env.CONFIRM_DELETE_INBOUND_MEDIA === "true";
 async function main() {
   const db = getDb();
   let cursor = null;
+  const documentId = getFirebaseAdmin().firestore.FieldPath.documentId();
   let scanned = 0;
   let candidates = 0;
   let deleted = 0;
@@ -19,7 +20,7 @@ async function main() {
   while (true) {
     let query = db.collectionGroup("messages")
       .where("direction", "==", "incoming")
-      .orderBy("__name__")
+      .orderBy(documentId)
       .limit(PAGE_SIZE);
     if (cursor) query = query.startAfter(cursor);
     const page = await query.get();
