@@ -18,11 +18,28 @@ function request(method, path) {
   return { httpMethod: method, path, headers: {} };
 }
 
-test("legacy owner API is disabled by default with a clear migration response", async () => {
+test("every legacy owner API route is disabled by default", async () => {
+  const routes = [
+    ["POST", "/send"],
+    ["POST", "/chat-state"],
+    ["POST", "/message-state"],
+    ["POST", "/delete-messages"],
+    ["POST", "/delete-chats"],
+    ["POST", "/send-media"],
+    ["GET", "/media"],
+    ["GET", "/status"],
+    ["GET", "/greeting-settings"],
+    ["POST", "/greeting-settings"],
+    ["POST", "/fcm-tokens/register"],
+    ["POST", "/fcm-tokens/remove"]
+  ];
+
   await withLegacyFlag(undefined, async () => {
-    const response = await handler(request("POST", "/send"));
-    assert.equal(response.statusCode, 410);
-    assert.match(response.body, /legacy endpoint is disabled/i);
+    for (const [method, path] of routes) {
+      const response = await handler(request(method, path));
+      assert.equal(response.statusCode, 410, `${method} ${path} must be disabled`);
+      assert.match(response.body, /legacy endpoint is disabled/i);
+    }
   });
 });
 
