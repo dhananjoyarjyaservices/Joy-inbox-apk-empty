@@ -210,3 +210,10 @@ The script is not run automatically and has not been executed against any produc
 ## Conversation internal notes
 
 The tenant inbox now supports private internal notes at `organizations/{organizationId}/chats/{chatId}/internalNotes`. Active members with chat permissions can list the latest 100 notes and add notes up to 2,000 characters. Each note records its author UID/name and timestamp. Internal notes are served only through authenticated tenant APIs; Firestore client rules deny direct access and notes are never sent to WhatsApp.
+
+
+## Interactive WhatsApp messages
+
+The tenant inbox composer now supports session-based interactive reply buttons (up to three) and list menus (up to ten rows total), with optional text header/footer. The backend validates Meta length/count limits, sends through the selected workspace Phone Number ID, and uses the tenant send-request idempotency ledger. Outgoing interactive messages are stored as structured tenant message records; incoming button/list selections are stored as searchable text with the selected option ID/title.
+
+Interactive messages remain subject to WhatsApp's active customer-service window and Meta account policy. They are not a substitute for approved templates outside that window.
