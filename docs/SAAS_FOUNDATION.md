@@ -60,3 +60,25 @@ The first command is a dry run. The second permanently deletes inbound media fil
 ## Validation and rollout
 
 The GitHub Actions CI workflow is configured to run backend tests, backend syntax checks, and the frontend TypeScript/Vite build on feature branches. A green CI run must be confirmed before merging. This branch has not been deployed and the Firestore rules have not been published to the live Firebase project.
+
+
+## Per-organisation WhatsApp credential connection (development)
+
+The organisation setup screen now has a WhatsApp Cloud API connection form. The backend:
+
+- Requires owner/admin membership for credential changes and owner/admin/manager for viewing connection metadata.
+- Calls Meta Graph API to verify the supplied Phone Number ID and access token before saving.
+- Encrypts the access token with AES-256-GCM using `WHATSAPP_CREDENTIALS_ENCRYPTION_KEY` (64 hex characters / 32 random bytes).
+- Stores the WABA ID, Phone Number ID, verified display name and encrypted token under the organisation's `whatsappConnections/primary` document.
+- Maintains a unique Phone Number ID to organisation mapping in the server-only `whatsappPhoneNumbers` collection.
+- Never returns the access token to the browser. Re-enter the token when rotating credentials.
+
+Before enabling this API, configure the encryption key in the Lambda environment. Generate one with:
+
+```bash
+openssl rand -hex 32
+```
+
+Store the value in AWS Lambda environment configuration or a secrets manager; do not commit it to GitHub. Back it up securely because losing the key makes previously encrypted tokens unrecoverable. Rotating the key requires an explicit re-encryption migration.
+
+**Important:** This phase verifies and stores per-business credentials only. Existing message sending, webhook processing, conversation storage and status callbacks still use the legacy single-owner code path. Do not enable live production messaging for newly connected organisations until those paths are migrated to the organisation-scoped model and verified with cross-tenant tests.
