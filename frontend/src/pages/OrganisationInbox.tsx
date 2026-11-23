@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
-import { ArrowLeft, MessageCircle, Send, RefreshCw, UserRoundCheck, StickyNote } from "lucide-react";
+import { ArrowLeft, MessageCircle, Send, RefreshCw, UserRoundCheck, StickyNote, Zap, Plus, X } from "lucide-react";
 import { db } from "../firebase/config";
 import {
   sendOrganisationWhatsAppText,
@@ -53,7 +53,7 @@ export default function OrganisationInbox() {
   const [notes, setNotes] = useState<OrganisationNote[]>([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [savingNote, setSavingNote] = useState(false);
-  const [assigning, setAssigning] = useState(false);
+  const [assigning, setAssigning] = useState(false);\n  const [quickReplies, setQuickReplies] = useState<OrganisationQuickReply[]>([]);\n  const [showQuickReplyForm, setShowQuickReplyForm] = useState(false);\n  const [quickReplyTitle, setQuickReplyTitle] = useState("");\n  const [quickReplyShortcut, setQuickReplyShortcut] = useState("");\n  const [savingQuickReply, setSavingQuickReply] = useState(false);
 
   const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
 
@@ -125,6 +125,37 @@ export default function OrganisationInbox() {
     } finally { setAssigning(false); }
   }
 
+  const quickReplyMatches = draft.startsWith("/")
+    ? quickReplies.filter((reply) => {
+        const term = draft.slice(1).toLowerCase();
+        return reply.shortcut.includes(term) || reply.title.toLowerCase().includes(term);
+      }).slice(0, 8)
+    : [];
+
+  async function handleSaveQuickReply(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!draft.trim()) return;
+    setSavingQuickReply(true);
+    setError("");
+    try {
+      const result = await saveOrganisationQuickReply(orgId, {
+        shortcut: quickReplyShortcut.trim().replace(/^\\/+/, "").toLowerCase(),
+        title: quickReplyTitle.trim(),
+        text: draft.trim(),
+      });
+      setQuickReplies((current) => [...current.filter((item) => item.id !== result.quickReply.id), result.quickReply].sort((a, b) => a.shortcut.localeCompare(b.shortcut)));
+      setShowQuickReplyForm(false);
+      setQuickReplyTitle("");
+      setQuickReplyShortcut("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Quick reply save nahi hua. Manager permission required ho sakti hai.");
+    } finally { setSavingQuickReply(false); }
+  }
+
+  function insertQuickReply(reply: OrganisationQuickReply) {
+    setDraft(reply.text);
+  }
+
   async function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedChat || !draft.trim()) return;
@@ -186,10 +217,26 @@ export default function OrganisationInbox() {
                 <button disabled={savingNote || !noteDraft.trim()} className="rounded-lg bg-amber-500 px-3 text-xs font-semibold text-white disabled:opacity-50">{savingNote ? "Saving" : "Add note"}</button>
               </form>
             </div>
-            <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-gray-200 bg-[#f0f2f5] p-3">
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={4096} placeholder="Type a message" className="h-11 min-w-0 flex-1 rounded-full border-0 bg-white px-4 text-sm outline-none" />
-              <button disabled={sending || !draft.trim()} aria-label="Send WhatsApp message" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18} /></button>
-            </form>
+            {quickReplyMatches.length > 0 && <div className="border-t border-gray-200 bg-white px-3 py-2">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Quick replies · select to insert</p>
+              {quickReplyMatches.map((reply) => <button key={reply.id} type="button" onClick={() => insertQuickReply(reply)} className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left hover:bg-gray-50"><span className="min-w-0"><span className="block truncate text-sm font-medium text-gray-800">{reply.title}</span><span className="block truncate text-xs text-gray-400">/{reply.shortcut} · {reply.text}</span></span><Zap size={15} className="shrink-0 text-[#075e54]" /></button>)}
+            </div>}
+            {showQuickReplyForm && <form onSubmit={handleSaveQuickReply} className="border-t border-gray-200 bg-white p-3">
+              <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold text-gray-800">Save current message as quick reply</p><button type="button" onClick={() => setShowQuickReplyForm(false)} aria-label="Close quick reply form"><X size={16} /></button></div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input required value={quickReplyShortcut} onChange={(event) => setQuickReplyShortcut(event.target.value)} placeholder="Shortcut (e.g. greeting)" className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-xs" />
+                <input required value={quickReplyTitle} onChange={(event) => setQuickReplyTitle(event.target.value)} placeholder="Reply title" className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-xs" />
+                <button disabled={savingQuickReply || !draft.trim()} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{savingQuickReply ? "Saving" : "Save"}</button>
+              </div>
+              <p className="mt-2 text-[11px] text-gray-400">Only organisation owner/admin/manager can create shared quick replies.</p>
+            </form>}
+            <div className="flex items-center gap-2 border-t border-gray-200 bg-[#f0f2f5] p-3">
+              <button type="button" onClick={() => { setQuickReplyTitle(""); setQuickReplyShortcut(""); setShowQuickReplyForm(true); }} disabled={!draft.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#075e54] hover:bg-white disabled:opacity-40" aria-label="Save as quick reply"><Plus size={19} /></button>
+              <form onSubmit={handleSend} className="flex min-w-0 flex-1 items-center gap-2">
+                <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={4096} placeholder="Type a message · use / for quick replies" className="h-11 min-w-0 flex-1 rounded-full border-0 bg-white px-4 text-sm outline-none" />
+                <button disabled={sending || !draft.trim()} aria-label="Send WhatsApp message" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18} /></button>
+              </form>
+            </div>
           </> : <div className="flex flex-1 items-center justify-center text-center text-sm text-gray-500">Select a chat to view messages</div>}
         </section>
       </div>
