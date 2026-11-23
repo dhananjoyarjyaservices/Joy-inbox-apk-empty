@@ -53,9 +53,14 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
     await setDoc(doc(db, "organizations/org_a/billing/subscription"), { status: "active", stripeCustomerId: "cus_private" });
     await setDoc(doc(db, "organizations/org_a/chats/chat_a/internalNotes/note_a"), { text: "Private team note", visibility: "internal" });
     await setDoc(doc(db, "stripeWebhookEvents/evt_123456789"), { status: "processed" });
+    await setDoc(doc(db, "chats/legacy_chat"), { customerPhone: "+15550001111" });
+    await setDoc(doc(db, "deletedChats/legacy_chat"), { deletedAt: new Date() });
+    await setDoc(doc(db, "whatsappPhoneNumbers/legacy_number"), { phoneNumberId: "123456789012345" });
+    await setDoc(doc(db, "users/agent_a/privateProfile"), { email: "private@example.test" });
   });
 
   const ownerDb = testEnv.authenticatedContext("owner_a").firestore();
+  const legacyOwnerDb = testEnv.authenticatedContext("Vy49nGnw74gR5SFHmjN0DOQ2QFE3").firestore();
   const agentDb = testEnv.authenticatedContext("agent_a").firestore();
   const otherTenantDb = testEnv.authenticatedContext("owner_b").firestore();
   const disabledDb = testEnv.authenticatedContext("disabled_a").firestore();
@@ -93,6 +98,15 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
   await assertFails(getDoc(doc(ownerDb, "organizations/org_a/chats/chat_a/internalNotes/note_a")));
   await assertFails(getDoc(doc(agentDb, "organizations/org_a/chats/chat_a/internalNotes/note_a")));
   await assertFails(getDoc(doc(ownerDb, "stripeWebhookEvents/evt_123456789")));
+  // Legacy root collections remain owner-only and read-only during migration.
+  await assertSucceeds(getDoc(doc(legacyOwnerDb, "chats/legacy_chat")));
+  await assertSucceeds(getDoc(doc(legacyOwnerDb, "deletedChats/legacy_chat")));
+  await assertSucceeds(getDoc(doc(legacyOwnerDb, "whatsappPhoneNumbers/legacy_number")));
+  await assertFails(getDoc(doc(agentDb, "chats/legacy_chat")));
+  await assertFails(getDoc(doc(agentDb, "deletedChats/legacy_chat")));
+  await assertFails(getDoc(doc(agentDb, "whatsappPhoneNumbers/legacy_number")));
+  await assertFails(getDoc(doc(agentDb, "users/agent_a/privateProfile")));
+  await assertFails(setDoc(doc(legacyOwnerDb, "chats/legacy_chat"), { customerPhone: "+15559999999" }));
 
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/chats/new_chat"), { text: "client write" }));
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/contacts/new_contact"), { name: "client write" }));
