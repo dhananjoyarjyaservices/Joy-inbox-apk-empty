@@ -89,7 +89,7 @@ Preparation changes on the feature branch configure the Vite root path, Cloudfla
 
 ## Scheduled SLA push alerts (AWS EventBridge)
 
-The backend now exports a separate Lambda entry point for scheduled checks. This lets overdue alerts run even when every agent has closed Joy Inbox.
+The backend exports a separate Lambda entry point for scheduled checks. It runs overdue SLA push alerts and due delayed automation replies even when every agent has closed Joy Inbox.
 
 1. Deploy the backend package to the same Node.js 22 Lambda that has Firebase Admin credentials and FCM service-account permissions.
 2. Create an EventBridge Scheduler schedule, for example `rate(1 minute)`, with flexible time window disabled.
@@ -98,7 +98,7 @@ The backend now exports a separate Lambda entry point for scheduled checks. This
 5. Allow EventBridge Scheduler's execution role to invoke only that scheduled Lambda using `lambda:InvokeFunction`. Do not expose the scheduled handler through a public Function URL or HTTP route.
 6. Set a timeout appropriate to organization volume (start with 60 seconds) and monitor CloudWatch logs and Lambda errors/throttles.
 
-The scheduled runner scans organizations in pages and checks up to 1,000 overdue chats per organization per invocation. It uses the same per-chat transactional claim fields as the interactive checker to avoid duplicate notifications when both paths run. A chat is marked notified only after FCM reports at least one successful device delivery; failed/no-device deliveries remain eligible for a later check.
+The scheduled runner scans organizations in pages and checks up to 1,000 overdue chats per organization per invocation. The same invocation processes up to 50 due automation reply steps (scanning at most 200 queued records) from the organization automation queues. It uses the same per-chat transactional claim fields as the interactive checker to avoid duplicate notifications when both paths run. A chat is marked notified only after FCM reports at least one successful device delivery; failed/no-device deliveries remain eligible for a later check.
 
 When a push cannot be delivered, the checker releases its temporary claim and stores an exponential retry delay (1, 2, 4, 8, 16, 32, then up to 60 minutes). Successful delivery clears the retry counter and records `slaOverdueLastDeliveredAt`. Reassigning a chat resets its retry state so the new assignee is not held behind the previous assignee's backoff. Retry fields are stored on the chat document; no separate queue service is required.
 
@@ -159,4 +159,8 @@ Each keyword automation rule can now contain one to five ordered text reply step
 ### Automation execution history
 
 Owners and admins can read the latest 50 workflow runs through `GET /organizations/automation-runs?organizationId=...`. The endpoint returns rule name, customer phone, run status, completed/total steps, error or skip reason, and timestamps. The builder displays this recent history; it is a rolling latest-50 view, not a long-term analytics export.
+
+### Delayed automation replies
+
+Keyword automation steps can specify a wait in seconds before each later reply (0 to 86,400 seconds). The first reply is sent from the inbound webhook; later steps are stored in `organizations/{organizationId}/automationQueue` and delivered by `src/index.slaScheduledHandler`. Configure the EventBridge schedule above at `rate(1 minute)` for minute-level scheduling. A queued reply is skipped when its originating WhatsApp 24-hour customer-service window has expired. The scheduler processes up to 50 due steps per invocation and scans at most 200 queued records; increase capacity only after load testing. Failed queued steps are marked failed/partially_failed for operator review and are not automatically retried. A worker lease reduces concurrent duplicate processing, but external send success followed by a process crash before Firestore commit can still cause a duplicate on a later lease expiry; monitor CloudWatch and run history. This is scheduled delivery, not an exact-to-the-second timer.
 
