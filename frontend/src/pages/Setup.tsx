@@ -37,11 +37,15 @@ export default function Setup() {
   useEffect(() => { void refresh(); }, []);
 
   useEffect(() => {
-    const inviteOrganizationId = searchParams.get("organizationId") || "";
-    const inviteToken = searchParams.get("invite") || "";
+    const fragmentParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    // Accept older query-string links too, but new links keep the token in the
+    // fragment so it is not sent to hosting/CDN logs or Referer headers.
+    const inviteOrganizationId = fragmentParams.get("organizationId") || searchParams.get("organizationId") || "";
+    const inviteToken = fragmentParams.get("invite") || searchParams.get("invite") || "";
     if (!user || !inviteOrganizationId || !inviteToken || invitationHandled.current) return;
     invitationHandled.current = true;
     setSearchParams({}, { replace: true });
+    window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
     setBusy(true); setError(""); setNotice("");
     void acceptOrganizationInvitation(inviteOrganizationId, inviteToken)
       .then(async () => {
