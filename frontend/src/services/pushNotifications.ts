@@ -50,9 +50,13 @@ export type NotificationDelivery = {
   errorCode: string | null; createdAt: string | null;
 };
 
+export type TeamNotificationTypeStats = {
+  total: number; delivered: number; failed: number; retried: number; attempts: number; rate?: number;
+};
 export type TeamNotificationDeliveryAnalytics = {
   uid: string; name: string; role: string; total: number; delivered: number;
-  failed: number; retried: number; attempts: number; rate: number; lastActivityAt: string | null;
+  failed: number; retried: number; attempts: number; rate: number;
+  byType: Record<string, TeamNotificationTypeStats>; lastActivityAt: string | null;
 };
 
 export type RegisteredPushDevice = {
