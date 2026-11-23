@@ -65,6 +65,10 @@ async function updateTenantChatAssignment(db, organization, actor, input) {
     const now = new Date();
     const updates = { updatedAt: now };
     if (parsed.hasAssignee) {
+      if (chatSnapshot.get("assignedTo") !== parsed.assignedTo) {
+        updates.slaOverdueNotifiedFor = null;
+        updates.slaOverdueNotifiedAt = null;
+      }
       updates.assignedTo = parsed.assignedTo;
       updates.assignedBy = actor.uid;
       updates.assignedAt = parsed.assignedTo === null ? null : now;
