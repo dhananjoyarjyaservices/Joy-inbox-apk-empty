@@ -145,3 +145,35 @@ export async function assignOrganisationChat(
     { method: "POST", body: JSON.stringify({ assignedToUid, ...(status ? { status } : {}) }) },
   );
 }
+
+export interface OrganisationQuickReply {
+  id: string;
+  shortcut: string;
+  title: string;
+  text: string;
+  updatedAt?: { toDate?: () => Date } | Date;
+}
+
+export async function getOrganisationQuickReplies(orgId: string) {
+  const result = await request<{ quickReplies: OrganisationQuickReply[] }>(
+    `/organisations/${encodeURIComponent(orgId)}/quick-replies`,
+  );
+  return result.quickReplies || [];
+}
+
+export async function saveOrganisationQuickReply(
+  orgId: string,
+  reply: { shortcut: string; title: string; text: string },
+) {
+  return request<{ success: boolean; quickReply: OrganisationQuickReply }>(
+    `/organisations/${encodeURIComponent(orgId)}/quick-replies`,
+    { method: "POST", body: JSON.stringify(reply) },
+  );
+}
+
+export async function deleteOrganisationQuickReply(orgId: string, shortcut: string) {
+  return request<{ success: boolean; result: { deleted: string } }>(
+    `/organisations/${encodeURIComponent(orgId)}/quick-replies/${encodeURIComponent(shortcut)}`,
+    { method: "DELETE" },
+  );
+}
