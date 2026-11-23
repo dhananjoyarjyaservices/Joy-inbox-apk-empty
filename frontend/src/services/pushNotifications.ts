@@ -45,6 +45,11 @@ function getInstallationId(): string {
   return installationId;
 }
 
+export type NotificationDelivery = {
+  id: string; type: string; status: "delivered" | "failed"; attempts: number;
+  errorCode: string | null; createdAt: string | null;
+};
+
 export type RegisteredPushDevice = {
   installationId: string; deviceName: string; platform: string; userAgent: string;
   createdAt: string | null; updatedAt: string | null;
@@ -156,6 +161,13 @@ async function authenticatedGet<T>(path: string): Promise<T> {
   const result = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(result.error || "Device request failed.");
   return result;
+}
+
+export async function listNotificationDeliveries(organizationId: string): Promise<NotificationDelivery[]> {
+  const result = await authenticatedGet<{ deliveries?: NotificationDelivery[] }>(
+    `/organizations/notifications/deliveries?organizationId=${encodeURIComponent(organizationId)}`
+  );
+  return Array.isArray(result.deliveries) ? result.deliveries : [];
 }
 
 export async function listRegisteredPushDevices(organizationId: string): Promise<RegisteredPushDevice[]> {
