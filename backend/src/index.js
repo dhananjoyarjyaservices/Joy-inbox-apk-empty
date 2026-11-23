@@ -736,14 +736,24 @@ async function checkTenantSlaAlerts(event) {
   const db = getDb();
   const admin = getFirebaseAdmin();
   const cutoff = admin.firestore.Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000));
-  const snapshot = await db.collection("organizations").doc(organization.id)
+  const chatsQuery = db.collection("organizations").doc(organization.id)
     .collection("chats")
-    .where("responsePendingSince", "<=", cutoff)
-    .limit(100)
-    .get();
+    .where("responsePendingSince", "<=", cutoff);
+  const overdueDocuments = [];
+  let pageCursor = null;
+  // Bound each invocation while paging so the first 100 overdue chats cannot
+  // permanently hide later chats once their alert-claim fields are populated.
+  for (let page = 0; page < 10; page += 1) {
+    let pageQuery = chatsQuery.orderBy("responsePendingSince").limit(100);
+    if (pageCursor) pageQuery = pageQuery.startAfter(pageCursor);
+    const pageSnapshot = await pageQuery.get();
+    overdueDocuments.push(...pageSnapshot.docs);
+    if (pageSnapshot.size < 100) break;
+    pageCursor = pageSnapshot.docs[pageSnapshot.docs.length - 1];
+  }
 
   let notified = 0;
-  for (const document of snapshot.docs) {
+  for (const document of overdueDocuments) {
     const chat = document.data();
     const assignedTo = typeof chat.assignedTo === "string" ? chat.assignedTo : "";
     if (!assignedTo || chat.archived === true || chat.status === "resolved") continue;
