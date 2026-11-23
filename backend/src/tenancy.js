@@ -139,6 +139,78 @@ function rotateEncryptedSecret(record, options = {}) {
   throw new Error("A target tenant secret keyring is required for rotation.");
 }
 
+
+/**
+ * Rotates encrypted WhatsApp credentials for one explicitly selected tenant.
+ * Dry-run is the default. Each credential is updated in its own transaction
+ * to avoid overwriting a concurrent reconnect or token refresh.
+ */
+async function rotateOrganizationWhatsAppCredentials(db, organizationId, targetKeyring, options = {}) {
+  if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
+  const dryRun = options.dryRun !== false;
+  const organizationRef = db.collection("organizations").doc(organizationId);
+  const organizationSnapshot = await organizationRef.get();
+  if (!organizationSnapshot.exists) throw httpError("Organization was not found.", 404);
+  if (!targetKeyring) throw httpError("A target encryption keyring is required.", 400);
+  const target = typeof targetKeyring === "string" ? parseEncryptionKeyring(targetKeyring) : targetKeyring;
+  if (!target || !/^[A-Za-z0-9_-]{1,64}$/.test(target.activeKeyId || "") ||
+      !target.keys || !target.keys[target.activeKeyId]) {
+    throw httpError("Target encryption keyring is invalid.", 400);
+  }
+  const settingsRef = organizationRef.collection("settings").doc("whatsapp");
+  const [legacySnapshot, numbersSnapshot] = await Promise.all([
+    settingsRef.get(),
+    settingsRef.collection("numbers").get()
+  ]);
+  const candidates = [];
+  if (legacySnapshot.exists && legacySnapshot.data()?.accessToken) {
+    candidates.push({ ref: settingsRef, snapshot: legacySnapshot });
+  }
+  for (const snapshot of numbersSnapshot.docs || []) {
+    if (snapshot.exists !== false && snapshot.data()?.accessToken) {
+      candidates.push({ ref: settingsRef.collection("numbers").doc(snapshot.id), snapshot });
+    }
+  }
+  const summary = { organizationId, dryRun, scanned: candidates.length, rotated: 0, alreadyCurrent: 0, failed: 0 };
+  for (const candidate of candidates) {
+    try {
+      const current = candidate.snapshot.data().accessToken;
+      if (current?.version === 2 && current.keyId === target.activeKeyId) {
+        summary.alreadyCurrent += 1;
+        continue;
+      }
+      if (dryRun) {
+        // Verify decryptability before reporting a credential as eligible.
+        decryptSecret(current);
+        summary.rotated += 1;
+        continue;
+      }
+      await db.runTransaction(async (transaction) => {
+        const latest = await transaction.get(candidate.ref);
+        if (!latest.exists || !latest.data()?.accessToken) {
+          summary.alreadyCurrent += 1;
+          return;
+        }
+        const latestRecord = latest.data().accessToken;
+        if (latestRecord?.version === 2 && latestRecord.keyId === target.activeKeyId) {
+          summary.alreadyCurrent += 1;
+          return;
+        }
+        const rotated = rotateEncryptedSecret(latestRecord, { targetKeyring: target });
+        transaction.set(candidate.ref, {
+          accessToken: rotated,
+          credentialEncryptionUpdatedAt: new Date()
+        }, { merge: true });
+        summary.rotated += 1;
+      });
+    } catch (error) {
+      summary.failed += 1;
+      if (options.failOnError) throw error;
+    }
+  }
+  return summary;
+}
+
 async function resolvePhoneNumberOrganization(db, phoneNumberId) {
   if (!validId(phoneNumberId)) throw httpError("Invalid WhatsApp phone number ID.", 400);
   const mapping = await db.collection("whatsappPhoneNumbers").doc(phoneNumberId).get();
@@ -268,4 +340,4 @@ async function listWhatsAppConnections(db, organizationId) {
   return items;
 }
 
-module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, parseEncryptionKeyring, rotateEncryptedSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections };
+module.exports = { ROLES, ROLE_PERMISSIONS, requireOrganization, requirePermission, encryptSecret, decryptSecret, parseEncryptionKeyring, rotateEncryptedSecret, rotateOrganizationWhatsAppCredentials, resolvePhoneNumberOrganization, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections };
