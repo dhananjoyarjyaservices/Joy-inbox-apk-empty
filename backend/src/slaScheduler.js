@@ -42,7 +42,8 @@ async function checkOrganization(db, admin, organizationId) {
         if (timestampMillis(current.responsePendingSince) !== pendingMillis ||
             current.assignedTo !== assignedTo || current.archived === true ||
             current.status === "resolved" ||
-            current.slaOverdueNotifiedFor === pendingMillis) return false;
+            current.slaOverdueNotifiedFor === pendingMillis ||
+            (timestampMillis(current.slaOverdueRetryAfter) > Date.now())) return false;
         transaction.update(chatRef, {
           slaOverdueNotifiedFor: pendingMillis,
           slaOverdueNotifiedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -65,6 +66,11 @@ async function checkOrganization(db, admin, organizationId) {
         );
         if (delivered > 0) {
           notified += 1;
+          await chatRef.set({
+            slaOverdueRetryAfter: admin.firestore.FieldValue.delete(),
+            slaOverdueAttemptCount: admin.firestore.FieldValue.delete(),
+            slaOverdueLastDeliveredAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
         } else {
           await clearClaim(db, admin, chatRef, pendingMillis);
         }
@@ -80,13 +86,17 @@ async function checkOrganization(db, admin, organizationId) {
   return notified;
 }
 
-async function clearClaim(db, admin, chatRef, pendingMillis) {
+async function clearClaim(db, admin, chatRef, pendingMillis, retry = true) {
   await db.runTransaction(async (transaction) => {
     const latest = await transaction.get(chatRef);
     if (latest.exists && latest.get("slaOverdueNotifiedFor") === pendingMillis) {
+      const attempt = Number(latest.get("slaOverdueAttemptCount") || 0) + 1;
+      const delayMs = Math.min(60 * 60 * 1000, 60 * 1000 * (2 ** Math.min(attempt - 1, 6)));
       transaction.update(chatRef, {
         slaOverdueNotifiedFor: admin.firestore.FieldValue.delete(),
-        slaOverdueNotifiedAt: admin.firestore.FieldValue.delete()
+        slaOverdueNotifiedAt: admin.firestore.FieldValue.delete(),
+        slaOverdueAttemptCount: attempt,
+        ...(retry ? { slaOverdueRetryAfter: admin.firestore.Timestamp.fromDate(new Date(Date.now() + delayMs)) } : {})
       });
     }
   });
