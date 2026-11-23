@@ -580,7 +580,7 @@ async function handleTenantRoute(event) {
       const result = await updateOrganisationChat(db, user, orgChatActionMatch[1], orgChatActionMatch[2], parseBody(event), action);
       return jsonResponse(event, 200, { success: true, result });
     }
-    if (orgMediaMatch && method === "POST") {\n      const result = await sendOrganisationMedia(db, user, orgMediaMatch[1], parseBody(event));\n      return jsonResponse(event, 200, { success: true, message: result });\n    }\n    if (orgMediaMatch && method === "POST") {
+    if (orgMediaMatch && method === "POST") {
       const result = await sendOrganisationMedia(db, user, orgMediaMatch[1], parseBody(event));
       return jsonResponse(event, 200, { success: true, message: result });
     }
