@@ -49,15 +49,19 @@ async function runScheduledAutomationSteps(options = {}) {
       if (!organizationId || !phone || !text || !Number.isInteger(stepIndex) || stepIndex < 1 || stepIndex > 4) {
         throw new Error("Queued automation step has invalid details.");
       }
-      if (stepIndex > 1) {
+      const runSnapshot = await runRef.get();
+      const completedBeforeThisStep = Number(runSnapshot.exists ? runSnapshot.get("completedSteps") : 0);
+      let previousStepSent = runSnapshot.exists && completedBeforeThisStep >= stepIndex;
+      if (previousStepSent && stepIndex > 1) {
         const previousRef = organizationRef.collection("automationQueue").doc(`${queued.runId}_${stepIndex}`);
         const previous = await previousRef.get();
-        if (!previous.exists || previous.get("status") !== "sent") {
-          await queueRef.set({ status: "skipped", reason: "previous_step_not_sent", claimedUntil: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-          await runRef.set({ status: "partially_failed", reason: "previous_step_not_sent", updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-          skipped += 1;
-          continue;
-        }
+        previousStepSent = previous.exists && previous.get("status") === "sent";
+      }
+      if (!previousStepSent) {
+        await queueRef.set({ status: "skipped", reason: "previous_step_not_sent", claimedUntil: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        await runRef.set({ status: "partially_failed", reason: "previous_step_not_sent", updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        skipped += 1;
+        continue;
       }
       const windowExpiresAt = queued.windowExpiresAt && typeof queued.windowExpiresAt.toMillis === "function"
         ? queued.windowExpiresAt.toMillis() : 0;
