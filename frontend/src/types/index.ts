@@ -38,12 +38,14 @@ export interface ChatMessage {
   replyToMessageSender?: string;
   replyToMessageType?: string;
   interactive?: {
-    type: "button" | "list";
+    type: "button" | "list" | "cta_url";
     body: string;
     header?: string;
     footer?: string;
     buttons?: Array<{ id: string; title: string }>;
     buttonTitle?: string;
+    displayText?: string;
+    url?: string;
     sections?: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>;
   };
   interactiveReplyId?: string;
