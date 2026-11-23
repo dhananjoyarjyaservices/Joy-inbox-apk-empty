@@ -27,6 +27,21 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /chats/{chatId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if false;
+
+        match /messages/{messageId} {
+          allow read: if isOrgMember(orgId);
+          allow write: if false;
+        }
+      }
+
+      match /contacts/{contactId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if false;
+      }
+
       match /whatsappConnections/{connectionId} {
         allow read, write: if false;
       }
