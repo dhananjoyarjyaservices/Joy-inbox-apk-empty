@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ChangeEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
-import { ArrowLeft, MessageCircle, Send, RefreshCw, UserRoundCheck, StickyNote, Zap, Plus, X } from "lucide-react";
+import { ArrowLeft, MessageCircle, Send, RefreshCw, UserRoundCheck, StickyNote, Zap, Plus, X, Paperclip } from "lucide-react";
 import { db } from "../firebase/config";
 import {
   sendOrganisationWhatsAppText,
@@ -62,7 +62,7 @@ export default function OrganisationInbox() {
   const [chatSearch, setChatSearch] = useState("");
   const [tagDraft, setTagDraft] = useState("");
   const [savingTags, setSavingTags] = useState(false);
-  const [changingStatus, setChangingStatus] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);\n  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const selectedChat = useMemo(() => chats.find((chat) => chat.id === selectedChatId) || null, [chats, selectedChatId]);
   const filteredChats = useMemo(() => { const term = chatSearch.trim().toLowerCase(); return term ? chats.filter((chat) => [chat.customerName, chat.customerPhone, chat.lastMessage, ...(chat.tags || [])].some((value) => String(value || "").toLowerCase().includes(term))) : chats; }, [chats, chatSearch]);
@@ -183,6 +183,40 @@ export default function OrganisationInbox() {
     setDraft(reply.text);
   }
 
+  async function handleMediaSelect(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !selectedChat) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setError("File size 3 MB se kam hona chahiye.");
+      return;
+    }
+    const type = file.type.startsWith("image/") ? "image"
+      : file.type.startsWith("video/") ? "video"
+        : file.type.startsWith("audio/") ? "audio" : "document";
+    setUploadingMedia(true);
+    setError("");
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = "";
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+      }
+      const fileBase64 = btoa(binary);
+      await sendOrganisationWhatsAppMedia(orgId, {
+        to: selectedChat.customerPhone || selectedChat.id,
+        type,
+        mimeType: file.type,
+        filename: file.name,
+        caption: draft.trim(),
+        fileBase64,
+      });
+      setDraft("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Media message send nahi hua.");
+    } finally { setUploadingMedia(false); }
+  }
+
   async function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedChat || !draft.trim()) return;
@@ -266,9 +300,13 @@ export default function OrganisationInbox() {
             </form>}
             <div className="flex items-center gap-2 border-t border-gray-200 bg-[#f0f2f5] p-3">
               <button type="button" onClick={() => { setQuickReplyTitle(""); setQuickReplyShortcut(""); setShowQuickReplyForm(true); }} disabled={!draft.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#075e54] hover:bg-white disabled:opacity-40" aria-label="Save as quick reply"><Plus size={19} /></button>
+              <label className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#075e54] hover:bg-white ${uploadingMedia ? "opacity-40" : ""}`} title="Attach image, video, audio or document">
+                <Paperclip size={19} />
+                <input type="file" className="hidden" disabled={uploadingMedia} accept="image/jpeg,image/png,video/mp4,video/3gpp,audio/aac,audio/amr,audio/mpeg,audio/mp4,audio/ogg,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleMediaSelect} />
+              </label>
               <form onSubmit={handleSend} className="flex min-w-0 flex-1 items-center gap-2">
-                <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={4096} placeholder="Type a message · use / for quick replies" className="h-11 min-w-0 flex-1 rounded-full border-0 bg-white px-4 text-sm outline-none" />
-                <button disabled={sending || !draft.trim()} aria-label="Send WhatsApp message" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18} /></button>
+                <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={4096} placeholder={uploadingMedia ? "Uploading media..." : "Type a message · use / for quick replies"} className="h-11 min-w-0 flex-1 rounded-full border-0 bg-white px-4 text-sm outline-none" />
+                <button disabled={sending || uploadingMedia || !draft.trim()} aria-label="Send WhatsApp message" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#075e54] text-white disabled:opacity-50"><Send size={18} /></button>
               </form>
             </div>
           </> : <div className="flex flex-1 items-center justify-center text-center text-sm text-gray-500">Select a chat to view messages</div>}
