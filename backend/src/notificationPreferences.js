@@ -1,14 +1,18 @@
 const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
   assignment: true,
   status: true,
-  sla: true
+  sla: true,
+  soundEnabled: true,
+  desktopEnabled: true
 });
 
 function normalizeNotificationPreferences(value = {}) {
   return {
     assignment: value.assignment !== false,
     status: value.status !== false,
-    sla: value.sla !== false
+    sla: value.sla !== false,
+    soundEnabled: value.soundEnabled !== false,
+    desktopEnabled: value.desktopEnabled !== false
   };
 }
 
