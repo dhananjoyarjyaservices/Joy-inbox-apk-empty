@@ -43,8 +43,12 @@ function createInvitationUrl(baseUrl, organizationId, token) {
     throw invitationError("FRONTEND_BASE_URL must use HTTPS.", 503);
   }
   const inviteUrl = new URL("/setup", url);
-  inviteUrl.searchParams.set("organizationId", organizationId);
-  inviteUrl.searchParams.set("invite", token);
+  // Keep the one-time token in the URL fragment: fragments are not sent in
+  // HTTP requests or Referer headers, reducing exposure in proxy/server logs.
+  const fragment = new URLSearchParams();
+  fragment.set("organizationId", organizationId);
+  fragment.set("invite", token);
+  inviteUrl.hash = fragment.toString();
   return inviteUrl.toString();
 }
 
