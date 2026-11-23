@@ -1,5 +1,6 @@
 
 const crypto = require("crypto");
+const { handleTenantRoute } = require("./tenants");
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const {
   getHeader,
@@ -818,6 +819,9 @@ exports.handler = async (event) => {
   if (method === "OPTIONS") {
     return emptyResponse(event, 204);
   }
+
+  const tenantResponse = await handleTenantRoute(event);
+  if (tenantResponse) return tenantResponse;
 
   if (method === "GET" && path.endsWith("/webhook")) {
     const result = await verifyWebhook(event);
