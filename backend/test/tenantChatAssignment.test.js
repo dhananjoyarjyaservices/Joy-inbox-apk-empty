@@ -138,7 +138,7 @@ test("tenant chat assignment route builds actor context from verified user and s
   assert.notEqual(handlerStart, -1);
   assert.notEqual(handlerEnd, -1);
   const handler = source.slice(handlerStart, handlerEnd);
-  assert.match(handler, /const actor = \\{ uid: decoded\\.uid, email: decoded\\.email \\|\\| "", role: organization\\.role \\}/);
-  assert.match(handler, /updateTenantChatAssignment\\(getDb\\(\\), organization, actor, actionInput\\)/);
+  assert.ok(handler.includes('const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };'));
+  assert.ok(handler.includes("updateTenantChatAssignment(getDb(), organization, actor, actionInput)"));
 });
 
