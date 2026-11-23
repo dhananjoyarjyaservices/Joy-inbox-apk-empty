@@ -652,6 +652,9 @@ async function sendTenantMessage(event) {
   if (claim.state === "completed") {
     return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
   }
+  if (claim.state === "unknown") {
+    return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
+  }
   if (claim.state === "pending") {
     return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   }
@@ -757,6 +760,9 @@ async function sendTenantTemplate(event) {
   const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId: credentials.phoneNumberId || null, to, templateName, language, variables, headerVariables, buttonVariables, headerMedia: headerMedia ? { mimeType: headerMedia.mimeType, filename: headerMedia.filename, base64: headerMedia.base64 } : null });
   const claim = await claimTenantSendRequest(db, organization.id, to, clientMessageId, payloadHash);
   if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  if (claim.state === "unknown") {
+    return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
+  }
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   const template = { name: templateName, language: { code: language } };
   const components = [];
@@ -868,6 +874,9 @@ async function retryTenantFailedTemplate(event) {
   const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId, to: chatId, retryOf: originalMessageId, templateName, language, headerVariables, variables, buttonVariables, mediaId });
   const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
   if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  if (claim.state === "unknown") {
+    return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
+  }
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   const components = [];
   if (mediaId) components.push({ type: "header", parameters: [{ type: mediaFormat, [mediaFormat]: { id: mediaId } }] });
@@ -929,6 +938,9 @@ async function retryTenantFailedText(event) {
   const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
   if (claim.state === "completed") {
     return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  }
+  if (claim.state === "unknown") {
+    return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
   }
   if (claim.state === "pending") {
     return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
@@ -1017,6 +1029,9 @@ async function sendTenantMediaMessage(event) {
   const payloadHash = hashSendPayload({ organizationId: organization.id, phoneNumberId: credentials.phoneNumberId || null, to, type, caption, filename, mimeType, source, contentHash, contextMessageId: replyContext?.contextMessageId || null });
   const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
   if (claim.state === "completed") return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
+  if (claim.state === "unknown") {
+    return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
+  }
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   let uploaded, result, sendStarted = false;
   try {
@@ -1127,6 +1142,9 @@ async function sendMessage(event) {
       messageId: claim.messageId,
       clientMessageId
     });
+  }
+  if (claim.state === "unknown") {
+    return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
   }
   if (claim.state === "pending") {
     return jsonResponse(event, 202, {
@@ -1517,6 +1535,9 @@ async function sendMediaMessage(event) {
       messageId: claim.messageId,
       clientMessageId
     });
+  }
+  if (claim.state === "unknown") {
+    return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
   }
   if (claim.state === "pending") {
     return jsonResponse(event, 202, {
