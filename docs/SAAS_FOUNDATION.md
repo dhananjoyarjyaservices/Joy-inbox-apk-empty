@@ -82,3 +82,19 @@ openssl rand -hex 32
 Store the value in AWS Lambda environment configuration or a secrets manager; do not commit it to GitHub. Back it up securely because losing the key makes previously encrypted tokens unrecoverable. Rotating the key requires an explicit re-encryption migration.
 
 **Important:** This phase verifies and stores per-business credentials only. Existing message sending, webhook processing, conversation storage and status callbacks still use the legacy single-owner code path. Do not enable live production messaging for newly connected organisations until those paths are migrated to the organisation-scoped model and verified with cross-tenant tests.
+
+
+## Organisation-scoped WhatsApp inbox foundation
+
+- Each verified WhatsApp Phone Number ID is mapped to one organisation in the server-only `whatsappPhoneNumbers` collection.
+- The webhook verification token is generated per connection. Only its SHA-256 hash is stored; the plaintext token is returned once after saving credentials.
+- Meta webhook GET verification accepts either the legacy global token or a matching organisation token.
+- Incoming messages are written under `organisations/{orgId}/chats/{customerPhone}/messages/{wamid}`; contact profiles are written under `organisations/{orgId}/contacts/{customerPhone}`.
+- Message delivery/read status callbacks update the matching organisation message document.
+- Customer media is not downloaded or persisted; only text/caption/type metadata is retained.
+- `POST /organisations/{orgId}/messages` checks active membership, decrypts that organisation's token server-side, sends a WhatsApp text message using that organisation's Phone Number ID, and persists the outgoing message under that organisation's chat.
+- The new organisation inbox UI reads only the organisation-scoped Firestore paths and uses the tenant-authorized send API.
+
+Configure the same AWS Lambda webhook URL (the `/webhook` endpoint) in Meta, and use the one-time organisation verify token displayed after saving. In Meta, subscribe the relevant WhatsApp Business Account to the app and enable the `messages` webhook field. The Meta App Secret used for request signature validation remains a platform-level secret.
+
+The new inbox supports basic text conversation viewing and sending. Team assignment, internal notes, tags, quick replies, media/template sending, automations, broadcasts, analytics and billing remain future work. Do not migrate the old top-level single-owner chat data automatically; it needs a reviewed tenant ownership mapping and migration plan.
