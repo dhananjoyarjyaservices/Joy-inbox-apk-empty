@@ -412,12 +412,11 @@ async function handleTenantChatAssignmentAudit(event) {
   const organization = await requireOrganization(getDb(), decoded, params.organizationId);
   requirePermission(organization, "chats:read");
   const chatId = String(params.chatId || "");
-  if (!/^\\d{6,20}$/.test(chatId)) {
+  if (!/^\d{6,20}$/.test(chatId)) {
     return jsonResponse(event, 400, { error: "A valid conversation ID is required." });
   }
   const snapshot = await organization.ref.collection("auditLogs")
     .where("details.chatId", "==", chatId)
-    .limit(50)
     .get();
   const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
     .filter(item => ["chat.assigned", "chat.status_changed"].includes(item.action))
