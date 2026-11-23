@@ -61,3 +61,10 @@ Returns the latest 50 campaign summaries.
 ## Before production sending
 
 Add an authoritative organization-wide opt-out/suppression list, recipient-level delivery idempotency, queue scheduling and rate limits, pause/cancel controls, delivery webhook reconciliation, and a campaign worker. Never send marketing messages to recipients without valid WhatsApp opt-in. Use approved templates for business-initiated messages outside the customer-service window.
+
+
+## WhatsApp opt-out suppression
+
+Inbound text replies matching standard opt-out keywords (STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, REMOVE and OPT OUT) create an organization-scoped suppression record. The webhook does not run greeting or keyword automation for that opt-out message. Campaign draft creation checks suppression records in bounded batches and excludes opted-out recipients while increasing the skipped-recipient count. Suppression is scoped to the organization and keyed by a SHA-256 hash of the normalized phone number.
+
+This is a compliance safeguard for campaign preparation; a complete sending worker, campaign controls, and delivery reconciliation are still required before campaigns can be launched.
