@@ -42,6 +42,7 @@ Annual customers pay for 10 months and receive 12 months of service (16.67% lowe
 ## Hard-limit behavior (no automatic overage)
 
 - Display in-app billing warnings to workspace owners at 80%, 95% and 100% of message quota. Push/email alert delivery is a separate launch item and must not be claimed until configured and tested.
+- A workspace without an active trial or paid subscription cannot send messages or add team members; complete Checkout to start the one-time trial or paid plan first.
 - At the message limit, block new outbound sends from every tenant channel (text, media, template, interactive, campaigns, automations and quick replies) with a clear HTTP 429 response and upgrade instructions.
 - Continue accepting and storing inbound WhatsApp webhooks and keep existing conversation history readable; do not drop customer messages because an outbound quota is exhausted.
 - At the media-transfer limit, block further media transfers through Joy Inbox. Text messages remain available if message quota remains.
