@@ -65,7 +65,6 @@ async function createOrganizationApiKey(db, organizationId, actorUid, input, now
 async function listOrganizationApiKeys(db, organizationId) {
   const snapshot = await db.collection("publicApiKeys")
     .where("organizationId", "==", organizationId)
-    .orderBy("createdAt", "desc")
     .limit(100)
     .get();
   return snapshot.docs.map(document => {
@@ -81,7 +80,7 @@ async function listOrganizationApiKeys(db, organizationId) {
       lastUsedAt: data.lastUsedAt || null,
       revokedAt: data.revokedAt || null
     };
-  });
+  }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }
 
 async function revokeOrganizationApiKey(db, organizationId, keyId, now = Date.now()) {
