@@ -5,6 +5,7 @@ Joy Inbox is a multi-tenant WhatsApp Business inbox SaaS built with React, TypeS
 ## Product capabilities in the SaaS branch
 
 - Workspace onboarding, account switching, owner/admin/agent roles and workspace invitations.
+- Initial tenant-scoped Sales CRM with a five-stage pipeline, configurable stages, up to 30 typed custom fields, lead values/sources/follow-ups and a pipeline board.
 - Shared tenant inbox with assignment, status management, pin/archive, search, paginated history, customer contacts, one-tap WhatsApp contact links and internal notes.
 - Tenant-scoped text, media, approved-template and interactive WhatsApp messaging, including reply buttons, lists, CTA links, media carousels and quoted replies.
 - Searchable saved Quick Replies, greeting automation, keyword automation and scheduled automation workers.
@@ -69,7 +70,8 @@ No production Firebase rules/indexes, AWS Lambda/EventBridge resources, Meta web
 
 ## Current authoritative checklists
 
-- [docs/INTERAKT-FEATURE-PARITY.md](docs/INTERAKT-FEATURE-PARITY.md) — audited feature-by-feature comparison and missing-work backlog.\n- [docs/EVENING-IMPLEMENTATION-PLAN.md](docs/EVENING-IMPLEMENTATION-PLAN.md) — prioritized build sequence and acceptance criteria.\n- [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md)
+- [docs/INTERAKT-FEATURE-PARITY.md](docs/INTERAKT-FEATURE-PARITY.md) — audited feature-by-feature comparison and missing-work backlog.\n- [docs/EVENING-IMPLEMENTATION-PLAN.md](docs/EVENING-IMPLEMENTATION-PLAN.md) — prioritized build sequence and acceptance criteria.\n- [docs/CRM-FOUNDATION.md](docs/CRM-FOUNDATION.md)
+- [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md)
 - [docs/DEPLOYMENT-CLOUDFLARE-AWS.md](docs/DEPLOYMENT-CLOUDFLARE-AWS.md)
 - [docs/BILLING-STRIPE.md](docs/BILLING-STRIPE.md)
 - [docs/ORGANIZATION-ONBOARDING.md](docs/ORGANIZATION-ONBOARDING.md)
