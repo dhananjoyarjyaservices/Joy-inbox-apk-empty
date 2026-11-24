@@ -40,7 +40,7 @@ const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMem
 const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
 const { updateTenantChatAssignment } = require("./tenantChatAssignment");
-const { requireOrganization, requirePermission, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
+const { requireOrganization, requirePermission, encryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
 const {
   getEmbeddedSignupConfig,
   createSignupSession,
@@ -318,6 +318,25 @@ async function handleWhatsAppEmbeddedSignupComplete(event) {
   requirePermission(organization, "whatsapp:manage");
   const claimed = await claimSignupSession(getDb(), organization.id, decoded.uid, body.sessionId);
   try {
+    // Fail before making Meta-side changes if this environment cannot safely
+    // encrypt the resulting business token and two-step registration PIN.
+    try { encryptSecret("joy-inbox-embedded-signup-storage-preflight"); }
+    catch { throw Object.assign(new Error("Secure WhatsApp credential storage is not configured on this server."), { statusCode: 503 }); }
+
+    const phoneNumberId = String(body.phoneNumberId || "");
+    if (!/^[0-9]{5,32}$/.test(phoneNumberId)) {
+      throw Object.assign(new Error("Meta did not return a valid WhatsApp phone number. Start again."), { statusCode: 400 });
+    }
+    try {
+      const existingOrganization = await resolvePhoneNumberOrganization(getDb(), phoneNumberId);
+      if (existingOrganization.id !== organization.id) {
+        throw Object.assign(new Error("This WhatsApp number is already connected to another Joy Inbox workspace."), { statusCode: 409 });
+      }
+      throw Object.assign(new Error("This WhatsApp number is already connected to this workspace."), { statusCode: 409 });
+    } catch (error) {
+      if (error.statusCode !== 404) throw error;
+    }
+
     const registrationPin = generateRegistrationPin();
     const result = await completeEmbeddedSignup({
       code: body.code,
