@@ -97,6 +97,9 @@ test("webhook URL validation requires HTTPS and rejects local/private destinatio
     "https://127.0.0.1/hook",
     "https://10.0.0.2/hook",
     "https://192.168.1.5/hook",
+    "https://169.254.169.254/latest",
+    "https://192.0.2.10/hook",
+    "https://[::1]/hook",
     "https://metadata.google.internal/latest",
     "https://user:password@hooks.example.com/hook",
     "https://hooks.example.com:8443/hook"
@@ -187,27 +190,27 @@ test("delivers a signed webhook and records the HTTP result", async () => {
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
 
-test("retries failed webhook deliveries with backoff and marks terminal failures", async () => {
+test("retries failed webhook deliveries with exponential backoff and marks the eighth attempt terminal", async () => {
   process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 16).toString("base64");
   const db = fakeDb();
   await createOrganizationWebhook(db, "org_a", "owner", {
     name: "Contacts", url: "https://hooks.example.com/events", events: ["contact.upserted"]
   });
   await enqueueOrganizationWebhookEvent(db, "org_a", "contact.upserted", "contact-43", { phone: "+919876543211" }, 1000);
-  const failed = await processPendingWebhookDeliveries(db, {
-    now: 1000,
-    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
-    fetchImpl: async () => ({ ok: false, status: 503 })
-  });
-  assert.deepEqual(failed, { delivered: 0, retried: 1, failed: 0 });
-  let deliveryEntry = [...db.records.entries()].find(([path]) => path.startsWith("webhookDeliveryQueue/"));
-  assert.equal(deliveryEntry[1].status, "pending");
-  assert.equal(deliveryEntry[1].attempts, 1);
-  const terminal = await processPendingWebhookDeliveries(db, {
-    now: deliveryEntry[1].nextAttemptAt.getTime(),
-    lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
-    fetchImpl: async () => ({ ok: false, status: 503 })
-  });
-  assert.deepEqual(terminal, { delivered: 0, retried: 1, failed: 0 });
+  let now = 1000;
+  let deliveryEntry;
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    const result = await processPendingWebhookDeliveries(db, {
+      now,
+      lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+      fetchImpl: async () => ({ ok: false, status: 503 })
+    });
+    if (attempt < 8) assert.deepEqual(result, { delivered: 0, retried: 1, failed: 0 });
+    else assert.deepEqual(result, { delivered: 0, retried: 0, failed: 1 });
+    deliveryEntry = [...db.records.entries()].find(([path]) => path.startsWith("webhookDeliveryQueue/"));
+    assert.equal(deliveryEntry[1].attempts, attempt);
+    now = deliveryEntry[1].nextAttemptAt.getTime();
+  }
+  assert.equal(deliveryEntry[1].status, "failed");
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
