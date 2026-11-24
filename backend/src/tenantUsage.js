@@ -76,6 +76,28 @@ function getReservationId(value) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex");
 }
 
+async function getTenantMessageUsage(db, organizationId, subscription, now = new Date()) {
+  if (!subscription || !["active", "trialing"].includes(String(subscription.status || ""))) return null;
+  const window = getUsageWindow(subscription, now);
+  const usageRef = db.collection("organizations").doc(organizationId)
+    .collection("billingUsage").doc(window.key);
+  const snapshot = await usageRef.get();
+  const data = snapshot.exists ? snapshot.data() || {} : {};
+  const used = Math.max(0, Number(data.messagesUsed || 0));
+  const reserved = Math.max(0, Number(data.messagesReserved || 0));
+  const percent = window.limit > 0 ? Math.min(100, Math.floor((used + reserved) / window.limit * 100)) : 100;
+  return {
+    messagesUsed: used,
+    messagesReserved: reserved,
+    messageLimit: window.limit,
+    percent,
+    thresholdsReached: [80, 95, 100].filter(threshold => percent >= threshold),
+    periodStart: window.start.toISOString(),
+    periodEnd: window.end.toISOString(),
+    trial: window.trial
+  };
+}
+
 async function reserveOutboundMessage(db, organizationId, clientMessageId, now = new Date()) {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(organizationId || ""))) {
     throw usageError("A valid workspace is required for quota enforcement.", 400);
@@ -191,6 +213,7 @@ module.exports = {
   usageError,
   addUtcMonths,
   getUsageWindow,
+  getTenantMessageUsage,
   reserveOutboundMessage,
   finishOutboundReservation,
   recordInboundMessageUsage
