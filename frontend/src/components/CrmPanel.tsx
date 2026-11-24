@@ -5,9 +5,12 @@ import {
   type CrmField, type CrmLead, type CrmStage
 } from "../services/crm";
 
-type Props = { organizationId: string };
+import type { TenantContact } from "../services/tenantResources";
+import type { OrganizationMember } from "../services/organizationMembers";
 
-export default function CrmPanel({ organizationId }: Props) {
+type Props = { organizationId: string; contacts: TenantContact[]; members: OrganizationMember[] };
+
+export default function CrmPanel({ organizationId, contacts, members }: Props) {
   const [fields, setFields] = useState<CrmField[]>([]);
   const [stages, setStages] = useState<CrmStage[]>([]);
   const [leads, setLeads] = useState<CrmLead[]>([]);
@@ -17,6 +20,8 @@ export default function CrmPanel({ organizationId }: Props) {
   const [title, setTitle] = useState("");
   const [value, setValue] = useState("");
   const [source, setSource] = useState("");
+  const [contactId, setContactId] = useState("");
+  const [ownerUid, setOwnerUid] = useState("");
   const [stageId, setStageId] = useState("new");
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldType, setFieldType] = useState<CrmField["type"]>("text");
@@ -47,10 +52,10 @@ export default function CrmPanel({ organizationId }: Props) {
     setSaving(true); setError("");
     try {
       await saveCrmLead(organizationId, {
-        title: title.trim(), contactId: "", stageId, ownerUid: "", source: source.trim(),
+        title: title.trim(), contactId, stageId, ownerUid, source: source.trim(),
         value: value.trim() ? Number(value) : null, currency: "INR", notes: "", nextFollowUpAt: null, customFields: customValues
       });
-      setTitle(""); setValue(""); setSource(""); setCustomValues({});
+      setTitle(""); setValue(""); setSource(""); setContactId(""); setOwnerUid(""); setCustomValues({});
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "Lead could not be saved."); }
     finally { setSaving(false); }
@@ -121,6 +126,8 @@ export default function CrmPanel({ organizationId }: Props) {
         <label className="text-xs text-gray-600 sm:col-span-2">Lead / deal name<input required maxLength={120} value={title} onChange={event => setTitle(event.target.value)} placeholder="Website redesign project" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
         <label className="text-xs text-gray-600">Deal value (₹)<input type="number" min="0" max="1000000000000" step="0.01" value={value} onChange={event => setValue(event.target.value)} placeholder="25000" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
         <label className="text-xs text-gray-600">Initial stage<select value={stageId} onChange={event => setStageId(event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">{activeStages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}</select></label>
+        <label className="text-xs text-gray-600">Linked customer<select value={contactId} onChange={event => setContactId(event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm"><option value="">No contact linked</option>{contacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name} · {contact.phone}</option>)}</select></label>
+        <label className="text-xs text-gray-600">Lead owner<select value={ownerUid} onChange={event => setOwnerUid(event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm"><option value="">Unassigned</option>{members.filter(member => member.status === "active").map(member => <option key={member.uid} value={member.uid}>{member.displayName || member.email || member.uid}</option>)}</select></label>
         <label className="text-xs text-gray-600 sm:col-span-3">Lead source<input maxLength={80} value={source} onChange={event => setSource(event.target.value)} placeholder="Website, referral, advertisement..." className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
         {fields.filter(field => field.active).map(field => <label key={field.id} className="text-xs text-gray-600">{field.label}{field.required ? " *" : ""}{field.type === "select" ? <select required={field.required} value={String(customValues[field.key] ?? "")} onChange={event => setCustomValues(current => ({ ...current, [field.key]: event.target.value }))} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm"><option value="">Choose...</option>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select> : field.type === "boolean" ? <span className="mt-2 flex items-center gap-2"><input type="checkbox" checked={customValues[field.key] === true} onChange={event => setCustomValues(current => ({ ...current, [field.key]: event.target.checked }))}/><span>Yes</span></span> : <input required={field.required} type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"} value={String(customValues[field.key] ?? "")} onChange={event => setCustomValues(current => ({ ...current, [field.key]: field.type === "number" && event.target.value !== "" ? Number(event.target.value) : event.target.value }))} className="mt-1 w-full rounded-lg border p-2 text-sm"/>}</label>)}
         <button disabled={saving || loading || !title.trim() || !stageId} className="mt-auto rounded-lg bg-[#075e54] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Plus size={15} className="mr-1 inline"/> Add lead</button>
@@ -131,7 +138,7 @@ export default function CrmPanel({ organizationId }: Props) {
         <div className="text-[11px] text-gray-500 md:col-span-2">Custom fields are defined and validated for CRM leads. This first pass supports up to 30 workspace fields and 20 pipeline stages. Contact linking, advanced reporting and bulk import are still pending.</div>
       </div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">Pipeline board</h3><span className="text-xs text-gray-500">{leads.length} leads · {fields.filter(field => field.active).length} custom fields</span></div>
-      {loading ? <p className="rounded-xl border bg-white p-5 text-sm text-gray-500">Loading CRM...</p> : <div className="grid gap-3 xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2">{grouped.map(({ stage, leads: stageLeads }) => <section key={stage.id} className="min-h-48 rounded-xl border bg-gray-100 p-3"><div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">{stage.name}</h4><span className="rounded-full bg-white px-2 py-0.5 text-[10px] text-gray-500">{stageLeads.length}</span></div><div className="space-y-2">{stageLeads.map(lead => <article key={lead.id} className="rounded-lg border bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-2"><strong className="break-words text-xs">{lead.title}</strong><button type="button" title="Delete lead" onClick={() => void removeLead(lead)} disabled={saving} className="text-gray-400 hover:text-red-600"><Trash2 size={13}/></button></div>{lead.value !== null && <p className="mt-2 text-xs font-semibold text-[#075e54]">{new Intl.NumberFormat("en-IN", { style: "currency", currency: lead.currency || "INR", maximumFractionDigits: 0 }).format(lead.value)}</p>}{lead.source && <p className="mt-1 text-[10px] text-gray-500">Source: {lead.source}</p>}<label className="mt-3 block text-[10px] text-gray-500">Move to<select value={lead.stageId} onChange={event => void moveLead(lead, event.target.value)} disabled={saving} className="mt-1 w-full rounded-md border bg-white p-1.5 text-xs">{activeStages.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label></article>)}</div>{!stageLeads.length && <p className="rounded-lg border border-dashed bg-white/60 p-3 text-center text-[10px] text-gray-400">No leads here</p>}</section>)}</div>}
+      {loading ? <p className="rounded-xl border bg-white p-5 text-sm text-gray-500">Loading CRM...</p> : <div className="grid gap-3 xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2">{grouped.map(({ stage, leads: stageLeads }) => <section key={stage.id} className="min-h-48 rounded-xl border bg-gray-100 p-3"><div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">{stage.name}</h4><span className="rounded-full bg-white px-2 py-0.5 text-[10px] text-gray-500">{stageLeads.length}</span></div><div className="space-y-2">{stageLeads.map(lead => <article key={lead.id} className="rounded-lg border bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-2"><strong className="break-words text-xs">{lead.title}</strong><button type="button" title="Delete lead" onClick={() => void removeLead(lead)} disabled={saving} className="text-gray-400 hover:text-red-600"><Trash2 size={13}/></button></div>{lead.value !== null && <p className="mt-2 text-xs font-semibold text-[#075e54]">{new Intl.NumberFormat("en-IN", { style: "currency", currency: lead.currency || "INR", maximumFractionDigits: 0 }).format(lead.value)}</p>}{lead.source && <p className="mt-1 text-[10px] text-gray-500">Source: {lead.source}</p>}{lead.contactId && <p className="mt-1 text-[10px] text-gray-500">Customer: {contacts.find(contact => contact.id === lead.contactId)?.name || lead.contactId}</p>}{lead.ownerUid && <p className="mt-1 text-[10px] text-gray-500">Owner: {members.find(member => member.uid === lead.ownerUid)?.displayName || members.find(member => member.uid === lead.ownerUid)?.email || "Workspace member"}</p>}<label className="mt-3 block text-[10px] text-gray-500">Move to<select value={lead.stageId} onChange={event => void moveLead(lead, event.target.value)} disabled={saving} className="mt-1 w-full rounded-md border bg-white p-1.5 text-xs">{activeStages.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label></article>)}</div>{!stageLeads.length && <p className="rounded-lg border border-dashed bg-white/60 p-3 text-center text-[10px] text-gray-400">No leads here</p>}</section>)}</div>}
     </div>
   </section>;
 }
