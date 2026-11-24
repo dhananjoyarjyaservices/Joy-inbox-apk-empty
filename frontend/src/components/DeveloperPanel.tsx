@@ -67,7 +67,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
     } catch (e) { setError(e instanceof Error ? e.message : "Developer settings could not be loaded."); }
     finally { setLoading(false); }
   }
-  useEffect(() => { void refresh(); }, [organizationId]);
+  useEffect(() => { void refresh(); }, [organizationId, usageDays]);
 
   async function createKey(event: FormEvent) {
     event.preventDefault();
