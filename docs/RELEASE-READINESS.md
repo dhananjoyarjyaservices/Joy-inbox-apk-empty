@@ -105,7 +105,7 @@ Last fully verified branch head before the CRM feature commits:
 - Joy Inbox CI (run 45356103837): backend unit tests and frontend TypeScript/tests/build both passed.
 - Cloudflare Pages preview deployed successfully for the verified head: `https://36702ad2.joy-inbox-apk-empty.pages.dev`. Branch preview: `https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev`.
 
-Current development head after the CRM implementation: `6a53878749e6e5e410cb8721fb82d6c926b7b195`. The connected GitHub status/run lookups have not returned checks for this newer head yet. Treat the CRM commits as **not CI-verified** until fresh backend tests, frontend TypeScript/build and preview deployment complete.
+The current PR #1 branch tip includes the CRM foundation and follow-up fixes. The connected GitHub status/run lookups have not returned checks for this newer work yet. Treat the CRM commits as **not CI-verified** until fresh backend tests, frontend TypeScript/build and preview deployment complete.
 
 ## Static security review completed in repository
 
