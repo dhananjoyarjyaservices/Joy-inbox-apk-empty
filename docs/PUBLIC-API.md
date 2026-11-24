@@ -118,3 +118,15 @@ Content-Type: application/json
 { "organizationId": "WORKSPACE_ID", "deliveryId": "64-character-delivery-document-id" }
 ```
 Only failed deliveries belonging to the selected workspace can be replayed. The server resets the retry state and queues the existing signed event again; it does not create a new event or change its payload. A delivery that is pending, processing or already delivered cannot be replayed.
+
+
+### Rotate a webhook signing secret
+
+```http
+PUT /organizations/developer/webhooks
+Authorization: Bearer FIREBASE_ID_TOKEN
+Content-Type: application/json
+
+{ "organizationId": "WORKSPACE_ID", "webhookId": "WEBHOOK_ID" }
+```
+Only an active subscription in the selected workspace can be rotated. The previous secret is replaced immediately; the new signing secret is returned once and must be copied into the receiving integration before its next delivery.
