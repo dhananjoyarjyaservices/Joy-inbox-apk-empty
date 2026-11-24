@@ -6,7 +6,7 @@ const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
-const { matchesAutomationRule, sortAutomationRules } = require("./automationRules");
+const { findMatchingAutomationRule } = require("./automationRules");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 
@@ -149,10 +149,10 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   const body = inboundMessage.text.body.trim().slice(0, 4096);
   if (!body) return;
   const rulesSnapshot = await organization.ref.collection("automationRules").limit(100).get();
-  const rules = sortAutomationRules(rulesSnapshot.docs
+  const rules = rulesSnapshot.docs
     .map((document) => ({ id: document.id, ...document.data() }))
-    .filter((rule) => rule.enabled === true && typeof rule.keyword === "string" && (typeof rule.response === "string" || (Array.isArray(rule.steps) && rule.steps.length > 0))));
-  const rule = rules.find((item) => matchesAutomationRule(item, body));
+    .filter((rule) => typeof rule.keyword === "string" && (typeof rule.response === "string" || (Array.isArray(rule.steps) && rule.steps.length > 0)));
+  const rule = findMatchingAutomationRule(rules, body);
   if (!rule) return;
 
   const inboundTimestamp = Number(inboundMessage.timestamp)
