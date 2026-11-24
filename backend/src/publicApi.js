@@ -152,8 +152,6 @@ async function listOrganizationApiUsage(db, organizationId, options = {}) {
   const toKey = new Date(options.now === undefined ? Date.now() : options.now).toISOString().slice(0, 10).replace(/-/g, "");
   const snapshot = await db.collection("publicApiUsageDaily")
     .where("organizationId", "==", organizationId)
-    .where("dateKey", ">=", fromKey)
-    .where("dateKey", "<=", toKey)
     .limit(10000)
     .get();
   const daily = snapshot.docs.map(document => {
@@ -164,7 +162,8 @@ async function listOrganizationApiUsage(db, organizationId, options = {}) {
       requests: Number(data.requestCount || 0),
       rateLimited: Number(data.rateLimitedCount || 0)
     };
-  }).sort((a, b) => b.date.localeCompare(a.date) || a.keyId.localeCompare(b.keyId));
+  }).filter(item => item.date >= fromKey && item.date <= toKey)
+    .sort((a, b) => b.date.localeCompare(a.date) || a.keyId.localeCompare(b.keyId));
   const totals = daily.reduce((result, item) => {
     result.requests += item.requests;
     result.rateLimited += item.rateLimited;
