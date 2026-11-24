@@ -72,6 +72,7 @@ test("Embedded Signup config is public-only and unavailable until app/config IDs
   });
   assert.equal(getEmbeddedSignupConfig({ META_APP_ID: env.META_APP_ID }), null);
   assert.equal(getEmbeddedSignupConfig({ ...env, META_APP_ID: "not-an-id" }), null);
+  assert.equal(getEmbeddedSignupConfig({ ...env, META_APP_SECRET: "" }), null);
 });
 
 
