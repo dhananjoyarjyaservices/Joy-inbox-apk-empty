@@ -96,3 +96,25 @@ Workspace webhook subscriptions can also select:
 - `lead.deleted` — a lead is deleted; payload contains the workspace lead ID and organization ID.
 
 Events use the same signed delivery queue, retry policy and idempotent event envelope as contact and message events. A webhook enqueue failure is logged and does not roll back a CRM save.
+
+
+## Webhook delivery operations
+
+The workspace Developer panel shows recent webhook delivery attempts and their status.
+
+### List delivery history
+```http
+GET /organizations/developer/webhook-deliveries?organizationId=WORKSPACE_ID&limit=50
+Authorization: Bearer FIREBASE_ID_TOKEN
+```
+Requires an authenticated workspace member with API management permission. The response is limited to 1–100 recent deliveries and includes event, status, attempts, HTTP response, timestamps and the last delivery error.
+
+### Replay a failed delivery
+```http
+POST /organizations/developer/webhook-deliveries
+Authorization: Bearer FIREBASE_ID_TOKEN
+Content-Type: application/json
+
+{ "organizationId": "WORKSPACE_ID", "deliveryId": "64-character-delivery-document-id" }
+```
+Only failed deliveries belonging to the selected workspace can be replayed. The server resets the retry state and queues the existing signed event again; it does not create a new event or change its payload. A delivery that is pending, processing or already delivered cannot be replayed.
