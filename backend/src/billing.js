@@ -14,12 +14,12 @@ function billingError(message, statusCode = 400) {
 
 function getConfiguredBillingPlans(env = process.env) {
   return [
-    { key: "lite", name: "Lite", monthlyPriceInr: 299, priceId: env.STRIPE_PRICE_LITE || "", limits: { messages: 10000, agents: 1, mediaTransferGb: 1, historyMonths: 3 } },
-    { key: "starter", name: "Starter", monthlyPriceInr: 599, priceId: env.STRIPE_PRICE_STARTER || "", limits: { messages: 40000, agents: 2, mediaTransferGb: 3, historyMonths: 6 } },
-    { key: "growth", name: "Growth", monthlyPriceInr: 999, priceId: env.STRIPE_PRICE_GROWTH || "", limits: { messages: 100000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
-    { key: "business", name: "Business", monthlyPriceInr: 1499, priceId: env.STRIPE_PRICE_BUSINESS || "", limits: { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
-    { key: "pro", name: "Pro", monthlyPriceInr: 1999, priceId: env.STRIPE_PRICE_PRO || "", limits: { messages: 300000, agents: 10, mediaTransferGb: 15, historyMonths: 12 } }
-  ].filter(plan => /^price_[A-Za-z0-9]+$/.test(plan.priceId));
+    { key: "lite", name: "Lite", monthlyPriceInr: 299, annualPriceInr: 2990, priceId: env.STRIPE_PRICE_LITE || "", annualPriceId: env.STRIPE_PRICE_LITE_ANNUAL || "", limits: { messages: 10000, agents: 1, mediaTransferGb: 1, historyMonths: 3 } },
+    { key: "starter", name: "Starter", monthlyPriceInr: 599, annualPriceInr: 5990, priceId: env.STRIPE_PRICE_STARTER || "", annualPriceId: env.STRIPE_PRICE_STARTER_ANNUAL || "", limits: { messages: 40000, agents: 2, mediaTransferGb: 3, historyMonths: 6 } },
+    { key: "growth", name: "Growth", monthlyPriceInr: 999, annualPriceInr: 9990, priceId: env.STRIPE_PRICE_GROWTH || "", annualPriceId: env.STRIPE_PRICE_GROWTH_ANNUAL || "", limits: { messages: 100000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
+    { key: "business", name: "Business", monthlyPriceInr: 1499, annualPriceInr: 14990, priceId: env.STRIPE_PRICE_BUSINESS || "", annualPriceId: env.STRIPE_PRICE_BUSINESS_ANNUAL || "", limits: { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
+    { key: "pro", name: "Pro", monthlyPriceInr: 1999, annualPriceInr: 19990, priceId: env.STRIPE_PRICE_PRO || "", annualPriceId: env.STRIPE_PRICE_PRO_ANNUAL || "", limits: { messages: 300000, agents: 10, mediaTransferGb: 15, historyMonths: 12 } }
+  ].map(plan => ({ ...plan, priceId: /^price_[A-Za-z0-9]+$/.test(plan.priceId) ? plan.priceId : "", annualPriceId: /^price_[A-Za-z0-9]+$/.test(plan.annualPriceId) ? plan.annualPriceId : "" }))\n    .filter(plan => plan.priceId || plan.annualPriceId);
 }
 
 function validReturnUrl(value) {
@@ -71,10 +71,10 @@ async function stripeRequest(path, options = {}) {
   return payload;
 }
 
-async function createCheckoutSession({ organization, decoded, planKey, env = process.env }) {
+async function createCheckoutSession({ organization, decoded, planKey, interval = "month", env = process.env }) {
   const plans = getConfiguredBillingPlans(env);
   const plan = plans.find(item => item.key === planKey);
-  if (!plan) throw billingError("This billing plan is not configured.", 400);
+  if (!plan) throw billingError("This billing plan is not configured.", 400);\n  if (!["month", "year"].includes(interval)) throw billingError("Choose monthly or annual billing.", 400);\n  const selectedPriceId = interval === "year" ? plan.annualPriceId : plan.priceId;\n  if (!selectedPriceId) throw billingError("This billing interval is not configured for the selected plan.", 400);
   if (!validReturnUrl(env.BILLING_SUCCESS_URL) || !validReturnUrl(env.BILLING_CANCEL_URL)) {
     throw billingError("BILLING_SUCCESS_URL and BILLING_CANCEL_URL must be configured as trusted HTTPS URLs.", 503);
   }
@@ -88,15 +88,15 @@ async function createCheckoutSession({ organization, decoded, planKey, env = pro
   const trialAlreadyUsed = Boolean(existing.exists && existing.get("trialUsedAt"));
   const params = {
     mode: "subscription",
-    "line_items[0][price]": plan.priceId,
+    "line_items[0][price]": selectedPriceId,
     "line_items[0][quantity]": "1",
     success_url: env.BILLING_SUCCESS_URL,
     cancel_url: env.BILLING_CANCEL_URL,
     client_reference_id: organization.id,
     "metadata[organizationId]": organization.id,
-    "metadata[planKey]": plan.key,
+    "metadata[planKey]": plan.key,\n    "metadata[billingInterval]": interval,
     "subscription_data[metadata][organizationId]": organization.id,
-    "subscription_data[metadata][planKey]": plan.key
+    "subscription_data[metadata][planKey]": plan.key,\n    "subscription_data[metadata][billingInterval]": interval
   };
   if (!trialAlreadyUsed) params["subscription_data[trial_period_days]"] = String(TRIAL_PERIOD_DAYS);
   if (customerId) params.customer = customerId;
@@ -104,16 +104,16 @@ async function createCheckoutSession({ organization, decoded, planKey, env = pro
   const session = await stripeRequest("/checkout/sessions", {
     method: "POST",
     params,
-    idempotencyKey: `joy-inbox-${organization.id}-${plan.key}-${Math.floor(Date.now() / 300000)}`
+    idempotencyKey: `joy-inbox-${organization.id}-${plan.key}-${interval}-${Math.floor(Date.now() / 300000)}`
   });
   if (!session.id || !validReturnUrl(session.url)) throw billingError("Stripe did not return a valid checkout URL.", 502);
   await subscriptionRef.set({
     checkoutSessionId: session.id,
-    checkoutPlan: plan.key,
+    checkoutPlan: plan.key,\n    checkoutInterval: interval,
     checkoutStartedAt: new Date(),
     updatedAt: new Date()
   }, { merge: true });
-  return { id: session.id, url: session.url, plan: plan.key, trialDays: trialAlreadyUsed ? 0 : TRIAL_PERIOD_DAYS };
+  return { id: session.id, url: session.url, plan: plan.key, interval, trialDays: trialAlreadyUsed ? 0 : TRIAL_PERIOD_DAYS };
 }
 
 async function createPortalSession({ organization, env = process.env }) {
@@ -134,7 +134,7 @@ async function createPortalSession({ organization, env = process.env }) {
 
 function extractSubscriptionFields(subscription, plans = getConfiguredBillingPlans()) {
   const priceId = String(subscription.items?.data?.[0]?.price?.id || "");
-  const plan = plans.find(item => item.priceId === priceId)?.key || "unknown";
+  const matchedPlan = plans.find(item => item.priceId === priceId || item.annualPriceId === priceId);\n  const plan = matchedPlan?.key || "unknown";\n  const interval = matchedPlan?.annualPriceId === priceId ? "year" : "month";
   const timestamp = value => Number.isFinite(Number(value)) && Number(value) > 0
     ? new Date(Number(value) * 1000) : null;
   return {
