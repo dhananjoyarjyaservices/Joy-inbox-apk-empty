@@ -1725,6 +1725,7 @@ async function retryTenantFailedTemplate(event) {
     return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
   }
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
+  const quotaReservation = await reserveTenantMessageQuota(db, organization.id, clientMessageId, claim.ref);
   const components = [];
   if (mediaId) components.push({ type: "header", parameters: [{ type: mediaFormat, [mediaFormat]: { id: mediaId } }] });
   if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text })) });
@@ -1738,6 +1739,7 @@ async function retryTenantFailedTemplate(event) {
     const payload = await response.json().catch(()=>({}));
     if (!response.ok || !payload.messages?.[0]?.id) { const error=new Error(payload.error?.message||"Meta did not confirm template retry delivery."); error.statusCode=502; error.definitive=!response.ok && isDefinitiveWhatsAppSendRejection(response.status); error.retryable=false; throw error; }
     const newMessageId=payload.messages[0].id; const timestamp=new Date();
+    await settleTenantMessageQuota(db, quotaReservation);
     const newRef=getTenantMessageRef(db,organization.id,chatId,newMessageId);
     const preview=`Template: ${templateName}`;
     const batch=db.batch();
@@ -1747,7 +1749,7 @@ async function retryTenantFailedTemplate(event) {
     await batch.commit();
     await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
     return jsonResponse(event,200,{success:true,messageId:newMessageId,clientMessageId});
-  } catch(error) { await markTenantSendRequestFailed(claim.ref,error); throw error; }
+  } catch(error) { await settleTenantMessageQuota(db, quotaReservation, error); await markTenantSendRequestFailed(claim.ref,error); throw error; }
 }
 
 async function retryTenantFailedText(event) {
