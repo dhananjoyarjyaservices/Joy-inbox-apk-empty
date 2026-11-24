@@ -64,7 +64,22 @@ function tenantResourceDb(seed = {}) {
             .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
           return { docs };
         };
-        return { get: read, limit() { return { get: read }; } };
+        const state = { cursor: null, max: Infinity };
+        const query = {
+          orderBy() { return query; },
+          startAfter(name, id) { state.cursor = { name, id }; return query; },
+          limit(value) { state.max = value; return query; },
+          async get() {
+            const result = await read();
+            const sorted = result.docs.sort((a, b) => String(a.data()?.name || "").localeCompare(String(b.data()?.name || "")) || a.id.localeCompare(b.id));
+            const after = state.cursor ? sorted.filter(doc => {
+              const name = String(doc.data()?.name || "");
+              return name > state.cursor.name || (name === state.cursor.name && doc.id.localeCompare(state.cursor.id) > 0);
+            }) : sorted;
+            return { docs: after.slice(0, state.max) };
+          }
+        };
+        return query;
       }
     };
   }
@@ -181,4 +196,26 @@ test("tenant resource collection rejects malformed organization IDs and unknown 
   const db = tenantResourceDb();
   assert.throws(() => getTenantResourceCollection(db, "../org_b", "contacts"), { statusCode: 400 });
   assert.throws(() => getTenantResourceCollection(db, "org_a", "members"), { statusCode: 400 });
+});
+
+
+test("public contacts use stable cursor pagination and reject invalid cursors or limits", async () => {
+  const { listPublicContacts } = require("../src/tenantResources");
+  const seed = {};
+  for (const [id, name] of [["919000000001", "Alex"], ["919000000002", "Alex"], ["919000000003", "Zara"]]) {
+    seed[`organizations/org_a/contacts/${id}`] = { name, phone: "+" + id };
+  }
+  const db = tenantResourceDb(seed);
+  const first = await listPublicContacts(db, "org_a", 2);
+  assert.equal(first.data.length, 2);
+  assert.equal(first.pagination.hasMore, true);
+  assert.ok(first.pagination.nextCursor);
+  const second = await listPublicContacts(db, "org_a", 2, first.pagination.nextCursor);
+  assert.equal(second.data.length, 1);
+  assert.equal(second.pagination.hasMore, false);
+  assert.equal(second.pagination.nextCursor, null);
+  assert.notEqual(first.data[1].id, second.data[0].id);
+  await assert.rejects(() => listPublicContacts(db, "org_a", 0), { statusCode: 400 });
+  await assert.rejects(() => listPublicContacts(db, "org_a", 101), { statusCode: 400 });
+  await assert.rejects(() => listPublicContacts(db, "org_a", 10, "bad-cursor"), { statusCode: 400 });
 });
