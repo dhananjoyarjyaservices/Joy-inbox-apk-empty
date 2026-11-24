@@ -8,7 +8,9 @@ const {
   reserveOutboundMessage,
   finishOutboundReservation,
   recordInboundMessageUsage,
-  getTenantMessageUsage
+  getTenantMessageUsage,
+  reserveMediaTransfer,
+  finishMediaTransfer
 } = require("../src/tenantUsage");
 
 function fakeDb() {
@@ -126,6 +128,30 @@ test("outbound reservation blocks at the hard limit and usage exposes 80/95/100 
     () => reserveOutboundMessage(db, "org_one", "client-at-limit", new Date("2026-11-24T00:00:00.000Z")),
     { statusCode: 429, code: "MESSAGE_QUOTA_EXCEEDED" }
   );
+});
+
+test("media transfer reservations count actual bytes and enforce the plan allowance", async () => {
+  const db = fakeDb();
+  const org = db.collection("organizations").doc("org_one");
+  await org.collection("billing").doc("subscription").set({
+    status: "active", plan: "lite",
+    currentPeriodStart: new Date("2026-11-01T00:00:00.000Z"),
+    currentPeriodEnd: new Date("2026-12-01T00:00:00.000Z")
+  });
+  const now = new Date("2026-11-24T00:00:00.000Z");
+  const reservation = await reserveMediaTransfer(db, "org_one", "upload-1", 100, now);
+  assert.equal(reservation.enforced, true);
+  await finishMediaTransfer(db, reservation, "sent", 80, now);
+  const usage = db.docs.get(reservation.usageRef.path);
+  assert.equal(usage.mediaBytesUsed, 80);
+  assert.equal(usage.mediaBytesReserved, 0);
+  const fullLimit = 1024 * 1024 * 1024;
+  const full = await reserveMediaTransfer(db, "org_one", "upload-full", fullLimit - 80, now);
+  await assert.rejects(
+    () => reserveMediaTransfer(db, "org_one", "upload-over", 1, now),
+    { statusCode: 429, code: "MESSAGE_QUOTA_EXCEEDED" }
+  );
+  await finishMediaTransfer(db, full, "failed", 0, now);
 });
 
 test("failed sends release reserved quota without consuming messages", async () => {
