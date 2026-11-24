@@ -183,6 +183,7 @@ export interface OrganizationWebhook {
   status: "active" | "revoked";
   createdAt?: unknown;
   lastDeliveryAt?: unknown;
+  secretRotatedAt?: unknown;
 }
 export interface OrganizationWebhookDelivery {
   id: string;
@@ -211,6 +212,9 @@ export async function createOrganizationWebhook(input: {
 }
 export async function revokeOrganizationWebhook(organizationId: string, webhookId: string): Promise<void> {
   await request("/organizations/developer/webhooks", "DELETE", { organizationId, webhookId });
+}
+export async function rotateOrganizationWebhookSecret(organizationId: string, webhookId: string): Promise<{ id: string; secret: string; rotatedAt: string }> {
+  return request("/organizations/developer/webhooks", "PUT", { organizationId, webhookId });
 }
 export async function listOrganizationWebhookDeliveries(organizationId: string, limit = 50): Promise<OrganizationWebhookDelivery[]> {
   const query = new URLSearchParams({ organizationId, limit: String(limit) });
