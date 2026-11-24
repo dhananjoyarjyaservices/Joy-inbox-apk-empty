@@ -1656,13 +1656,17 @@ async function handleOrganizationNotifications(event) {
     });
   }
   for (const doc of slaSnapshot.docs) {
-    if (!preferences.sla) continue;
     const item = doc.data() || {};
+    const type = item.type === "crm_follow_up" ? "crm_follow_up" : "sla";
+    if ((type === "sla" && !preferences.sla) || (type === "crm_follow_up" && !preferences.crm)) continue;
     const createdAt = item.createdAt?.toDate ? item.createdAt.toDate().toISOString() : new Date(item.createdAt || 0).toISOString();
     notifications.push({
-      id: doc.id, type: "sla", title: String(item.title || "SLA response overdue"),
-      body: String(item.body || "A customer conversation needs your reply"),
-      chatId: String(item.chatId || ""), createdAt,
+      id: doc.id, type,
+      title: String(item.title || (type === "crm_follow_up" ? "CRM follow-up is due" : "SLA response overdue")),
+      body: String(item.body || (type === "crm_follow_up" ? "A lead follow-up is due." : "A customer conversation needs your reply")),
+      ...(item.chatId ? { chatId: String(item.chatId) } : {}),
+      ...(item.leadId ? { leadId: String(item.leadId) } : {}),
+      createdAt,
       read: item.read === true || readIds.has(doc.id)
     });
   }
