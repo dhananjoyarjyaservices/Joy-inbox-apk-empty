@@ -138,6 +138,21 @@ async function revokeOrganizationWebhook(db, organizationId, webhookId, now = Da
   return { id: webhookId, status: "revoked" };
 }
 
+async function rotateOrganizationWebhookSecret(db, organizationId, webhookId, now = Date.now()) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId || "") || !/^[A-Za-z0-9_-]{1,128}$/.test(webhookId || "")) {
+    throw httpError("A valid workspace and webhook ID are required.", 400);
+  }
+  const ref = db.collection("organizations").doc(organizationId).collection("webhookSubscriptions").doc(webhookId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists || snapshot.data()?.status !== "active") {
+    throw httpError("An active webhook subscription was not found in this workspace.", 404);
+  }
+  const secret = "joywhsec_" + crypto.randomBytes(32).toString("base64url");
+  const rotatedAt = new Date(now);
+  await ref.set({ secretEncrypted: encryptSecret(secret), secretRotatedAt: rotatedAt, updatedAt: rotatedAt }, { merge: true });
+  return { id: webhookId, secret, rotatedAt: rotatedAt.toISOString() };
+}
+
 async function enqueueOrganizationWebhookEvent(db, organizationId, event, eventId, payload, now = Date.now()) {
   if (!WEBHOOK_EVENTS.has(event)) return { queued: 0 };
   if (typeof eventId !== "string" || !eventId || eventId.length > 200) throw httpError("A stable webhook event ID is required.", 400);
@@ -369,6 +384,7 @@ module.exports = {
   createOrganizationWebhook,
   listOrganizationWebhooks,
   revokeOrganizationWebhook,
+  rotateOrganizationWebhookSecret,
   enqueueOrganizationWebhookEvent,
   listOrganizationWebhookDeliveries,
   replayOrganizationWebhookDelivery,
