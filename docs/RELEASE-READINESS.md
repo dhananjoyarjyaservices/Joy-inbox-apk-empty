@@ -29,6 +29,13 @@ This checklist separates code already present from work that requires real servi
 - [x] A route-inventory regression test scans backend HTTP route suffixes and fails CI if a newly added unscoped endpoint is neither classified as a deliberate system endpoint nor added to the legacy fail-closed list.
 - [x] A genuine `backend/package-lock.json` is committed; backend CI uses `npm ci`, and a Node.js 22 workflow regenerates and commits the lockfile when the backend dependency manifest changes.
 
+## History retention worker
+
+- [x] Add a bounded, cursor-based worker that deletes tenant message records older than the active plan's retention window; contacts and chat records remain intact.
+- [x] Add a dedicated EventBridge schedule template with the schedule disabled by default.
+- [ ] Deploy the worker to an isolated staging Lambda and verify each plan's cutoff against seeded test records.
+- [ ] Verify backups and restore procedures before enabling the schedule in any customer environment.
+
 ## Required before staging acceptance
 
 - [ ] Configure Firebase Admin credentials and verify all required Firestore indexes.
