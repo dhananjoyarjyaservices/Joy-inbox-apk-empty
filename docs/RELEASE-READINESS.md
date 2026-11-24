@@ -9,6 +9,8 @@ This checklist separates code already present from work that requires real servi
 - [x] Tenant authentication, organization membership and role checks.
 - [x] Tenant-scoped text messaging and webhook routing by Meta Phone Number ID.
 - [x] Tenant chat, contact and Quick Reply data foundations.
+- [x] Contact phone-number changes use a Firestore transaction, preserve creation timestamps and reject destination-number collisions; regression tests cover missing source and collision cases.
+- [x] Inbox assignment and agent-performance views page through the complete organization member list instead of silently stopping at the first 100 members.
 - [x] Assignment/state management, SLA checks and team notifications.
 - [x] Automation rules, leased queue processing and uncertain-delivery protection.
 - [x] Campaign drafts, approved-template checks, consent evidence validation, STOP suppression, explicit START re-subscription, send worker, pause/cancel and recipient reports.
