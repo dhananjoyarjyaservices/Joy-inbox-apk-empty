@@ -1619,6 +1619,7 @@ async function sendTenantTemplate(event) {
   }
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   const quotaReservation = await reserveTenantMessageQuota(db, organization.id, clientMessageId, claim.ref);
+  const mediaQuotaReservation = headerMedia ? await reserveTenantMediaQuota(db, organization.id, `template_header_${clientMessageId}`, Buffer.byteLength(headerMedia.base64, "base64"), claim.ref, quotaReservation) : null;
   const template = { name: templateName, language: { code: language } };
   const components = [];
   let uploadedHeaderMediaId = "";
@@ -1626,8 +1627,15 @@ async function sendTenantTemplate(event) {
     const mimeType = headerMediaMimeType;
     const buffer = Buffer.from(headerMedia.base64, "base64");
     let uploaded;
-    try { uploaded = await uploadWhatsAppMedia(buffer, mimeType, headerMedia.filename, credentials); }
-    catch (error) { await settleTenantMessageQuota(db, quotaReservation, { definitive: true }); await markTenantSendRequestFailed(claim.ref, error); throw error; }
+    try {
+      uploaded = await uploadWhatsAppMedia(buffer, mimeType, headerMedia.filename, credentials);
+      await settleTenantMediaQuota(db, mediaQuotaReservation, "sent", buffer.length);
+    } catch (error) {
+      await settleTenantMediaQuota(db, mediaQuotaReservation, error?.definitive === true ? "failed" : "sent", error?.definitive === true ? 0 : buffer.length);
+      await settleTenantMessageQuota(db, quotaReservation, { definitive: true });
+      await markTenantSendRequestFailed(claim.ref, error);
+      throw error;
+    }
     uploadedHeaderMediaId = uploaded.mediaId;
     const mediaType = mediaHeaderFormat.toLowerCase();
     components.push({ type: "header", parameters: [{ type: mediaType, [mediaType]: { id: uploaded.mediaId } }] });
