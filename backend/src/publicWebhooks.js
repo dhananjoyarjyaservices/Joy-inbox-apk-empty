@@ -155,6 +155,7 @@ async function enqueueOrganizationWebhookEvent(db, organizationId, event, eventI
         status: "pending",
         attempts: 0,
         nextAttemptAt: new Date(now),
+        expiresAt: new Date(now + 90 * 24 * 60 * 60 * 1000),
         createdAt: new Date(now),
         updatedAt: new Date(now)
       });
