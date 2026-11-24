@@ -483,12 +483,22 @@ async function handlePublicApiMessages(event) {
   const connections = await listWhatsAppConnections(db, authenticatedKey.organizationId);
   const connection = connections.find(item => item.phoneNumberId === phoneNumberId && item.connected);
   if (!connection) return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the API key workspace." });
+  const idempotencyKey = getHeader(event, "idempotency-key");
+  if (!idempotencyKey) return jsonResponse(event, 400, { error: "Idempotency-Key is required for message sends." });
   const idempotent = await runIdempotentApiRequest(
-    db, authenticatedKey, getHeader(event, "idempotency-key"),
+    db, authenticatedKey, idempotencyKey,
     { method: "POST", resource: "messages", payload: { to, text, phoneNumberId } },
     async () => {
       const credentials = await getWhatsAppCredentials(db, authenticatedKey.organizationId, phoneNumberId);
-      const result = await sendWhatsAppText(to, text, undefined, credentials);
+      const reservation = await reserveTenantMessageQuota(db, authenticatedKey.organizationId, crypto.randomUUID());
+      let result;
+      try {
+        result = await sendWhatsAppText(to, text, undefined, credentials);
+        await settleTenantMessageQuota(db, reservation);
+      } catch (error) {
+        await settleTenantMessageQuota(db, reservation, error);
+        throw error;
+      }
       const timestamp = new Date();
       const chatRef = getTenantChatRef(db, authenticatedKey.organizationId, to);
       const messageRef = getTenantMessageRef(db, authenticatedKey.organizationId, to, result.messageId);
