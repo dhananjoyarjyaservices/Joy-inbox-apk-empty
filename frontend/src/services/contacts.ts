@@ -10,7 +10,8 @@ import {
   writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
-import { auth, db } from "../firebase/config";
+import { auth } from "../firebase/config";
+import { db } from "../firebase/firestore";
 import type { Contact } from "../types";
 
 function getContactsCollection(userId: string) {
