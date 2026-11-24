@@ -14,7 +14,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Automated CRM follow-up reminders: scheduled scan, transactional deduplication, active-owner validation, in-app notification, push delivery, member opt-out and retry after failure. Notification Center routes CRM alerts to Sales CRM. See `docs/CRM-FOUNDATION.md`.
 - [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.
 - [x] CRM sales performance report: pipeline totals, won revenue, conversion rate, stage, owner and source breakdowns with agent-scoped visibility and a 1,000-lead sample cap.
-- [x] CRM lead activity timeline: append-only actor-attributed create/update/delete events, tracked-field before/after snapshots, agent assignment checks and on-demand pipeline-card history.\n- [x] Probability-weighted CRM pipeline forecast using configurable stage win probabilities; expected open value is calculated separately per currency.\n- [ ] Validate forecast accuracy and stage-probability configuration with real workspace sales data.\n\n## Public developer API and outbound webhooks — contacts, CRM, text-send, template-read and campaign-reporting slices
+- [x] CRM lead activity timeline: append-only actor-attributed create/update/delete events, tracked-field before/after snapshots, agent assignment checks and on-demand pipeline-card history.\n- [x] Probability-weighted CRM pipeline forecast using configurable stage win probabilities; expected open value is calculated separately per currency.\n- [ ] Validate forecast accuracy and stage-probability configuration with real workspace sales data.\n\n## Public developer API and outbound webhooks — contacts, CRM, text-send, template-read, campaign reporting and draft creation slices
 
 - [x] Add owner/admin API key creation, metadata listing and revocation with one-time raw-key display, SHA-256-only storage, scopes, expiry and throttled last-used metadata.
 - [x] Add API-key authentication that derives the workspace from the key, checks active workspace state and enforces contacts read/write scopes.
@@ -23,6 +23,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add `POST /public/v1/messages` for workspace-connected WhatsApp text sends with `messages:write`, required idempotency keys and server-side quota enforcement.
 - [x] Add `GET /public/v1/templates` for listing the first Meta template page with `templates:read` and workspace phone/WABA ownership checks.
 - [x] Add paginated `GET /public/v1/campaigns` summaries with `campaigns:read`; results expose aggregate delivery counters only and never recipient phone numbers or consent records.
+- [x] Add `POST /public/v1/campaigns` with separate `campaigns:write` scope, mandatory idempotency, connected-number validation, Meta approved-template/language/category verification, body-variable validation and opt-out suppression; this endpoint creates drafts only and cannot schedule or send.
 - [x] Add a workspace Developer panel to create/revoke keys and view API examples.
 - [x] Deny client-side Firestore access to API key and rate-limit records.
 - [ ] Enable Firestore TTL on `publicApiRateLimits.expiresAt` in the staging/production project.
@@ -142,14 +143,14 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-Latest verified code commit: `7c7afd6fb48a12e827c3300bfdc782e5d692bf34`.
-- Backend tests with Firestore emulator (run 45404695037): **357 passed, 0 failed, 0 skipped**.
-- Frontend build (run 45404694933): **passed**.
-- Combined Joy Inbox CI (run 45404694947): **passed**.
-- The passing backend suite includes the public campaign reporting pagination and least-privilege scope tests, plus the explicit public-route security inventory update.
+Latest verified code commit: `170d325d54c846ba2fd61231582d4d33666c6484`.
+- Backend tests with Firestore emulator (run 45406409617): **358 passed, 0 failed, 0 skipped**.
+- Frontend build (run 45406409520): **passed**.
+- Combined Joy Inbox CI (run 45406409704): **passed**.
+- The passing backend suite includes public campaign pagination, least-privilege `campaigns:write` scope coverage and route-security inventory checks. The public campaign draft endpoint itself still requires isolated Meta/Firebase staging acceptance.
 - CI is repository-level verification. It does not prove that live Firebase, Meta, Stripe, email, AWS or customer-device integrations are configured correctly.
 
-The PR #1 branch tip at this verification point is `7c7afd6fb48a12e827c3300bfdc782e5d692bf34`. Keep the pull request in draft until the external staging and launch gates below pass.
+The PR #1 branch tip at this verification point is `170d325d54c846ba2fd61231582d4d33666c6484`. Keep the pull request in draft until the external staging and launch gates below pass.
 ## Static security review completed in repository
 
 Reviewed the current implementation paths for Firebase ID-token verification, active workspace membership and role permissions, legacy single-owner route kill-switch coverage, Firestore tenant read/write boundaries, Meta raw-body HMAC verification, Stripe timestamped HMAC verification, tenant Phone Number ID webhook routing, encrypted per-number credentials, outbound idempotency/uncertain delivery handling, subscription/usage fail-closed behavior and media metadata-only inbound persistence. The review found and fixed a multi-number connection-status fallback edge case; the regression has an automated backend test; the exact current suite count must be read from the latest workflow logs, not inferred from an older run.
