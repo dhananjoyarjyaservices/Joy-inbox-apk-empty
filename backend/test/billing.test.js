@@ -35,7 +35,7 @@ test("billing plan discovery returns only Stripe price IDs configured by the bac
   assert.equal(plans[1].monthlyPriceInr, 599);
   assert.equal(plans[1].annualPriceInr, 5990);
   assert.equal(plans[1].annualPriceId, "price_starter_year");
-  assert.deepEqual(plans[2].limits, { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 });
+  assert.deepEqual(plans[2].limits, { messages: 100000, agents: 5, mediaTransferGb: 6, historyMonths: 12 });
   assert.equal(TRIAL_PERIOD_DAYS, 7);
 });
 
