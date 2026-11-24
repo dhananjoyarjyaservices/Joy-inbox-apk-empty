@@ -46,6 +46,51 @@ function getTenantResourceCollection(db, organizationId, resource) {
   return db.collection("organizations").doc(organizationId).collection(resource);
 }
 
+function normalizeContactPageSize(rawLimit) {
+  if (rawLimit === undefined || rawLimit === null || rawLimit === "") return 50;
+  const value = Number(rawLimit);
+  if (!Number.isInteger(value) || value < 1 || value > 100) throw httpError("Page limit must be an integer between 1 and 100.", 400);
+  return value;
+}
+
+function decodeContactCursor(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || value.length > 512 || !/^[A-Za-z0-9_-]+$/.test(value)) throw httpError("Pagination cursor is invalid.", 400);
+  let cursor;
+  try { cursor = JSON.parse(Buffer.from(value, "base64url").toString("utf8")); } catch { throw httpError("Pagination cursor is invalid.", 400); }
+  if (cursor?.v !== 1 || typeof cursor.name !== "string" || !cursor.name || cursor.name.length > 100 || !ID_PATTERN.test(cursor.id || "")) {
+    throw httpError("Pagination cursor is invalid.", 400);
+  }
+  return cursor;
+}
+
+function encodeContactCursor(document) {
+  const data = document.data() || {};
+  if (typeof data.name !== "string" || !data.name) throw httpError("Contact cannot be used as a pagination cursor because its name is invalid.", 500);
+  return Buffer.from(JSON.stringify({ v: 1, name: data.name, id: document.id }), "utf8").toString("base64url");
+}
+
+async function listPublicContacts(db, organizationId, rawLimit = 50, rawCursor = null) {
+  const limit = normalizeContactPageSize(rawLimit);
+  const cursor = decodeContactCursor(rawCursor);
+  let query = getTenantResourceCollection(db, organizationId, "contacts")
+    .orderBy("name", "asc")
+    .orderBy("__name__", "asc");
+  if (cursor) query = query.startAfter(cursor.name, cursor.id);
+  const snapshot = await query.limit(limit + 1).get();
+  const hasMore = snapshot.docs.length > limit;
+  const docs = snapshot.docs.slice(0, limit);
+  return {
+    data: docs.map(document => ({ id: document.id, ...document.data() })),
+    pagination: {
+      limit,
+      returned: docs.length,
+      hasMore,
+      nextCursor: hasMore && docs.length ? encodeContactCursor(docs[docs.length - 1]) : null
+    }
+  };
+}
+
 async function listTenantResource(db, organizationId, resource) {
   const ordered = getTenantResourceCollection(db, organizationId, resource)
     .orderBy(resource === "contacts" ? "name" : "createdAt", resource === "contacts" ? "asc" : "desc");
@@ -114,4 +159,4 @@ async function deleteTenantResource(db, organizationId, resource, resourceId) {
   await ref.delete();
 }
 
-module.exports = { contactInput, quickReplyInput, getTenantResourceCollection, listTenantResource, saveTenantResource, deleteTenantResource };
+module.exports = { contactInput, quickReplyInput, getTenantResourceCollection, listTenantResource, listPublicContacts, normalizeContactPageSize, encodeContactCursor, decodeContactCursor, saveTenantResource, deleteTenantResource };
