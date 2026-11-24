@@ -42,11 +42,12 @@ function normalizeCrmFieldDefinition(input) {
 function normalizeCrmFieldValues(input, definitions = []) {
   if (input === undefined) return {};
   if (!input || typeof input !== "object" || Array.isArray(input)) throw crmError("Custom field values must be an object.");
-  const activeDefinitions = new Map(definitions.filter(field => field.active !== false).map(field => [field.key, field]));
+  const knownDefinitions = new Map(definitions.map(field => [field.key, field]));
+  const activeDefinitions = definitions.filter(field => field.active !== false);
   const values = {};
   for (const [key, value] of Object.entries(input)) {
-    const definition = activeDefinitions.get(key);
-    if (!definition) throw crmError(`Custom field "${key}" is not configured or is inactive.`);
+    const definition = knownDefinitions.get(key);
+    if (!definition) throw crmError(`Custom field "${key}" is not configured.`);
     if (value === null || value === "") {
       if (definition.required) throw crmError(`${definition.label} is required.`);
       continue;
@@ -71,7 +72,7 @@ function normalizeCrmFieldValues(input, definitions = []) {
       values[key] = value;
     }
   }
-  for (const definition of activeDefinitions.values()) {
+  for (const definition of activeDefinitions) {
     if (definition.required && (values[definition.key] === undefined || values[definition.key] === null || values[definition.key] === "")) {
       throw crmError(`${definition.label} is required.`);
     }
