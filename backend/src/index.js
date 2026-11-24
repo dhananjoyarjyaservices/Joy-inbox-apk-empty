@@ -3814,7 +3814,7 @@ exports.handler = async (event) => {
     }
   }
 
-  if (method === "GET" && path.endsWith("/public/v1/campaigns")) {
+  if (path.endsWith("/public/v1/campaigns")) {
     try { return await handlePublicApiCampaigns(event); }
     catch (error) {
       console.error("Public campaigns API request failed:", error.statusCode || "PUBLIC_API_REQUEST_FAILED");
