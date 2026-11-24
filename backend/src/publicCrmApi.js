@@ -31,7 +31,7 @@ async function savePublicLead(db, organizationId, input, resourceId = "") {
   ]);
   const definitions = fieldSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const existingStages = new Map(stageSnapshot.docs.map(doc => [doc.id, doc.data()]));
-  if (!existingStages.size) {
+  {
     const now = new Date();
     const refs = DEFAULT_PIPELINE_STAGES.map(stage => organizationRef.collection("crmStages").doc(stage.id));
     await db.runTransaction(async transaction => {
@@ -40,7 +40,9 @@ async function savePublicLead(db, organizationId, input, resourceId = "") {
         if (!snapshot.exists) transaction.create(refs[index], { ...DEFAULT_PIPELINE_STAGES[index], createdAt: now, updatedAt: now });
       });
     });
-    DEFAULT_PIPELINE_STAGES.forEach(stage => existingStages.set(stage.id, stage));
+    DEFAULT_PIPELINE_STAGES.forEach(stage => {
+      if (!existingStages.has(stage.id)) existingStages.set(stage.id, stage);
+    });
   }
   const lead = normalizeCrmLead(input, definitions);
   const stage = existingStages.get(lead.stageId);
