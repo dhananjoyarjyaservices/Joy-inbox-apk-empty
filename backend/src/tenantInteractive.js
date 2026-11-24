@@ -18,11 +18,36 @@ function normalizeInteractiveMessage(input) {
     throw httpError("Interactive message details are required.");
   }
   const type = input.type;
-  if (!["button", "list", "cta_url"].includes(type)) throw httpError("Interactive message type must be button, list or cta_url.");
+  if (!["button", "list", "cta_url", "carousel"].includes(type)) throw httpError("Interactive message type must be button, list, cta_url or carousel.");
   const body = cleanText(input.body, "Message body", 1024);
   const header = cleanText(input.header, "Header", 60, false);
   const footer = cleanText(input.footer, "Footer", 60, false);
   const normalized = { type, body, ...(header ? { header } : {}), ...(footer ? { footer } : {}) };
+
+  if (type === "carousel") {
+    if (header || footer) throw httpError("Carousel messages use card media and do not support a message header or footer.");
+    if (!Array.isArray(input.cards) || input.cards.length < 2 || input.cards.length > 10) {
+      throw httpError("Carousel messages require two to ten cards.");
+    }
+    normalized.cards = input.cards.map((card, index) => {
+      const imageUrl = cleanText(card?.imageUrl, `Card ${index + 1} image URL`, 2000);
+      let parsedImage;
+      try { parsedImage = new URL(imageUrl); } catch { throw httpError(`Card ${index + 1} requires a valid HTTPS image URL.`); }
+      if (parsedImage.protocol !== "https:" || parsedImage.username || parsedImage.password) {
+        throw httpError(`Card ${index + 1} image URL must use HTTPS and cannot contain credentials.`);
+      }
+      const cardBody = cleanText(card?.body, `Card ${index + 1} text`, 160);
+      const displayText = cleanText(card?.displayText, `Card ${index + 1} button text`, 20);
+      const url = cleanText(card?.url, `Card ${index + 1} button URL`, 2000);
+      let parsedUrl;
+      try { parsedUrl = new URL(url); } catch { throw httpError(`Card ${index + 1} requires a valid HTTPS button URL.`); }
+      if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password) {
+        throw httpError(`Card ${index + 1} button URL must use HTTPS and cannot contain credentials.`);
+      }
+      return { imageUrl: parsedImage.toString(), body: cardBody, displayText, url: parsedUrl.toString() };
+    });
+    return normalized;
+  }
 
   if (type === "cta_url") {
     normalized.displayText = cleanText(input.displayText, "Link button text", 20);
@@ -85,7 +110,17 @@ function buildWhatsAppInteractivePayload(to, input) {
   };
   if (message.header) interactive.header = { type: "text", text: message.header };
   if (message.footer) interactive.footer = { text: message.footer };
-  if (message.type === "cta_url") {
+  if (message.type === "carousel") {
+    interactive.action = {
+      cards: message.cards.map((card, cardIndex) => ({
+        card_index: cardIndex,
+        type: "cta_url",
+        header: { type: "image", image: { link: card.imageUrl } },
+        body: { text: card.body },
+        action: { name: "cta_url", parameters: { display_text: card.displayText, url: card.url } }
+      }))
+    };
+  } else if (message.type === "cta_url") {
     interactive.action = {
       name: "cta_url",
       parameters: { display_text: message.displayText, url: message.url }
@@ -113,7 +148,7 @@ function buildWhatsAppInteractivePayload(to, input) {
 }
 
 function getInteractivePreview(message) {
-  const count = message.type === "cta_url" ? 1 : message.type === "button"
+  const count = message.type === "carousel" ? message.cards.length : message.type === "cta_url" ? 1 : message.type === "button"
     ? message.buttons.length
     : message.sections.reduce((total, section) => total + section.rows.length, 0);
   return `Interactive ${message.type} message · ${count} option(s): ${message.body}`.slice(0, 1024);
