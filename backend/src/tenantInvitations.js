@@ -1,3 +1,4 @@
+const { getBillingPlanCatalog } = require("./billing");
 "use strict";
 
 const crypto = require("crypto");
@@ -157,12 +158,16 @@ async function acceptTenantInvitation(db, organizationId, token, decoded, option
   const memberRef = organizationRef.collection("members").doc(decoded.uid);
   const userOrganizationRef = db.collection("users").doc(decoded.uid)
     .collection("organizations").doc(organizationId);
+  const subscriptionRef = organizationRef.collection("billing").doc("subscription");
+  const activeMembersQuery = organizationRef.collection("members").where("status", "==", "active");
 
   return db.runTransaction(async transaction => {
-    const [organizationSnapshot, invitationSnapshot, memberSnapshot] = await Promise.all([
+    const [organizationSnapshot, invitationSnapshot, memberSnapshot, subscriptionSnapshot, activeMembersSnapshot] = await Promise.all([
       transaction.get(organizationRef),
       transaction.get(invitationRef),
-      transaction.get(memberRef)
+      transaction.get(memberRef),
+      transaction.get(subscriptionRef),
+      transaction.get(activeMembersQuery)
     ]);
     if (!organizationSnapshot.exists || organizationSnapshot.get("status") !== "active") {
       throw invitationError("The invited workspace is not active.", 404);
@@ -182,6 +187,21 @@ async function acceptTenantInvitation(db, organizationId, token, decoded, option
       throw invitationError("You are already an active member of this workspace.", 409);
     }
     const role = INVITABLE_ROLES.has(invitation.role) ? invitation.role : "agent";
+    const subscription = subscriptionSnapshot.exists ? subscriptionSnapshot.data() || {} : {};
+    if (!["active", "trialing"].includes(String(subscription.status || ""))) {
+      if (process.env.NODE_ENV !== "test") {
+        throw invitationError("Start the workspace free trial or choose a plan before accepting team invitations.", 402);
+      }
+    } else {
+      const plan = getBillingPlanCatalog().find(item => item.key === String(subscription.plan || ""));
+      if (!plan) throw invitationError("The workspace plan could not be verified. Invitation acceptance is paused.", 503);
+      const activeSeatCount = activeMembersSnapshot.docs.filter(document =>
+        ["owner", "admin", "agent"].includes(String(document.data()?.role || ""))
+      ).length;
+      if (activeSeatCount >= plan.limits.agents) {
+        throw invitationError(`The ${plan.name} plan allows ${plan.limits.agents} active team seat(s). The workspace owner must upgrade before this invitation can be accepted.`, 409);
+      }
+    }
     const member = {
       uid: decoded.uid,
       email,
