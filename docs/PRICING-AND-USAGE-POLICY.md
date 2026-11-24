@@ -2,7 +2,7 @@
 
 **Status:** Approved product design; not yet a production billing configuration.
 **Billing currency:** INR
-**Billing cadence:** Monthly only at launch
+**Billing cadence:** Monthly or annual
 **WhatsApp charges:** Paid directly by each customer to Meta; excluded from Joy Inbox subscription fees.
 
 ## Monthly plans
@@ -15,7 +15,7 @@
 | Business | ₹1,499 | 150,000 | 5 | 6 GB | 12 months |
 | Pro | ₹1,999 | 300,000 | 10 | 15 GB | 12 months |
 
-All plans include the same core product features. Plan differences are usage limits, agent seats and history retention. Amounts are before applicable taxes. No annual billing or paid overage is offered at launch.
+All plans include the same core product features. Plan differences are usage limits, agent seats and history retention. Amounts are before applicable taxes. WhatsApp/Meta conversation charges are separate and paid directly by the customer.\n\n## Annual billing (two months free)\n\nAnnual customers pay for 10 months and receive 12 months of service (16.67% lower than paying monthly for a full year). Annual payment is collected upfront and renews once per year. The same monthly usage allowances apply in each service month; unused monthly quota does not roll over. Annual prices: Lite ₹2,990/year; Starter ₹5,990/year; Growth ₹9,990/year; Business ₹14,990/year; Pro ₹19,990/year. Annual subscription includes the same seven-day one-time free trial policy. No prorated cash refund or automatic downgrade is promised; cancellation and refund terms must be configured in Stripe and published in customer terms before launch.
 
 ## Seven-day free trial
 
@@ -55,4 +55,4 @@ All plans include the same core product features. Plan differences are usage lim
 
 The current Stripe integration foundation supports plan discovery, Checkout, Billing Portal and signed webhook synchronization. The backend plan catalog and seven-day one-time trial are wired to this policy. However, message/media/agent quota counters, atomic quota enforcement across every send route, usage alerts, retention deletion, Stripe trial-end behavior and full staging tests are not yet complete.
 
-**Do not enable live paid checkout or advertise these limits as enforced until all quota checks are server-side, transaction-safe, tenant-isolated, tested for concurrent sends and wired into every outbound send path.** Configure the five real monthly Stripe Price IDs only after the final prices are approved in the Stripe Dashboard.
+**Do not enable live paid checkout or advertise these limits as enforced until all quota checks are server-side, transaction-safe, tenant-isolated, tested for concurrent sends and wired into every outbound send path.** Configure all ten real Stripe Price IDs (five monthly and five annual) only after the final prices are approved in the Stripe Dashboard.
