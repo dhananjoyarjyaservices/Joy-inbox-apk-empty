@@ -104,23 +104,73 @@ async function revokeOrganizationApiKey(db, organizationId, keyId, now = Date.no
   return { id: keyId, status: "revoked" };
 }
 
-async function consumeApiRateLimit(db, keyHash, now = Date.now()) {
+async function consumeApiRateLimit(db, keyHash, organizationId, now = Date.now()) {
   const minute = Math.floor(now / 60000);
-  const ref = db.collection("publicApiRateLimits").doc(`${keyHash}_${minute}`);
-  await db.runTransaction(async transaction => {
-    const snapshot = await transaction.get(ref);
-    const count = snapshot.exists ? Number(snapshot.data()?.count || 0) : 0;
-    if (count >= MAX_REQUESTS_PER_MINUTE) {
-      throw httpError("API rate limit exceeded. Try again in the next minute.", 429);
+  const dateKey = new Date(now).toISOString().slice(0, 10).replace(/-/g, "");
+  const rateRef = db.collection("publicApiRateLimits").doc(`${keyHash}_${minute}`);
+  const usageRef = db.collection("publicApiUsageDaily").doc(`${keyHash}_${dateKey}`);
+  const limited = await db.runTransaction(async transaction => {
+    const [rateSnapshot, usageSnapshot] = await Promise.all([
+      transaction.get(rateRef),
+      transaction.get(usageRef)
+    ]);
+    const count = rateSnapshot.exists ? Number(rateSnapshot.data()?.count || 0) : 0;
+    const usage = usageSnapshot.exists ? usageSnapshot.data() || {} : {};
+    const isLimited = count >= MAX_REQUESTS_PER_MINUTE;
+    if (!isLimited) {
+      transaction.set(rateRef, {
+        keyHash,
+        organizationId,
+        minute,
+        count: count + 1,
+        expiresAt: new Date((minute + 61) * 60000),
+        updatedAt: new Date(now)
+      }, { merge: true });
     }
-    transaction.set(ref, {
+    transaction.set(usageRef, {
       keyHash,
-      minute,
-      count: count + 1,
-      expiresAt: new Date((minute + 61) * 60000),
+      organizationId,
+      dateKey,
+      requestCount: Number(usage.requestCount || 0) + 1,
+      rateLimitedCount: Number(usage.rateLimitedCount || 0) + (isLimited ? 1 : 0),
+      expiresAt: new Date(now + 400 * 24 * 60 * 60 * 1000),
       updatedAt: new Date(now)
     }, { merge: true });
+    return isLimited;
   });
+  if (limited) throw httpError("API rate limit exceeded. Try again in the next minute.", 429);
+}
+
+async function listOrganizationApiUsage(db, organizationId, options = {}) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId || "")) throw httpError("A valid workspace is required.", 400);
+  const rawDays = options.days === undefined ? 30 : Number(options.days);
+  if (!Number.isInteger(rawDays) || rawDays < 1 || rawDays > 90) throw httpError("Usage history must be between 1 and 90 days.", 400);
+  const fromDate = new Date(options.now === undefined ? Date.now() : options.now);
+  fromDate.setUTCHours(0, 0, 0, 0);
+  fromDate.setUTCDate(fromDate.getUTCDate() - (rawDays - 1));
+  const fromKey = fromDate.toISOString().slice(0, 10).replace(/-/g, "");
+  const toKey = new Date(options.now === undefined ? Date.now() : options.now).toISOString().slice(0, 10).replace(/-/g, "");
+  const snapshot = await db.collection("publicApiUsageDaily")
+    .where("organizationId", "==", organizationId)
+    .where("dateKey", ">=", fromKey)
+    .where("dateKey", "<=", toKey)
+    .limit(10000)
+    .get();
+  const daily = snapshot.docs.map(document => {
+    const data = document.data() || {};
+    return {
+      keyId: data.keyHash,
+      date: data.dateKey,
+      requests: Number(data.requestCount || 0),
+      rateLimited: Number(data.rateLimitedCount || 0)
+    };
+  }).sort((a, b) => b.date.localeCompare(a.date) || a.keyId.localeCompare(b.keyId));
+  const totals = daily.reduce((result, item) => {
+    result.requests += item.requests;
+    result.rateLimited += item.rateLimited;
+    return result;
+  }, { requests: 0, rateLimited: 0 });
+  return { periodDays: rawDays, totals, daily };
 }
 
 async function authenticateOrganizationApiKey(db, authorization, now = Date.now()) {
@@ -142,7 +192,7 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(data.organizationId || "")) throw httpError("API key workspace is invalid.", 403);
   const organization = await db.collection("organizations").doc(data.organizationId).get();
   if (!organization.exists || organization.data()?.status !== "active") throw httpError("API key workspace is inactive.", 403);
-  await consumeApiRateLimit(db, keyHash, now);
+  await consumeApiRateLimit(db, keyHash, data.organizationId, now);
   const lastUsedAt = typeof data.lastUsedAt?.toDate === "function"
     ? data.lastUsedAt.toDate().getTime()
     : data.lastUsedAt instanceof Date ? data.lastUsedAt.getTime() : 0;
@@ -164,6 +214,7 @@ function requireApiScope(authenticatedKey, scope) {
 module.exports = {
   ALLOWED_SCOPES,
   MAX_REQUESTS_PER_MINUTE,
+  listOrganizationApiUsage,
   normalizeApiKeyInput,
   createOrganizationApiKey,
   listOrganizationApiKeys,
