@@ -27,23 +27,34 @@ function fakeDb() {
     };
   }
   function collection(path) { return { doc: id => doc(path + "/" + id) }; }
+  let transactionQueue = Promise.resolve();
   return {
     docs,
     collection,
-    async runTransaction(callback) {
-      return callback({
-        async get(ref) {
-          const value = docs.get(ref.path);
-          return { exists: Boolean(value), data: () => value, get: key => value?.[key] };
-        },
-        create(ref, value) {
-          if (docs.has(ref.path)) throw new Error("document already exists");
-          docs.set(ref.path, value);
-        },
-        set(ref, value, options) {
-          docs.set(ref.path, options ? { ...(docs.get(ref.path) || {}), ...value } : value);
+    runTransaction(callback) {
+      const run = transactionQueue.then(async () => {
+        const writes = [];
+        const transaction = {
+          async get(ref) {
+            const value = docs.get(ref.path);
+            return { exists: Boolean(value), data: () => value, get: key => value?.[key] };
+          },
+          create(ref, value) { writes.push({ type: "create", path: ref.path, value }); },
+          set(ref, value, options) { writes.push({ type: "set", path: ref.path, value, merge: options?.merge === true }); }
+        };
+        const result = await callback(transaction);
+        for (const write of writes) {
+          if (write.type === "create") {
+            if (docs.has(write.path)) throw new Error("document already exists");
+            docs.set(write.path, write.value);
+          } else {
+            docs.set(write.path, write.merge ? { ...(docs.get(write.path) || {}), ...write.value } : write.value);
+          }
         }
+        return result;
       });
+      transactionQueue = run.catch(() => {});
+      return run;
     }
   };
 }
@@ -202,4 +213,36 @@ test("inbound provider message usage is idempotent and does not reject inbound m
   assert.equal(await recordInboundMessageUsage(db, "org_one", "wamid.abc", now), false);
   const usage = [...db.docs.entries()].find(([path]) => path.includes("/billingUsage/"))[1];
   assert.equal(usage.messagesUsed, 1);
+});
+
+
+test("concurrent outbound reservations cannot exceed the final available message quota", async () => {
+  const db = fakeDb();
+  const now = new Date("2026-11-24T00:00:00.000Z");
+  const subscription = {
+    status: "active",
+    plan: "lite",
+    currentPeriodStart: new Date("2026-11-01T00:00:00.000Z"),
+    currentPeriodEnd: new Date("2026-12-01T00:00:00.000Z")
+  };
+  const organization = db.collection("organizations").doc("org_one");
+  await organization.collection("billing").doc("subscription").set(subscription);
+  const window = getUsageWindow(subscription, now);
+  db.docs.set(`organizations/org_one/billingUsage/${window.key}`, {
+    plan: "lite",
+    periodKey: window.key,
+    messageLimit: window.limit,
+    messagesUsed: window.limit - 1,
+    messagesReserved: 0
+  });
+
+  const results = await Promise.allSettled([
+    reserveOutboundMessage(db, "org_one", "concurrent-message-a", now),
+    reserveOutboundMessage(db, "org_one", "concurrent-message-b", now)
+  ]);
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter(result => result.status === "rejected" && result.reason.statusCode === 429).length, 1);
+  const usage = db.docs.get(`organizations/org_one/billingUsage/${window.key}`);
+  assert.equal(usage.messagesUsed + usage.messagesReserved, window.limit);
+  assert.equal(usage.messagesReserved, 1);
 });
