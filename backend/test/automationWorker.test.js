@@ -159,3 +159,43 @@ test("automation queue continues only while its source rule remains enabled", ()
   assert.equal(automationRuleAllowsQueue({ exists: false, data: () => ({ enabled: true }) }), false);
   assert.equal(automationRuleAllowsQueue(null), false);
 });
+
+
+test("does not send delayed automation steps after their rule is disabled or deleted", async () => {
+  const { processClaimedJob } = require("../src/automationWorker");
+  const writes = [];
+  const runRef = {
+    async get() { return { exists: true, data: () => ({ completedSteps: 0, status: "sending" }) }; },
+    async set(patch, options) { writes.push({ type: "run", patch, options }); }
+  };
+  const ruleRef = {
+    async get() { return { exists: true, data: () => ({ enabled: false }) }; }
+  };
+  const organizationRef = {
+    collection(name) {
+      return { doc(id) {
+        if (name === "automationRuns" && id === "run_1") return runRef;
+        if (name === "automationRules" && id === "rule_1") return ruleRef;
+        throw new Error("Unexpected automation reference " + name + "/" + id);
+      } };
+    }
+  };
+  const jobRef = {
+    id: "job_1",
+    async update(patch) { writes.push({ type: "job", patch }); }
+  };
+  let sendCalls = 0;
+  const outcome = await processClaimedJob({}, jobRef, {
+    runId: "run_1", ruleId: "rule_1", organizationId: "org_1",
+    customerPhone: "919876543210", text: "Delayed reply", stepIndex: 1, totalSteps: 2
+  }, organizationRef, {
+    now: () => new Date("2026-11-24T12:00:00.000Z"),
+    getWhatsAppCredentials: async () => { throw new Error("Credentials must not be loaded."); },
+    sendWhatsAppText: async () => { sendCalls += 1; throw new Error("Message must not be sent."); }
+  });
+  assert.equal(outcome, "skipped");
+  assert.equal(sendCalls, 0);
+  assert.equal(writes[0].patch.status, "skipped");
+  assert.equal(writes[0].patch.reason, "automation_rule_disabled_or_deleted");
+  assert.equal(writes[1].patch.status, "skipped");
+});
