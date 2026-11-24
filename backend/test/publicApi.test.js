@@ -293,6 +293,17 @@ test("API keys accept the campaigns:read scope without granting campaign mutatio
   assert.throws(() => requireApiScope(auth, "leads:write"), { statusCode: 403 });
 });
 
+test("campaigns:write permits draft creation scope without granting outbound message sends", async () => {
+  const db = fakeDb({ "organizations/org_one": { status: "active" } });
+  const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "Campaign drafts", scopes: ["campaigns:write"]
+  });
+  const auth = await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey);
+  requireApiScope(auth, "campaigns:write");
+  assert.throws(() => requireApiScope(auth, "campaigns:read"), { statusCode: 403 });
+  assert.throws(() => requireApiScope(auth, "messages:write"), { statusCode: 403 });
+});
+
 test("API key accepts the messages:write scope and rejects unknown message scopes", async () => {
   const db = fakeDb({ "organizations/org_one": { status: "active" } });
   const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
