@@ -98,3 +98,16 @@ test("sorts automation rules by numeric priority including zero with stable tie 
     ["x", "y"]
   );
 });
+
+
+test("selects the first enabled matching automation by priority and stable tie-breakers", () => {
+  const { findMatchingAutomationRule } = require("../src/automationRules");
+  const rules = [
+    { id: "later", name: "Later", enabled: true, keyword: "price", priority: 100 },
+    { id: "disabled", name: "Disabled", enabled: false, keyword: "price", priority: 0 },
+    { id: "same-b", name: "Beta", enabled: true, keyword: "price", priority: 5 },
+    { id: "same-a", name: "Alpha", enabled: true, keyword: "price", priority: 5 }
+  ];
+  assert.equal(findMatchingAutomationRule(rules, "What's the price?").id, "same-a");
+  assert.equal(findMatchingAutomationRule(rules, "hello"), null);
+});
