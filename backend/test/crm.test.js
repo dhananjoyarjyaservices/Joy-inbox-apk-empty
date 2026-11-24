@@ -37,6 +37,7 @@ test("validates custom field values against active definitions and data types", 
   assert.throws(() => normalizeCrmFieldValues({ source: "Other" }, definitions), { statusCode: 400 });
   assert.throws(() => normalizeCrmFieldValues({ inactive: "value" }, definitions), { statusCode: 400 });
   assert.throws(() => normalizeCrmFieldValues({ arbitrary: "value" }, definitions), { statusCode: 400 });
+  assert.throws(() => normalizeCrmFieldValues({ due_date: "2026-02-31" }, [{ key: "due_date", label: "Due date", type: "date", active: true }]), { statusCode: 400 });
 });
 
 test("enforces required custom fields even when omitted", () => {
