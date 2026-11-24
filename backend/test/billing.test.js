@@ -23,11 +23,18 @@ test("billing plan discovery returns only Stripe price IDs configured by the bac
     STRIPE_PRICE_STARTER: "price_starter",
     STRIPE_PRICE_GROWTH: "",
     STRIPE_PRICE_BUSINESS: "price_business",
-    STRIPE_PRICE_PRO: "price_pro",\n    STRIPE_PRICE_LITE_ANNUAL: "price_lite_year",\n    STRIPE_PRICE_STARTER_ANNUAL: "price_starter_year",\n    STRIPE_PRICE_GROWTH_ANNUAL: "price_growth_year",\n    STRIPE_PRICE_BUSINESS_ANNUAL: "price_business_year",\n    STRIPE_PRICE_PRO_ANNUAL: "price_pro_year"
+    STRIPE_PRICE_PRO: "price_pro",
+    STRIPE_PRICE_LITE_ANNUAL: "price_lite_year",
+    STRIPE_PRICE_STARTER_ANNUAL: "price_starter_year",
+    STRIPE_PRICE_GROWTH_ANNUAL: "price_growth_year",
+    STRIPE_PRICE_BUSINESS_ANNUAL: "price_business_year",
+    STRIPE_PRICE_PRO_ANNUAL: "price_pro_year"
   });
   assert.deepEqual(plans.map(plan => plan.key), ["lite", "starter", "business", "pro"]);
   assert.equal(plans[0].priceId, "price_lite");
-  assert.equal(plans[1].monthlyPriceInr, 599);\n  assert.equal(plans[1].annualPriceInr, 5990);\n  assert.equal(plans[1].annualPriceId, "price_starter_year");
+  assert.equal(plans[1].monthlyPriceInr, 599);
+  assert.equal(plans[1].annualPriceInr, 5990);
+  assert.equal(plans[1].annualPriceId, "price_starter_year");
   assert.deepEqual(plans[2].limits, { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 });
   assert.equal(TRIAL_PERIOD_DAYS, 7);
 });
@@ -134,7 +141,8 @@ test("checkout session creation uses server price IDs and a Stripe idempotency k
     decoded: { email: "owner@example.com" },
     planKey: "starter",
     env: {
-      STRIPE_PRICE_STARTER: "price_starter",\n      STRIPE_PRICE_STARTER_ANNUAL: "price_starter_year",
+      STRIPE_PRICE_STARTER: "price_starter",
+      STRIPE_PRICE_STARTER_ANNUAL: "price_starter_year",
       BILLING_SUCCESS_URL: process.env.BILLING_SUCCESS_URL,
       BILLING_CANCEL_URL: process.env.BILLING_CANCEL_URL
     }
@@ -186,7 +194,8 @@ test("annual checkout selects the annual Stripe Price and preserves one-time tri
   assert.equal(session.interval, "year");
   assert.equal(session.trialDays, 7);
 });
-\ntest("checkout does not repeat a free trial for a workspace that already used it", async t => {
+
+test("checkout does not repeat a free trial for a workspace that already used it", async t => {
   const oldKey = process.env.STRIPE_SECRET_KEY;
   const oldFetch = global.fetch;
   t.after(() => {
