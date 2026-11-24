@@ -74,3 +74,5 @@ No production Firebase rules/indexes, AWS Lambda/EventBridge resources, Meta web
 - [docs/BILLING-STRIPE.md](docs/BILLING-STRIPE.md)
 - [docs/ORGANIZATION-ONBOARDING.md](docs/ORGANIZATION-ONBOARDING.md)
 - [docs/SAAS-MIGRATION.md](docs/SAAS-MIGRATION.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [SECURITY.md](SECURITY.md)
