@@ -63,13 +63,15 @@ Acceptance:
 
 ## Recommended build sequence
 
-### Phase 1 — CRM foundation (first product module)
-Deliver:
-- Tenant-scoped custom contact fields with typed definitions (text, number, date, single-select, multi-select, checkbox).
-- Contact profile editor and display of custom values.
-- Lead record lifecycle and configurable pipeline stages.
-- Board/list views, stage movement, lead owner, value, source and next-follow-up date.
-- Filters and basic funnel/agent reports.
+**Status refresh (2026-11-24):** The initial CRM foundation, follow-up reminders, CSV lead import, sales reporting, lead activity timeline and probability-weighted forecast are now present in the SaaS branch. Public API support has also expanded beyond contacts/leads to include text-message sending and template listing. The remaining phases below should be treated as incremental extensions, not as work that has not started.
+
+### Phase 1 — CRM completion and validation (in progress)
+Already present: tenant-scoped lead records, configurable pipeline stages, typed lead custom fields, lead board/editing, owner assignment, follow-up reminders, CSV lead import, sales reports, activity timeline and weighted forecast.
+
+Remaining delivery:
+- Integrate typed custom fields directly into contact profiles.
+- Add saved filters, reusable segments, deduplication and conversion attribution.
+- Validate CRM reporting and forecast behavior against real workspace data.
 
 Acceptance:
 - Every CRM read/write checks active organization membership and permission.
@@ -79,7 +81,9 @@ Acceptance:
 - Pagination and indexes are defined before unbounded queries.
 - Unit tests cover malformed fields, cross-tenant access, duplicate stages and concurrent updates.
 
-### Phase 2 — Public API and outbound webhooks
+### Phase 2 — Public API and outbound webhooks (initial slice implemented; extensions remain)
+Already present: contacts and leads CRUD, text-message send, template listing, scoped/hashed API keys, per-key rate limiting, cursor pagination for contacts/leads, mutation idempotency, daily usage analytics and signed webhook delivery/replay/secret rotation.
+
 Deliver:
 - Versioned API surface separate from browser-session routes.
 - Hashed API keys, scoped permissions, expiry, rotation and revocation.
