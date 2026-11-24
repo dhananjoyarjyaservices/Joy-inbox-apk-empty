@@ -19,12 +19,18 @@ function getEmbeddedSignupConfig(env = process.env) {
   const appId = String(env.META_APP_ID || "").trim();
   const configId = String(env.META_EMBEDDED_SIGNUP_CONFIG_ID || "").trim();
   if (!/^\d{5,32}$/.test(appId) || !/^\d{5,32}$/.test(configId)) return null;
+  const partnerMode = env.META_PARTNER_MODE === "solution_partner" ? "solution_partner" : "tech_provider";
+  if (partnerMode === "solution_partner" &&
+      (!/^\d{5,32}$/.test(env.META_SYSTEM_USER_ID || "") ||
+       !String(env.META_SYSTEM_USER_ACCESS_TOKEN || "").trim() ||
+       !/^\d{5,32}$/.test(env.META_EXTENDED_CREDIT_LINE_ID || ""))) return null;
   return {
     appId,
     configId,
     graphApiVersion: /^v\d+\.\d+$/.test(env.GRAPH_API_VERSION || "")
       ? env.GRAPH_API_VERSION
       : DEFAULT_GRAPH_VERSION,
+    partnerMode,
     solutionId: /^\d{5,32}$/.test(env.META_EMBEDDED_SIGNUP_SOLUTION_ID || "")
       ? env.META_EMBEDDED_SIGNUP_SOLUTION_ID
       : null
@@ -178,6 +184,36 @@ async function completeEmbeddedSignup({
     throw httpError("The selected phone number does not belong to the WhatsApp Business Account shared with Joy Inbox.", 403);
   }
 
+  let billingModel = "meta_direct";
+  if (config.partnerMode === "solution_partner") {
+    const systemUserId = String(env.META_SYSTEM_USER_ID || "");
+    const systemUserToken = String(env.META_SYSTEM_USER_ACCESS_TOKEN || "");
+    const creditLineId = String(env.META_EXTENDED_CREDIT_LINE_ID || "");
+    const currency = /^[A-Z]{3}$/.test(env.META_CREDIT_LINE_CURRENCY || "")
+      ? env.META_CREDIT_LINE_CURRENCY
+      : "INR";
+
+    await metaRequest(
+      fetchImpl,
+      buildGraphUrl(config.graphApiVersion, `${wabaId}/assigned_users`, {
+        user: systemUserId,
+        tasks: JSON.stringify(["MANAGE", "DEVELOP"])
+      }),
+      systemUserToken,
+      { method: "POST", body: JSON.stringify({}) }
+    );
+    await metaRequest(
+      fetchImpl,
+      buildGraphUrl(config.graphApiVersion, `${creditLineId}/whatsapp_credit_sharing_and_attach`, {
+        waba_currency: currency,
+        waba_id: wabaId
+      }),
+      systemUserToken,
+      { method: "POST", body: JSON.stringify({}) }
+    );
+    billingModel = "joy_inbox_partner_credit_line";
+  }
+
   // Subscribe Joy Inbox's Meta app to the customer's WABA before registration.
   // If phone registration is rejected, the customer can safely retry signup.
   await metaRequest(
@@ -202,7 +238,8 @@ async function completeEmbeddedSignup({
     phoneNumberId,
     displayPhoneNumber: String(phone.display_phone_number || "").slice(0, 40),
     verifiedName: String(phone.verified_name || "").slice(0, 100),
-    registrationPin
+    registrationPin,
+    billingModel
   };
 }
 
