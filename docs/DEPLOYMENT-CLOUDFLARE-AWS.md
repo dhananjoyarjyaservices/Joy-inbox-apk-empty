@@ -49,6 +49,11 @@ Recommended safe preview arrangement:
 
 Cloudflare documents that Git-integrated Pages projects can create branch and pull-request preview deployments, and that the repository/project connection is managed under Settings > Builds > Manage. See the official [Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/) and [GitHub integration](https://developers.cloudflare.com/pages/configuration/git-integration/github-integration/) guides.
 
+
+### Reproducible Lambda package
+
+From the repository root, run `npm run package:lambda --prefix backend`. The script creates an isolated temporary build directory, installs only locked production dependencies with `npm ci --omit=dev`, includes the HTTP and scheduled handler source files, creates `backend/dist/joy-inbox-lambda.zip`, and verifies the ZIP archive. It does not deploy or upload the artifact. The backend Firestore-emulator workflow runs this packaging check after the regression suite. Configure each Lambda handler explicitly: `src/index.handler` for HTTP, `src/index.slaScheduledHandler` for SLA/retention/campaign scheduling, and `src/automationWorker.handler` for the separate automation queue worker.
+
 ## AWS Lambda environment
 
 Lambda must use Node.js 22 and the deployment package must include the backend dependencies. Configure the following values using AWS Secrets Manager or protected Lambda environment variables:
