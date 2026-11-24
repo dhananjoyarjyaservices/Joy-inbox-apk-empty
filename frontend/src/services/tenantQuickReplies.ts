@@ -8,7 +8,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 
-import { db } from "../firebase/config";
+import { db } from "../firebase/firestore";
 import type { QuickReply } from "../types";
 
 function quickRepliesCollection(organizationId: string) {
