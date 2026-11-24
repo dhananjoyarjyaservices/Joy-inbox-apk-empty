@@ -2685,6 +2685,7 @@ async function handleTenantBilling(event) {
       plans,
       subscription: snapshot.exists ? {
         plan: String(value.plan || value.checkoutPlan || "unknown"),
+         interval: value.interval === "year" || value.billingInterval === "year" || value.checkoutInterval === "year" ? "year" : "month",
         status: String(value.status || "incomplete"),
         currentPeriodEnd: asIso(value.currentPeriodEnd),
         trialEnd: asIso(value.trialEnd),
