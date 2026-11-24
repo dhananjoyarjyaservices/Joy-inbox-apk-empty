@@ -507,13 +507,13 @@ async function handleTenantCrm(event, resource) {
       const snapshot = await collection.orderBy("position", "asc").get();
       return jsonResponse(event, 200, { items: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
     }
+    const leadQuery = organization.role === "agent"
+      ? collection.where("ownerUid", "==", decoded.uid).orderBy("updatedAt", "desc")
+      : collection.orderBy("updatedAt", "desc");
     const snapshot = resource === "fields"
       ? await collection.orderBy("createdAt", "asc").get()
-      : await collection.orderBy("updatedAt", "desc").limit(100).get();
-    let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    if (resource === "leads" && organization.role === "agent") {
-      items = items.filter(item => item.ownerUid === decoded.uid);
-    }
+      : await leadQuery.limit(100).get();
+    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     return jsonResponse(event, 200, { items });
   }
 
