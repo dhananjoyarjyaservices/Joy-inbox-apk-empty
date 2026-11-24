@@ -29,6 +29,7 @@ test("aggregates pipeline, revenue, owner and source sales reporting", () => {
   assert.equal(report.byOwner[0].name, "Agent A");
   assert.equal(report.bySource.find(item => item.source === "Website").total, 2);
   assert.equal(report.byOwner.find(item => item.uid === "unassigned").total, 1);
+  assert.equal(report.byCurrency.find(item => item.currency === "INR").wonValue, 2500);
 });
 
 test("reports an empty pipeline safely and flags capped samples", () => {
