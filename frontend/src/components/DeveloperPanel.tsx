@@ -3,7 +3,11 @@ import {
   createOrganizationApiKey,
   listOrganizationApiKeys,
   revokeOrganizationApiKey,
-  type OrganizationApiKey
+  listOrganizationWebhooks,
+  createOrganizationWebhook,
+  revokeOrganizationWebhook,
+  type OrganizationApiKey,
+  type OrganizationWebhook
 } from "../services/organizations";
 
 function displayDate(value: unknown) {
@@ -16,6 +20,12 @@ function displayDate(value: unknown) {
 
 export default function DeveloperPanel({ organizationId }: { organizationId: string }) {
   const [keys, setKeys] = useState<OrganizationApiKey[]>([]);
+  const [webhooks, setWebhooks] = useState<OrganizationWebhook[]>([]);
+  const [webhookName, setWebhookName] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [webhookCopied, setWebhookCopied] = useState(false);
+  const [webhookSaving, setWebhookSaving] = useState(false);
   const [name, setName] = useState("");
   const [readContacts, setReadContacts] = useState(true);
   const [writeContacts, setWriteContacts] = useState(false);
@@ -30,8 +40,14 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
   async function refresh() {
     if (!organizationId) return;
     setLoading(true);
-    try { setKeys(await listOrganizationApiKeys(organizationId)); }
-    catch (e) { setError(e instanceof Error ? e.message : "API keys could not be loaded."); }
+    try {
+      const [apiKeys, subscriptions] = await Promise.all([
+        listOrganizationApiKeys(organizationId),
+        listOrganizationWebhooks(organizationId)
+      ]);
+      setKeys(apiKeys);
+      setWebhooks(subscriptions);
+    } catch (e) { setError(e instanceof Error ? e.message : "Developer settings could not be loaded."); }
     finally { setLoading(false); }
   }
   useEffect(() => { void refresh(); }, [organizationId]);
@@ -63,6 +79,43 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
       setKeys(current => current.map(item => item.id === key.id ? { ...item, status: "revoked" } : item));
       setNotice("API key revoked.");
     } catch (e) { setError(e instanceof Error ? e.message : "API key could not be revoked."); }
+  }
+
+  async function createWebhook(event: FormEvent) {
+    event.preventDefault();
+    if (!organizationId) return;
+    setWebhookSaving(true); setError(""); setNotice(""); setWebhookSecret(""); setWebhookCopied(false);
+    try {
+      const result = await createOrganizationWebhook({
+        organizationId,
+        name: webhookName,
+        url: webhookUrl,
+        events: ["contact.upserted"]
+      });
+      setWebhookSecret(result.secret);
+      setWebhookName("");
+      setWebhookUrl("");
+      setNotice("Webhook created. Copy its signing secret now; it will not be shown again.");
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Webhook could not be created."); }
+    finally { setWebhookSaving(false); }
+  }
+
+  async function revokeWebhook(webhook: OrganizationWebhook) {
+    if (!confirm(`Disable the webhook “${webhook.name}”? No further events will be delivered.`)) return;
+    setError(""); setNotice("");
+    try {
+      await revokeOrganizationWebhook(organizationId, webhook.id);
+      setWebhooks(current => current.map(item => item.id === webhook.id ? { ...item, status: "revoked" } : item));
+      setNotice("Webhook disabled.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Webhook could not be disabled."); }
+  }
+
+  async function copyWebhookSecret() {
+    try {
+      await navigator.clipboard.writeText(webhookSecret);
+      setWebhookCopied(true);
+    } catch { setError("Clipboard access is unavailable. Select and copy the signing secret manually."); }
   }
 
   async function copyKey() {
@@ -117,6 +170,17 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <p className="mt-1 text-[11px] text-gray-400">Created: {displayDate(key.createdAt)} · Last used: {displayDate(key.lastUsedAt)}</p>
             {key.status === "active" && <button type="button" onClick={() => void revoke(key)} className="mt-2 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600">Revoke key</button>}
           </article>)}</div> : <p className="text-sm text-gray-500">{loading ? "Loading API keys..." : "No API keys created for this workspace."}</p>}
+        </div>
+        <div className="rounded-xl border bg-white p-4 space-y-3">
+          <div><h3 className="font-semibold">Outbound webhooks</h3><p className="mt-1 text-xs text-gray-500">Send signed contact events to your HTTPS endpoint. Delivery is queued and retried automatically.</p></div>
+          {webhookSecret && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-900">Copy the signing secret now</p><p className="mt-1 text-xs text-amber-800">Store this secret securely. Joy Inbox will not show it again.</p><div className="mt-2 flex flex-wrap gap-2"><input readOnly value={webhookSecret} className="min-w-0 flex-1 rounded-lg border border-amber-300 bg-white p-2 font-mono text-xs"/><button type="button" onClick={() => void copyWebhookSecret()} className="rounded-lg bg-amber-900 px-3 py-2 text-xs font-semibold text-white">{webhookCopied ? "Copied" : "Copy secret"}</button></div></div>}
+          <form onSubmit={createWebhook} className="grid gap-2 sm:grid-cols-2">
+            <input required minLength={2} maxLength={80} value={webhookName} onChange={event => setWebhookName(event.target.value)} placeholder="Webhook name" className="rounded-lg border p-2 text-sm"/>
+            <input required type="url" value={webhookUrl} onChange={event => setWebhookUrl(event.target.value)} placeholder="https://your-domain.com/webhooks/joy" className="rounded-lg border p-2 text-sm"/>
+            <p className="text-xs text-gray-500 sm:col-span-2">Subscribed event: <code>contact.upserted</code> (contact created or updated from Joy Inbox or the Public API).</p>
+            <button disabled={webhookSaving || !organizationId} className="justify-self-start rounded-lg bg-[#075e54] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{webhookSaving ? "Creating..." : "Create webhook"}</button>
+          </form>
+          <div className="space-y-2">{webhooks.length ? webhooks.map(webhook => <article key={webhook.id} className="rounded-lg border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{webhook.name}</strong><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${webhook.status === "active" ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{webhook.status}</span></div><p className="mt-1 break-all text-xs text-gray-500">{webhook.url}</p><p className="mt-1 text-[11px] text-gray-500">Events: {webhook.events.join(", ")} · Last delivery: {displayDate(webhook.lastDeliveryAt)}</p>{webhook.status === "active" && <button type="button" onClick={() => void revokeWebhook(webhook)} className="mt-2 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600">Disable webhook</button>}</article>) : <p className="text-xs text-gray-500">No webhook subscriptions created.</p>}</div>
         </div>
         <div className="rounded-xl border bg-white p-4">
           <h3 className="font-semibold">Available API endpoints</h3>
