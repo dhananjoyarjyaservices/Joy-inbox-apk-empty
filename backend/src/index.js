@@ -496,15 +496,14 @@ async function handleTenantCrm(event, resource) {
 
   if (method === "GET") {
     if (resource === "stages") {
-      const existing = await collection.get();
-      if (!existing.docs.length) {
-        const batch = db.batch();
+      await db.runTransaction(async transaction => {
+        const refs = DEFAULT_PIPELINE_STAGES.map(stage => collection.doc(stage.id));
+        const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));
         const now = new Date();
-        for (const stage of DEFAULT_PIPELINE_STAGES) {
-          batch.create(collection.doc(stage.id), { ...stage, createdAt: now, updatedAt: now });
-        }
-        await batch.commit();
-      }
+        snapshots.forEach((snapshot, index) => {
+          if (!snapshot.exists) transaction.create(refs[index], { ...DEFAULT_PIPELINE_STAGES[index], createdAt: now, updatedAt: now });
+        });
+      });
       const snapshot = await collection.orderBy("position", "asc").get();
       return jsonResponse(event, 200, { items: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
     }
