@@ -15,7 +15,11 @@
 | Business | ₹1,499 | 150,000 | 5 | 6 GB | 12 months |
 | Pro | ₹1,999 | 300,000 | 10 | 15 GB | 12 months |
 
-All plans include the same core product features. Plan differences are usage limits, agent seats and history retention. Amounts are before applicable taxes. WhatsApp/Meta conversation charges are separate and paid directly by the customer.\n\n## Annual billing (two months free)\n\nAnnual customers pay for 10 months and receive 12 months of service (16.67% lower than paying monthly for a full year). Annual payment is collected upfront and renews once per year. The same monthly usage allowances apply in each service month; unused monthly quota does not roll over. Annual prices: Lite ₹2,990/year; Starter ₹5,990/year; Growth ₹9,990/year; Business ₹14,990/year; Pro ₹19,990/year. Annual subscription includes the same seven-day one-time free trial policy. No prorated cash refund or automatic downgrade is promised; cancellation and refund terms must be configured in Stripe and published in customer terms before launch.
+All plans include the same core product features. Plan differences are usage limits, agent seats and history retention. Amounts are before applicable taxes. WhatsApp/Meta conversation charges are separate and paid directly by the customer.
+
+## Annual billing (two months free)
+
+Annual customers pay for 10 months and receive 12 months of service (16.67% lower than paying monthly for a full year). Annual payment is collected upfront and renews once per year. The same monthly usage allowances apply in each service month; unused monthly quota does not roll over. Annual prices: Lite ₹2,990/year; Starter ₹5,990/year; Growth ₹9,990/year; Business ₹14,990/year; Pro ₹19,990/year. Annual subscription includes the same seven-day one-time free trial policy. No prorated cash refund or automatic downgrade is promised; cancellation and refund terms must be configured in Stripe and published in customer terms before launch.
 
 ## Seven-day free trial
 
