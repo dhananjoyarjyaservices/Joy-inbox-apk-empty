@@ -9,9 +9,9 @@ import {
 import type { TenantContact } from "../services/tenantResources";
 import type { OrganizationMember } from "../services/organizationMembers";
 
-type Props = { organizationId: string; contacts: TenantContact[]; members: OrganizationMember[]; canManageSchema: boolean };
+type Props = { organizationId: string; contacts: TenantContact[]; members: OrganizationMember[]; canManageSchema: boolean; initialContactId?: string; initialContactName?: string };
 
-export default function CrmPanel({ organizationId, contacts, members, canManageSchema }: Props) {
+export default function CrmPanel({ organizationId, contacts, members, canManageSchema, initialContactId, initialContactName }: Props) {
   const [fields, setFields] = useState<CrmField[]>([]);
   const [stages, setStages] = useState<CrmStage[]>([]);
   const [leads, setLeads] = useState<CrmLead[]>([]);
@@ -59,6 +59,13 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   }, [organizationId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (!initialContactId) return;
+    setContactId(initialContactId);
+    setTitle(initialContactName ? `WhatsApp lead - ${initialContactName}`.slice(0, 120) : "WhatsApp lead");
+    setEditingLeadId("");
+  }, [initialContactId, initialContactName]);
 
   const activeStages = useMemo(() => stages.filter(stage => stage.active).sort((a, b) => a.position - b.position), [stages]);
   const followUpCounts = useMemo(() => {
