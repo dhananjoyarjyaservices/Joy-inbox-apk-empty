@@ -273,14 +273,15 @@ async function processPendingWebhookDeliveries(db, {
         createdAt: toIso(current.createdAt),
         data: current.payload
       });
-      const signature = "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("hex");
+      const timestampHeader = String(Math.floor(now / 1000));
+      const signature = "sha256=" + crypto.createHmac("sha256", secret).update(`${timestampHeader}.${body}`).digest("hex");
       const requestOptions = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Joy-Event": current.event,
           "X-Joy-Delivery": document.id,
-          "X-Joy-Timestamp": String(Math.floor(now / 1000)),
+          "X-Joy-Timestamp": timestampHeader,
           "X-Joy-Signature": signature,
           "User-Agent": "Joy-Inbox-Webhooks/1.0"
         },
