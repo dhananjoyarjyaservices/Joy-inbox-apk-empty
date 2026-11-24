@@ -50,12 +50,6 @@ async function listCrmActivity(organization, leadId, limit = 50) {
     error.statusCode = 400;
     throw error;
   }
-  const lead = await organization.ref.collection("crmLeads").doc(leadId).get();
-  if (!lead.exists) {
-    const error = new Error("Lead was not found.");
-    error.statusCode = 404;
-    throw error;
-  }
   const snapshot = await organization.ref.collection("crmLeads").doc(leadId).collection("activity")
     .orderBy("createdAt", "desc").limit(limit).get();
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
