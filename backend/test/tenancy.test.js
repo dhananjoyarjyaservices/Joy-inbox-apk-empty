@@ -15,11 +15,14 @@ test("agent role cannot manage organization membership or WhatsApp settings", ()
   assert.equal(ROLE_PERMISSIONS.agent.has("chats:read"), true);
   assert.throws(() => requirePermission(agent, "members:manage"), { statusCode: 403 });
   assert.throws(() => requirePermission(agent, "whatsapp:manage"), { statusCode: 403 });
+  assert.throws(() => requirePermission(agent, "api:manage"), { statusCode: 403 });
+  assert.doesNotThrow(() => requirePermission({ role: "owner" }, "api:manage"));
+  assert.doesNotThrow(() => requirePermission({ role: "admin" }, "api:manage"));
 });
 
 test("role permission matrix denies unknown and privileged permissions to agents", () => {
   const permissions = [
-    "members:manage", "settings:manage", "whatsapp:manage",
+    "members:manage", "settings:manage", "whatsapp:manage", "api:manage",
     "chats:read", "chats:manage", "messages:send",
     "contacts:manage", "quickReplies:manage"
   ];
