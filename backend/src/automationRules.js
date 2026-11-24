@@ -33,6 +33,16 @@ function normalizeAutomationRule(input) {
   return { name, keyword, matchType, response: steps[0].message, steps, enabled: input.enabled !== false, priority };
 }
 
+function sortAutomationRules(rules) {
+  return [...rules].sort((a, b) => {
+    const priorityA = Number.isInteger(a.priority) ? a.priority : 100;
+    const priorityB = Number.isInteger(b.priority) ? b.priority : 100;
+    return priorityA - priorityB ||
+      String(a.name || "").localeCompare(String(b.name || "")) ||
+      String(a.id || "").localeCompare(String(b.id || ""));
+  });
+}
+
 function matchesAutomationRule(rule, messageText) {
   const message = String(messageText || "").trim().toLowerCase();
   const keyword = String(rule.keyword || "").trim().toLowerCase();
@@ -42,4 +52,4 @@ function matchesAutomationRule(rule, messageText) {
   return message.includes(keyword);
 }
 
-module.exports = { ID_PATTERN, normalizeAutomationRule, matchesAutomationRule };
+module.exports = { ID_PATTERN, normalizeAutomationRule, sortAutomationRules, matchesAutomationRule };
