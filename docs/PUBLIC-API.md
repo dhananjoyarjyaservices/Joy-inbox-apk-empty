@@ -43,6 +43,15 @@ Required scope: `messages:write`. The request must include the connected `phoneN
 ```
 The number must belong to the API key's workspace. The API sends through the WhatsApp Cloud API and stores the text and delivery metadata in the workspace inbox; it does not store customer media. Use a unique `Idempotency-Key` for safe retries. WhatsApp policy, recipient opt-in, messaging windows and Meta account limits still apply. A successful response means Meta accepted the message, not that the recipient device received it.
 
+## Approved WhatsApp templates
+
+### List templates
+```http
+GET /public/v1/templates?phoneNumberId=PHONE_NUMBER_ID&wabaId=WABA_ID
+Authorization: Bearer YOUR_JOY_API_KEY
+```
+Required scope: `templates:read`. Both IDs must belong to a connected WhatsApp number in the API key's workspace. The response returns template IDs, names, approval status, language, category and components. Meta pagination is indicated by `hasNext`; this endpoint currently returns the first page (up to 100 templates).
+
 ## Sales CRM leads
 
 ### List leads
