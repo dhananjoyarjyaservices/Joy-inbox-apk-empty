@@ -50,10 +50,13 @@ test("enforces required custom fields even when omitted", () => {
 
 test("validates pipeline stages and mutually exclusive outcome flags", () => {
   assert.deepEqual(normalizePipelineStage({ id: "proposal", name: "Proposal", position: 30 }), {
-    id: "proposal", name: "Proposal", position: 30, isWon: false, isLost: false, isDefault: false, active: true
+    id: "proposal", name: "Proposal", position: 30, isWon: false, isLost: false, probability: 50, isDefault: false, active: true
   });
   assert.throws(() => normalizePipelineStage({ id: "won", name: "Won", isWon: true, isLost: true }), { statusCode: 400 });
   assert.throws(() => normalizePipelineStage({ id: "1invalid", name: "Invalid" }), { statusCode: 400 });
+  assert.throws(() => normalizePipelineStage({ id: "proposal", name: "Proposal", probability: 101 }), { statusCode: 400 });
+  assert.equal(normalizePipelineStage({ id: "won", name: "Won", isWon: true }).probability, 100);
+  assert.equal(normalizePipelineStage({ id: "lost", name: "Lost", isLost: true }).probability, 0);
 });
 
 test("normalizes lead data, custom fields and follow-up dates", () => {
