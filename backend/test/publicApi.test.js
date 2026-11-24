@@ -7,7 +7,8 @@ const {
   listOrganizationApiKeys,
   revokeOrganizationApiKey,
   authenticateOrganizationApiKey,
-  requireApiScope
+  requireApiScope,
+  listOrganizationApiUsage
 } = require("../src/publicApi");
 
 function fakeDb(seed = {}) {
@@ -34,14 +35,18 @@ function fakeDb(seed = {}) {
     return {
       doc(id) { return doc(path + "/" + id); },
       where(field, operator, value) {
-        assert.equal(operator, "==");
+        const filters = [{ field, operator, value }];
         const query = {
+          where(nextField, nextOperator, nextValue) { filters.push({ field: nextField, operator: nextOperator, value: nextValue }); return query; },
           orderBy() { return query; },
           limit() { return query; },
           async get() {
             const prefix = path + "/";
             const docs = [...records.entries()]
-              .filter(([key, data]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/") && data[field] === value)
+              .filter(([key, data]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/") &&
+                filters.every(filter => filter.operator === "==" ? data[filter.field] === filter.value :
+                  filter.operator === ">=" ? data[filter.field] >= filter.value :
+                  filter.operator === "<=" ? data[filter.field] <= filter.value : false))
               .map(([key, data]) => ({ id: key.slice(prefix.length), data: () => data }));
             return { docs };
           }
@@ -180,4 +185,46 @@ test("enforces a per-key 60-request-per-minute limit", async () => {
   );
   const nextMinute = await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + 60000);
   assert.equal(nextMinute.organizationId, "org_one");
+});
+
+
+test("records daily API request and rate-limit usage for each workspace key", async () => {
+  const db = fakeDb({ "organizations/org_one": { status: "active" } });
+  const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "Analytics key", scopes: ["contacts:read"]
+  });
+  const now = Date.parse("2026-11-24T12:00:00Z");
+  await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now);
+  const usagePath = `publicApiUsageDaily/${created.id}_20261124`;
+  assert.equal(db.records.get(usagePath).requestCount, 1);
+  assert.equal(db.records.get(usagePath).rateLimitedCount, 0);
+  const usage = await listOrganizationApiUsage(db, "org_one", { days: 1, now });
+  assert.deepEqual(usage.totals, { requests: 1, rateLimited: 0 });
+  assert.equal(usage.daily[0].keyId, created.id);
+  assert.equal(usage.daily[0].date, "20261124");
+});
+
+test("counts rate-limited API attempts in daily usage analytics", async () => {
+  const db = fakeDb({ "organizations/org_one": { status: "active" } });
+  const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "Rate analytics", scopes: ["contacts:read"]
+  });
+  const now = Date.parse("2026-11-24T12:00:00Z");
+  for (let index = 0; index < 60; index += 1) {
+    await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + index);
+  }
+  await assert.rejects(() => authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + 1000), { statusCode: 429 });
+  const usage = await listOrganizationApiUsage(db, "org_one", { days: 1, now });
+  assert.deepEqual(usage.totals, { requests: 61, rateLimited: 1 });
+});
+
+test("API usage analytics are tenant scoped and validate reporting windows", async () => {
+  const db = fakeDb({
+    "publicApiUsageDaily/key_a_20261124": { keyHash: "key_a", organizationId: "org_a", dateKey: "20261124", requestCount: 5, rateLimitedCount: 1 },
+    "publicApiUsageDaily/key_b_20261124": { keyHash: "key_b", organizationId: "org_b", dateKey: "20261124", requestCount: 99, rateLimitedCount: 0 }
+  });
+  const usage = await listOrganizationApiUsage(db, "org_a", { days: 1, now: Date.parse("2026-11-24T12:00:00Z") });
+  assert.equal(usage.totals.requests, 5);
+  assert.equal(usage.daily.length, 1);
+  await assert.rejects(() => listOrganizationApiUsage(db, "org_a", { days: 91 }), { statusCode: 400 });
 });
