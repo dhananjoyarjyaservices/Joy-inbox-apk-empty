@@ -56,7 +56,7 @@ const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = requ
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
-const { reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
+const { getTenantMessageUsage, reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
@@ -2711,6 +2711,7 @@ async function handleTenantBilling(event) {
       Promise.resolve(getConfiguredBillingPlans().map(({ key, name, monthlyPriceInr, annualPriceInr, priceId, annualPriceId, limits }) => ({ key, name, monthlyPriceInr, annualPriceInr, monthlyAvailable: Boolean(priceId), annualAvailable: Boolean(annualPriceId), currency: "INR", intervals: ["month", "year"], limits, trialDays: 7 })))
     ]);
     const value = snapshot.exists ? snapshot.data() || {} : {};
+    const usage = snapshot.exists ? await getTenantMessageUsage(getDb(), organization.id, value).catch(error => ({ error: error.message })) : null;
     const asIso = input => input?.toDate ? input.toDate().toISOString()
       : input instanceof Date ? input.toISOString() : null;
     return jsonResponse(event, 200, {
@@ -2722,7 +2723,8 @@ async function handleTenantBilling(event) {
         status: String(value.status || "incomplete"),
         currentPeriodEnd: asIso(value.currentPeriodEnd),
         trialEnd: asIso(value.trialEnd),
-        cancelAtPeriodEnd: value.cancelAtPeriodEnd === true
+        cancelAtPeriodEnd: value.cancelAtPeriodEnd === true,
+         usage
       } : null
     });
   }
