@@ -71,7 +71,7 @@ All data remains under the authenticated workspace path. Custom field keys and s
 - Leads with a due `nextFollowUpAt` are scanned by the scheduled worker.
 - A reminder is sent to the assigned active workspace member only; unassigned leads are left for manual triage.
 - Won, lost and inactive-stage leads are excluded.
-- The worker writes an in-app notification and sends a push notification, using a deterministic notification ID.
+- The worker writes an in-app notification and sends a push notification, using a deterministic notification ID. Members can disable CRM follow-up alerts in Notification preferences; sound and desktop delivery preferences are also respected. CRM follow-ups appear in the Notification Center and open Sales CRM when selected.
 - Reminder claims are transactional and keyed to the exact follow-up timestamp to avoid duplicate sends across overlapping scheduler invocations. Failed deliveries release the claim for retry.
 - The existing EventBridge `src/index.slaScheduledHandler` now runs this worker alongside SLA and automation checks. Schedule it at a five-minute cadence in staging after deploying the updated Lambda package.
 
