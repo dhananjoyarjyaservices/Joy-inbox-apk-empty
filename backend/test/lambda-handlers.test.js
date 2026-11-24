@@ -20,6 +20,7 @@ test("CRM API endpoints require Firebase authentication before workspace data ac
     ["POST", "/organizations/crm/fields"],
     ["GET", "/organizations/crm/stages"],
     ["POST", "/organizations/crm/stages"],
+    ["GET", "/organizations/crm/report"],
     ["GET", "/organizations/crm/leads"],
     ["POST", "/organizations/crm/leads"],
     ["POST", "/organizations/crm/leads/import"],
