@@ -22,12 +22,12 @@ Configure these in both staging and production backend secrets; never use a Vite
 - `STRIPE_PRICE_STARTER`
 - `STRIPE_PRICE_GROWTH`
 - `STRIPE_PRICE_BUSINESS`
-- `STRIPE_PRICE_PRO`
+- `STRIPE_PRICE_PRO`\n- `STRIPE_PRICE_LITE_ANNUAL`\n- `STRIPE_PRICE_STARTER_ANNUAL`\n- `STRIPE_PRICE_GROWTH_ANNUAL`\n- `STRIPE_PRICE_BUSINESS_ANNUAL`\n- `STRIPE_PRICE_PRO_ANNUAL`
 - `BILLING_SUCCESS_URL`
 - `BILLING_CANCEL_URL`
 - `BILLING_PORTAL_RETURN_URL`
 
-Create five monthly recurring Products/Prices in the Stripe Dashboard using the INR amounts and entitlements in docs/PRICING-AND-USAGE-POLICY.md, then supply their actual Price IDs. The backend exposes only plans whose Price IDs are configured. Checkout applies a seven-day trial once per workspace; the first successful trial subscription is recorded using trialUsedAt, and subsequent subscriptions for that workspace do not receive another trial. The public billing-plan response includes the monthly INR price and usage limits but never exposes Stripe Price IDs.
+Create five monthly and five annual recurring Products/Prices in the Stripe Dashboard using the INR amounts and entitlements in docs/PRICING-AND-USAGE-POLICY.md, then supply their actual Price IDs. Annual prices bill once per year and are priced at ten monthly payments (two months free). The backend exposes only plans whose Price IDs are configured. Checkout applies a seven-day trial once per workspace; the first successful trial subscription is recorded using trialUsedAt, and subsequent subscriptions for that workspace do not receive another trial. The public billing-plan response includes monthly and annual INR prices, interval availability and usage limits but never exposes Stripe Price IDs. Checkout accepts interval: "month" or "year"; monthly remains the default for older clients.
 
 ## Stripe webhook setup
 
@@ -35,8 +35,8 @@ Register `https://YOUR_API_DOMAIN/billing/stripe-webhook` in Stripe and subscrib
 
 ## Staging acceptance checks
 
-1. Configure Stripe test-mode secret, webhook secret, three recurring Price IDs and HTTPS return URLs.
-2. From an owner/admin account, open Workspace Billing and create a Checkout Session for each configured plan.
+1. Configure Stripe test-mode secret, webhook secret, ten recurring Price IDs (five monthly and five annual) and HTTPS return URLs.
+2. From an owner/admin account, open Workspace Billing and create a Checkout Session for each configured plan and both billing intervals.
 3. Complete a test subscription and verify `checkout.session.completed` writes the correct organization, customer, subscription, plan, status and renewal date.
 4. Update, cancel and fail payment on test subscriptions; verify the subscription status and cancellation flag update from signed webhook events.
 5. Open the Billing Portal and verify it returns only the linked Stripe customer.
