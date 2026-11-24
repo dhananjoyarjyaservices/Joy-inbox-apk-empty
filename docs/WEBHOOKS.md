@@ -1,6 +1,6 @@
 # Joy Inbox outbound webhooks
 
-The initial outbound webhook implementation supports workspace-managed HTTPS subscriptions and the `contact.upserted` event.
+Outbound webhooks support workspace-managed HTTPS subscriptions for contact changes and WhatsApp inbound/message-status events.
 
 ## Configure
 
@@ -45,7 +45,8 @@ Verify the signature against the exact raw request body before parsing JSON. Do 
 
 ## Current scope and remaining work
 
-- Implemented event: `contact.upserted` from the workspace contact manager and public contacts API.
-- Message event names are reserved but must be connected to inbound/outbound message and status webhook paths before they are offered to customers.
+- `contact.upserted`: contact created or updated through the workspace contact manager or public contacts API.
+- `message.received`: new inbound WhatsApp message after it is persisted.
+- `message.sent`, `message.delivered`, `message.read`, `message.failed`: Meta message-status events.
 - Delivery history UI, manual replay, endpoint secret rotation and configurable retry policies remain to be added.
 - The scheduled worker currently processes a bounded batch of deliveries alongside SLA and automation checks; isolate it into its own schedule after staging load tests.
