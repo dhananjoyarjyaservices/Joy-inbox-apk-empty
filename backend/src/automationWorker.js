@@ -3,6 +3,7 @@
 const { getDb } = require("./firebase");
 const { getWhatsAppCredentials } = require("./tenancy");
 const { sendWhatsAppText } = require("./whatsapp");
+const { reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 
 const MAX_JOBS_PER_INVOCATION = 25;
 const MAX_ATTEMPTS = 5;
@@ -55,6 +56,7 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
   const chatRef = organizationRef.collection("chats").doc(job.customerPhone);
 
   let sendAttempted = false;
+  let quotaReservation = null;
   try {
     const runSnapshot = await runRef.get();
     if (!runSnapshot.exists) throw Object.assign(new Error("Automation run was not found."), { definitive: true });
@@ -71,8 +73,10 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     }
 
     const credentials = await getCredentials(db, job.organizationId, job.phoneNumberId || undefined);
+    quotaReservation = await reserveOutboundMessage(db, job.organizationId, `automation_queue_${job.runId}_${Number(job.stepIndex || 0) + 1}`);
     sendAttempted = true;
     const result = await sendText(job.customerPhone, job.text, undefined, credentials);
+    await finishOutboundReservation(db, quotaReservation, "sent");
     const sentAt = new Date();
     const batch = db.batch();
     batch.set(chatRef.collection("messages").doc(result.messageId), {
@@ -115,6 +119,9 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     await batch.commit();
     return "sent";
   } catch (error) {
+    if (quotaReservation) {
+      await finishOutboundReservation(db, quotaReservation, error?.definitive === true || Number(error?.metaStatusCode) === 429 ? "failed" : "sent");
+    }
     const attempts = Number(job.attempts || 1);
     const disposition = getFailureDisposition(error, sendAttempted, attempts);
     const failedAt = new Date();
