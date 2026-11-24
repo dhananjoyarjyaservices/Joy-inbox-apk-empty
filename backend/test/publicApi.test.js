@@ -83,7 +83,7 @@ test("creates a scoped API key once and stores only its SHA-256 hash", async () 
   const now = Date.parse("2026-11-24T10:00:00Z");
   const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
     name: "CRM integration",
-    scopes: ["contacts:read", "contacts:write", "messages:write"],
+    scopes: ["contacts:read", "contacts:write"],
     expiryDays: 30
   }, now);
   assert.match(created.apiKey, /^joy_live_[A-Za-z0-9_-]{40,64}$/);
