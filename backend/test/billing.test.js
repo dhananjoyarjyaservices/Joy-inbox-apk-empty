@@ -30,7 +30,7 @@ test("billing plan discovery returns only Stripe price IDs configured by the bac
     STRIPE_PRICE_BUSINESS_ANNUAL: "price_business_year",
     STRIPE_PRICE_PRO_ANNUAL: "price_pro_year"
   });
-  assert.deepEqual(plans.map(plan => plan.key), ["lite", "starter", "business", "pro"]);
+  assert.deepEqual(plans.map(plan => plan.key), ["lite", "starter", "growth", "business", "pro"]);
   assert.equal(plans[0].priceId, "price_lite");
   assert.equal(plans[1].monthlyPriceInr, 599);
   assert.equal(plans[1].annualPriceInr, 5990);
