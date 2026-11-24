@@ -59,7 +59,8 @@ const {
   listOrganizationApiKeys,
   revokeOrganizationApiKey,
   authenticateOrganizationApiKey,
-  requireApiScope
+  requireApiScope,
+  listOrganizationApiUsage
 } = require("./publicApi");
 const {
   createOrganizationWebhook,
@@ -337,6 +338,18 @@ async function handleOrganizationWebhookDeliveries(event) {
   }
   const result = await replayOrganizationWebhookDelivery(getDb(), organization.id, String(body.deliveryId || ""));
   return jsonResponse(event, 200, result);
+}
+
+async function handleOrganizationApiUsage(event) {
+  if (getMethod(event) !== "GET") return jsonResponse(event, 405, { error: "Method not allowed." });
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "api:manage");
+  const usage = await listOrganizationApiUsage(getDb(), organization.id, {
+    days: event.queryStringParameters?.days
+  });
+  return jsonResponse(event, 200, usage);
 }
 
 async function handleOrganizationApiKeys(event) {
@@ -3663,6 +3676,10 @@ exports.handler = async (event) => {
     }
   }
 
+  if (method === "GET" && path.endsWith("/organizations/developer/api-usage")) {
+    try { return await handleOrganizationApiUsage(event); }
+    catch (error) { return jsonResponse(event, error.statusCode || 500, { error: error.message || "Unable to load API usage." }); }
+  }
   if (["GET", "POST", "DELETE"].includes(method) && path.endsWith("/organizations/developer/api-keys")) {
     try { return await handleOrganizationApiKeys(event); }
     catch (error) {
