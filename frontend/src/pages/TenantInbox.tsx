@@ -7,7 +7,7 @@ import { logout } from "../services/auth";
 import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
 import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, checkTenantSlaAlerts, listWhatsAppTemplates, sendTenantTemplate, sendTenantText, retryTenantFailedText, retryTenantFailedTemplate, getOrganizationSlaSettings, saveOrganizationSlaSettings, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult, type WhatsAppTemplate, listOrganizationNotifications, listOrganizationAutomationRules, listOrganizationAutomationRuns, getOrganizationAutomationQueueHealth, type OrganizationAutomationQueueHealth, saveOrganizationAutomationRule, deleteOrganizationAutomationRule, type OrganizationAutomationRule, type OrganizationAutomationRun, markOrganizationNotificationRead, markAllOrganizationNotificationsRead, getOrganizationNotificationPreferences, saveOrganizationNotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, type OrganizationNotificationPreferences, type OrganizationNotification, listOrganizationCampaigns, createOrganizationCampaign, updateOrganizationCampaign, type OrganizationCampaign, type OrganizationCampaignAction, getOrganizationCampaignReportRecipients, type OrganizationCampaignReportRecipient, getOrganizationBilling, createOrganizationBillingCheckout, openOrganizationBillingPortal, type OrganizationBillingState } from "../services/organizations";
 import OrganizationMembers from "../components/OrganizationMembers";
-import { listOrganizationMembers, updateOrganizationChatAssignment, listChatAssignmentAudit, listHistoricalAgentPerformance, type OrganizationMember, type ChatAssignmentAuditEvent, type HistoricalAgentPerformance } from "../services/organizationMembers";
+import { listAllOrganizationMembers, updateOrganizationChatAssignment, listChatAssignmentAudit, listHistoricalAgentPerformance, type OrganizationMember, type ChatAssignmentAuditEvent, type HistoricalAgentPerformance } from "../services/organizationMembers";
 import { listenToTenantChats, listenToTenantMessages, loadOlderTenantMessages } from "../services/tenantChats";
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
 import { enablePushNotifications, syncPushToken, listenForForegroundPush, playNotificationSound, listRegisteredPushDevices, revokePushDevice, listNotificationDeliveries, listTeamNotificationDeliveryAnalytics, getMemberNotificationDeliveryReport, type TeamNotificationDeliveryAnalytics, type MemberNotificationDeliveryReport, type NotificationDelivery, type RegisteredPushDevice } from "../services/pushNotifications";
@@ -305,8 +305,9 @@ export default function TenantInbox() {
   useEffect(() => {
     if (!organization) { setTeamMembers([]); return; }
     let active = true;
-    listOrganizationMembers(organization.id, { limit: 100 })
-      .then(page => { if (active) setTeamMembers(page.members.filter(member => member.status === "active")); })
+    setTeamMembers([]);
+    listAllOrganizationMembers(organization.id)
+      .then(members => { if (active) setTeamMembers(members.filter(member => member.status === "active")); })
       .catch(e => { if (active) setError(e instanceof Error ? e.message : "Team members could not load."); });
     return () => { active = false; };
   }, [organization?.id]);
