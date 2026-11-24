@@ -263,6 +263,19 @@ async function handleWhatsAppConnectionHealth(event) {
   return jsonResponse(event, 200, { results, checkedAt });
 }
 
+async function handleWhatsAppRegistrationPin(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const phoneNumberId = event.queryStringParameters?.phoneNumberId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "whatsapp:manage");
+  const credentials = await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
+  if (!credentials.registrationPin) {
+    return jsonResponse(event, 404, { error: "A saved WhatsApp registration PIN is not available for this number." });
+  }
+  return jsonResponse(event, 200, { phoneNumberId, registrationPin: credentials.registrationPin });
+}
+
 async function handleWhatsAppEmbeddedSignupConfig(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
@@ -3343,6 +3356,14 @@ exports.handler = async (event) => {
     return jsonResponse(event, 410, {
       error: "This legacy endpoint is disabled. Use the organization-scoped Joy Inbox API."
     });
+  }
+
+  if (method === "GET" && path.endsWith("/whatsapp/registration-pin")) {
+    try { return await handleWhatsAppRegistrationPin(event); }
+    catch (error) {
+      console.error("WhatsApp registration PIN could not load:", error.statusCode || "PIN_LOOKUP_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "WhatsApp registration PIN could not be loaded." });
+    }
   }
 
   if (method === "GET" && path.endsWith("/whatsapp/embedded-signup/config")) {
