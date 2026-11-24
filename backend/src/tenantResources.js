@@ -63,8 +63,34 @@ async function saveTenantResource(db, organizationId, resource, input, resourceI
   const now = new Date();
   if (resource === "contacts") {
     const id = data.phoneId;
-    await collection.doc(id).set({ ...data, ...(resourceId && resourceId === id ? {} : { createdAt: now }), updatedAt: now }, { merge: true });
-    if (resourceId && resourceId !== id) await collection.doc(resourceId).delete();
+    const targetRef = collection.doc(id);
+    if (resourceId && resourceId !== id) {
+      if (!ID_PATTERN.test(resourceId)) throw httpError("Invalid contact ID.", 400);
+      const sourceRef = collection.doc(resourceId);
+      await db.runTransaction(async (transaction) => {
+        const [sourceSnapshot, targetSnapshot] = await Promise.all([
+          transaction.get(sourceRef),
+          transaction.get(targetRef)
+        ]);
+        if (!sourceSnapshot.exists) throw httpError("Contact was not found.", 404);
+        if (targetSnapshot.exists) {
+          throw httpError("A contact with this phone number already exists in this workspace. Update that contact instead.", 409);
+        }
+        const sourceData = sourceSnapshot.data() || {};
+        transaction.set(targetRef, {
+          ...data,
+          createdAt: sourceData.createdAt || now,
+          updatedAt: now
+        });
+        transaction.delete(sourceRef);
+      });
+    } else {
+      await targetRef.set({
+        ...data,
+        ...(resourceId ? {} : { createdAt: now }),
+        updatedAt: now
+      }, { merge: true });
+    }
     return { id, ...data };
   }
   if (resourceId) {
