@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { handler } = require("../src/index");
 const crypto = require("node:crypto");
 const {
@@ -16,6 +18,52 @@ const {
   createPortalSession,
   processStripeWebhookEvent
 } = require("../src/billing");
+
+test("backend environment example documents all ten monthly and annual Stripe Price IDs", () => {
+  const example = fs.readFileSync(path.join(__dirname, "../.env.example"), "utf8");
+  for (const plan of ["LITE", "STARTER", "GROWTH", "BUSINESS", "PRO"]) {
+    assert.match(example, new RegExp(`^STRIPE_PRICE_${plan}=price_REPLACE_WITH_${plan}_MONTHLY_PRICE_ID"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { handler } = require("../src/index");
+const crypto = require("node:crypto");
+const {
+  EVENT_LEASE_MS,
+  TRIAL_PERIOD_DAYS,
+  getConfiguredBillingPlans,
+  validReturnUrl,
+  verifyStripeSignature,
+  extractSubscriptionFields,
+  claimStripeEvent,
+  createCheckoutSession,
+  createPortalSession,
+  processStripeWebhookEvent
+, "m"));
+    assert.match(example, new RegExp(`^STRIPE_PRICE_${plan}_ANNUAL=price_REPLACE_WITH_${plan}_ANNUAL_PRICE_ID"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { handler } = require("../src/index");
+const crypto = require("node:crypto");
+const {
+  EVENT_LEASE_MS,
+  TRIAL_PERIOD_DAYS,
+  getConfiguredBillingPlans,
+  validReturnUrl,
+  verifyStripeSignature,
+  extractSubscriptionFields,
+  claimStripeEvent,
+  createCheckoutSession,
+  createPortalSession,
+  processStripeWebhookEvent
+, "m"));
+  }
+});
 
 test("billing plan discovery returns only Stripe price IDs configured by the backend", () => {
   const plans = getConfiguredBillingPlans({
