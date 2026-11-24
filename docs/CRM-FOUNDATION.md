@@ -91,3 +91,8 @@ The Sales CRM screen includes a workspace-scoped report for total, open, won and
 ## Lead activity timeline
 
 Each lead stores an append-only activity history in its own `crmLeads/{leadId}/activity` subcollection. Lead creation, tracked-field updates and deletion write an actor-attributed event. Update events list the fields that changed and retain a limited before/after snapshot (title, stage, owner, deal value/currency, source, follow-up date and linked contact). Free-form notes and custom-field values are deliberately excluded from the audit snapshot. The authenticated timeline endpoint checks workspace membership and agent lead assignment before returning the latest 1–100 events. The pipeline card exposes the timeline on demand.
+
+
+## Probability-weighted pipeline forecast
+
+Each CRM pipeline stage supports an integer win probability from 0 to 100. New stages default to 50%; closed-won and closed-lost stages default to 100% and 0%. Workspace admins can choose the probability when creating a stage. Sales reporting adds an expected open-pipeline amount by multiplying each open lead value by its stage probability. Currency totals remain separated; no foreign-exchange conversion is implied. Forecasts are directional estimates, not guaranteed revenue.
