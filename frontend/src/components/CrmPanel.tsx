@@ -22,6 +22,7 @@ export default function CrmPanel({ organizationId }: Props) {
   const [fieldType, setFieldType] = useState<CrmField["type"]>("text");
   const [fieldOptions, setFieldOptions] = useState("");
   const [stageName, setStageName] = useState("");
+  const [customValues, setCustomValues] = useState<Record<string, string | number | boolean>>({});
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -47,9 +48,9 @@ export default function CrmPanel({ organizationId }: Props) {
     try {
       await saveCrmLead(organizationId, {
         title: title.trim(), contactId: "", stageId, ownerUid: "", source: source.trim(),
-        value: value.trim() ? Number(value) : null, currency: "INR", notes: "", nextFollowUpAt: null, customFields: {}
+        value: value.trim() ? Number(value) : null, currency: "INR", notes: "", nextFollowUpAt: null, customFields: customValues
       });
-      setTitle(""); setValue(""); setSource("");
+      setTitle(""); setValue(""); setSource(""); setCustomValues({});
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "Lead could not be saved."); }
     finally { setSaving(false); }
@@ -121,6 +122,7 @@ export default function CrmPanel({ organizationId }: Props) {
         <label className="text-xs text-gray-600">Deal value (₹)<input type="number" min="0" max="1000000000000" step="0.01" value={value} onChange={event => setValue(event.target.value)} placeholder="25000" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
         <label className="text-xs text-gray-600">Initial stage<select value={stageId} onChange={event => setStageId(event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">{activeStages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}</select></label>
         <label className="text-xs text-gray-600 sm:col-span-3">Lead source<input maxLength={80} value={source} onChange={event => setSource(event.target.value)} placeholder="Website, referral, advertisement..." className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
+        {fields.filter(field => field.active).map(field => <label key={field.id} className="text-xs text-gray-600">{field.label}{field.required ? " *" : ""}{field.type === "select" ? <select required={field.required} value={String(customValues[field.key] ?? "")} onChange={event => setCustomValues(current => ({ ...current, [field.key]: event.target.value }))} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm"><option value="">Choose...</option>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select> : field.type === "boolean" ? <span className="mt-2 flex items-center gap-2"><input type="checkbox" checked={customValues[field.key] === true} onChange={event => setCustomValues(current => ({ ...current, [field.key]: event.target.checked }))}/><span>Yes</span></span> : <input required={field.required} type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"} value={String(customValues[field.key] ?? "")} onChange={event => setCustomValues(current => ({ ...current, [field.key]: field.type === "number" && event.target.value !== "" ? Number(event.target.value) : event.target.value }))} className="mt-1 w-full rounded-lg border p-2 text-sm"/>}</label>)}
         <button disabled={saving || loading || !title.trim() || !stageId} className="mt-auto rounded-lg bg-[#075e54] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Plus size={15} className="mr-1 inline"/> Add lead</button>
       </form>
       <div className="mb-5 grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-2">
