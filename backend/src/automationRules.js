@@ -52,4 +52,16 @@ function matchesAutomationRule(rule, messageText) {
   return message.includes(keyword);
 }
 
-module.exports = { ID_PATTERN, normalizeAutomationRule, sortAutomationRules, matchesAutomationRule };
+function findMatchingAutomationRule(rules, messageText) {
+  return sortAutomationRules(rules).find(rule =>
+    rule.enabled === true && matchesAutomationRule(rule, messageText)
+  ) || null;
+}
+
+module.exports = {
+  ID_PATTERN,
+  normalizeAutomationRule,
+  sortAutomationRules,
+  matchesAutomationRule,
+  findMatchingAutomationRule
+};
