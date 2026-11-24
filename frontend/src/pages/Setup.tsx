@@ -3,8 +3,110 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Building2, LogOut, MessageCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
-import { connectWhatsApp, disconnectWhatsApp, checkWhatsAppConnectionHealth, createOrganization, listOrganizations, listWhatsAppConnections, acceptOrganizationInvitation, type Organization, type WhatsAppConnection } from "../services/organizations";
+import { disconnectWhatsApp, checkWhatsAppConnectionHealth, createOrganization, listOrganizations, listWhatsAppConnections, acceptOrganizationInvitation, getWhatsAppEmbeddedSignupConfig, startWhatsAppEmbeddedSignup, completeWhatsAppEmbeddedSignup, type Organization, type WhatsAppConnection, type WhatsAppEmbeddedSignupConfig } from "../services/organizations";
 import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
+
+declare global {
+  interface Window {
+    FB?: {
+      init(options: { appId: string; autoLogAppEvents: boolean; xfbml: boolean; version: string }): void;
+      login(callback: (response: any) => void, options: Record<string, unknown>): void;
+    };
+    fbAsyncInit?: () => void;
+  }
+}
+
+async function ensureFacebookSdk(appId: string, version: string) {
+  if (window.FB) {
+    window.FB.init({ appId, autoLogAppEvents: true, xfbml: true, version });
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    window.fbAsyncInit = () => {
+      try {
+        if (!window.FB) throw new Error("Meta login could not be initialized. Refresh and try again.");
+        window.FB.init({ appId, autoLogAppEvents: true, xfbml: true, version });
+        resolve();
+      } catch (error) { reject(error); }
+    };
+    if (!document.getElementById("facebook-jssdk")) {
+      const script = document.createElement("script");
+      script.id = "facebook-jssdk";
+      script.async = true;
+      script.defer = true;
+      script.crossOrigin = "anonymous";
+      script.src = "https://connect.facebook.net/en_US/sdk.js";
+      script.onerror = () => reject(new Error("Meta login SDK could not load. Check your connection and try again."));
+      document.body.appendChild(script);
+    }
+  });
+}
+
+function runMetaEmbeddedSignup(config: WhatsAppEmbeddedSignupConfig): Promise<{ code: string; wabaId: string; phoneNumberId: string }> {
+  if (!config.appId || !config.configId || !config.graphApiVersion) {
+    return Promise.reject(new Error("WhatsApp self-service onboarding is not configured yet."));
+  }
+  return new Promise((resolve, reject) => {
+    let code = "";
+    let account: { wabaId: string; phoneNumberId: string } | null = null;
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      if (!error && (!code || !account)) return;
+      settled = true;
+      window.removeEventListener("message", onMessage);
+      window.clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve({ code, ...account! });
+    };
+    const timeout = window.setTimeout(() => finish(new Error("Meta signup timed out. Please start again.")), 180000);
+    const onMessage = (event: MessageEvent) => {
+      let hostname = "";
+      try { hostname = new URL(event.origin).hostname; } catch { return; }
+      if (hostname !== "facebook.com" && !hostname.endsWith(".facebook.com")) return;
+      let data: any;
+      try { data = typeof event.data === "string" ? JSON.parse(event.data) : event.data; } catch { return; }
+      if (data?.type !== "WA_EMBEDDED_SIGNUP") return;
+      if (data.event === "FINISH") {
+        const wabaId = String(data.data?.waba_id || "");
+        const phoneNumberId = String(data.data?.phone_number_id || "");
+        if (!/^\d{5,32}$/.test(wabaId) || !/^\d{5,32}$/.test(phoneNumberId)) {
+          finish(new Error("Meta did not return the selected WhatsApp number. Please try again."));
+          return;
+        }
+        account = { wabaId, phoneNumberId };
+        finish();
+      } else if (data.event === "CANCEL") {
+        finish(new Error("WhatsApp setup was cancelled. You can try again whenever you are ready."));
+      } else if (data.event === "ERROR") {
+        finish(new Error(String(data.data?.error_message || "Meta could not complete WhatsApp setup.").slice(0, 240)));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    const options: Record<string, unknown> = {
+      config_id: config.configId,
+      response_type: "code",
+      override_default_response_type: true,
+      auth_type: "rerequest",
+      extras: { setup: config.solutionId ? { solutionID: config.solutionId } : {} }
+    };
+    try {
+      if (!window.FB) throw new Error("Meta login is not ready. Refresh and try again.");
+      window.FB.login((response) => {
+        const authorizationCode = String(response?.authResponse?.code || response?.code || "");
+        if (!authorizationCode) {
+          finish(new Error("Meta authorization was not completed. Please try again."));
+          return;
+        }
+        code = authorizationCode;
+        finish();
+      }, options);
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error("Meta signup could not be opened."));
+    }
+  });
+}
+
 
 export default function Setup() {
   const { user } = useAuth();
@@ -14,8 +116,9 @@ export default function Setup() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [name, setName] = useState("");
   const [organizationId, setOrganizationId] = useState(() => getActiveOrganizationId());
-  const [phoneNumberId, setPhoneNumberId] = useState("");
-  const [accessToken, setAccessToken] = useState("");
+  const [embeddedConfig, setEmbeddedConfig] = useState<WhatsAppEmbeddedSignupConfig>({ enabled: false });
+  const [embeddedConfigLoading, setEmbeddedConfigLoading] = useState(false);
+  const [embeddedSignupBusy, setEmbeddedSignupBusy] = useState(false);
   const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(false);
   const [healthChecking, setHealthChecking] = useState(false);
@@ -64,6 +167,17 @@ export default function Setup() {
   }, [user, searchParams, setSearchParams, navigate]);
 
   useEffect(() => {
+    if (!organizationId) { setEmbeddedConfig({ enabled: false }); return; }
+    let active = true;
+    setEmbeddedConfigLoading(true);
+    getWhatsAppEmbeddedSignupConfig(organizationId)
+      .then(config => { if (active) setEmbeddedConfig(config); })
+      .catch(() => { if (active) setEmbeddedConfig({ enabled: false }); })
+      .finally(() => { if (active) setEmbeddedConfigLoading(false); });
+    return () => { active = false; };
+  }, [organizationId]);
+
+  useEffect(() => {
     if (!organizationId) { setConnections([]); return; }
     let active = true;
     setConnectionsLoading(true);
@@ -110,14 +224,25 @@ export default function Setup() {
     finally { setBusy(false); }
   }
 
-  async function handleConnect(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+  async function handleEmbeddedSignup() {
+    if (!organizationId || embeddedSignupBusy || !embeddedConfig.enabled) return;
+    setEmbeddedSignupBusy(true); setError(""); setNotice("");
     try {
-      await connectWhatsApp(organizationId, phoneNumberId.trim(), accessToken.trim());
-      setAccessToken(""); setNotice("WhatsApp number verified and connected.");
+      const session = await startWhatsAppEmbeddedSignup(organizationId);
+      await ensureFacebookSdk(embeddedConfig.appId || "", embeddedConfig.graphApiVersion || "v26.0");
+      const meta = await runMetaEmbeddedSignup(embeddedConfig);
+      await completeWhatsAppEmbeddedSignup({
+        organizationId,
+        sessionId: session.sessionId,
+        code: meta.code,
+        wabaId: meta.wabaId,
+        phoneNumberId: meta.phoneNumberId
+      });
       setConnections(await listWhatsAppConnections(organizationId));
-    } catch (e) { setError(e instanceof Error ? e.message : "WhatsApp connection failed."); }
-    finally { setBusy(false); }
+      setNotice("WhatsApp Business is connected. Your number is ready in Joy Inbox.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "WhatsApp setup could not be completed. Please try again.");
+    } finally { setEmbeddedSignupBusy(false); }
   }
 
   return <main className="min-h-screen bg-[#eef2f3] px-4 py-8">
@@ -136,13 +261,13 @@ export default function Setup() {
         {connectionsLoading ? <p className="text-sm text-gray-500">Loading connected numbers...</p> : connections.length ? <div className="space-y-2">{connections.map(connection => <div key={connection.phoneNumberId} className="rounded-xl border border-gray-200 p-3"><div className="flex items-center justify-between gap-3"><p className="font-medium">{connection.displayPhoneNumber || "WhatsApp number"}</p><div className="flex items-center gap-2"><span className={`text-xs ${connection.connected ? "text-green-700" : "text-gray-500"}`}>{connection.connected ? "Connected" : "Disconnected"}</span>{connection.connected && <button type="button" disabled={busy} onClick={() => void handleDisconnect(connection)} className="text-xs font-medium text-red-600 disabled:opacity-50">Disconnect</button>}</div></div><p className="mt-1 text-sm text-gray-600">{connection.verifiedName || "Business name not provided"}</p><p className="mt-1 break-all text-xs text-gray-400">Phone Number ID: {connection.phoneNumberId}</p>{connection.connected && healthResults[connection.phoneNumberId] && <div className="mt-2 rounded-lg bg-gray-50 p-2"><p className={`text-xs font-medium ${healthResults[connection.phoneNumberId].status === "healthy" ? "text-green-700" : "text-amber-700"}`}>{healthResults[connection.phoneNumberId].status === "healthy" ? "Healthy · Meta verified" : "Attention required"}</p>{healthResults[connection.phoneNumberId].error && <p className="mt-1 text-xs text-amber-700">{healthResults[connection.phoneNumberId].error}</p>}<p className="mt-1 text-[11px] text-gray-400">Checked: {new Date(healthResults[connection.phoneNumberId].checkedAt).toLocaleString()}</p></div>}</div>)}</div> : <p className="text-sm text-gray-500">No WhatsApp numbers connected to this workspace yet.</p>}
       </section>
       <section className="rounded-2xl bg-white p-6 shadow-sm">
-        <h2 className="mb-1 text-lg font-semibold">Connect WhatsApp Cloud API</h2><p className="mb-4 text-sm text-gray-500">Select a workspace, then enter its Meta Phone Number ID and permanent access token. The token is stored encrypted on the server.</p>
-        <form onSubmit={handleConnect} className="space-y-3">
-          <select required value={organizationId} onChange={(e) => { setOrganizationId(e.target.value); setActiveOrganizationId(e.target.value); }} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm"><option value="">Select workspace</option>{organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}</select>
-          <input required value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="Meta Phone Number ID" className="w-full rounded-xl border border-gray-200 px-3 py-3 text-sm"/>
-          <input required type="password" autoComplete="off" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder="Meta access token" className="w-full rounded-xl border border-gray-200 px-3 py-3 text-sm"/>
-          <button disabled={busy || !organizationId} className="w-full rounded-xl bg-[#075e54] py-3 font-semibold text-white disabled:opacity-60">{busy ? "Please wait..." : "Verify and connect number"}</button>
-        </form>
+        <div className="mb-2 flex items-center gap-2"><MessageCircle className="text-[#075e54]"/><h2 className="text-lg font-semibold">Connect WhatsApp Business</h2></div>
+        <p className="mb-5 text-sm text-gray-600">Connect securely through Meta. Joy Inbox will configure your Cloud API connection automatically—no Phone Number ID, access token or webhook URL to copy.</p>
+        <button type="button" onClick={() => void handleEmbeddedSignup()} disabled={!organizationId || embeddedSignupBusy || embeddedConfigLoading || !embeddedConfig.enabled} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1877F2] py-3.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          {embeddedSignupBusy ? "Connecting to Meta..." : embeddedConfigLoading ? "Preparing secure connection..." : "Continue with Facebook"}
+        </button>
+        {!embeddedConfigLoading && !embeddedConfig.enabled && <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Self-service WhatsApp connection is being configured by Joy Inbox. Please try again later.</div>}
+        <p className="mt-3 text-xs text-gray-500">Meta will ask you to sign in, select your business, verify ownership of your phone number and approve the requested permissions. Joy Inbox never asks you to share your password or access token.</p>
       </section>
       {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-xl bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
