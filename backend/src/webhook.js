@@ -6,7 +6,7 @@ const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
-const { matchesAutomationRule } = require("./automationRules");
+const { matchesAutomationRule, sortAutomationRules } = require("./automationRules");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 
@@ -152,7 +152,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   const rules = rulesSnapshot.docs
     .map((document) => ({ id: document.id, ...document.data() }))
     .filter((rule) => rule.enabled === true && typeof rule.keyword === "string" && (typeof rule.response === "string" || (Array.isArray(rule.steps) && rule.steps.length > 0)))
-    .sort((a, b) => Number(a.priority || 100) - Number(b.priority || 100));
+    
   const rule = rules.find((item) => matchesAutomationRule(item, body));
   if (!rule) return;
 
