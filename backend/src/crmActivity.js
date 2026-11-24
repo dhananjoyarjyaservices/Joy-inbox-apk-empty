@@ -39,7 +39,7 @@ function buildCrmActivityEvent({ organizationId, leadId, actorUid, action, befor
 
 async function recordCrmActivity(db, input) {
   const event = buildCrmActivityEvent(input);
-  const ref = input.organizationRef.collection("crmActivity").doc();
+  const ref = input.organizationRef.collection("crmLeads").doc(input.leadId).collection("activity").doc();
   await ref.create(event);
   return { id: ref.id, ...event };
 }
@@ -56,8 +56,8 @@ async function listCrmActivity(organization, leadId, limit = 50) {
     error.statusCode = 404;
     throw error;
   }
-  const snapshot = await organization.ref.collection("crmActivity")
-    .where("leadId", "==", leadId).orderBy("createdAt", "desc").limit(limit).get();
+  const snapshot = await organization.ref.collection("crmLeads").doc(leadId).collection("activity")
+    .orderBy("createdAt", "desc").limit(limit).get();
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
