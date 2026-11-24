@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, RefreshCw, BriefcaseBusiness, Trash2, Pencil, Upload } from "lucide-react";
+import { Plus, RefreshCw, BriefcaseBusiness, Trash2, Pencil, Upload, History } from "lucide-react";
 import {
-  listCrmFields, listCrmLeads, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead, importCrmLeads, getCrmSalesReport,
-  type CrmSalesReport,
+  listCrmFields, listCrmLeads, listCrmLeadActivity, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead, importCrmLeads, getCrmSalesReport,
+  type CrmSalesReport, type CrmLeadActivity,
   type CrmField, type CrmLead, type CrmStage
 } from "../services/crm";
 
@@ -35,6 +35,10 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const [followUpFilter, setFollowUpFilter] = useState<"all" | "overdue" | "today">("all");
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState("");
+  const [activityLeadId, setActivityLeadId] = useState("");
+  const [leadActivities, setLeadActivities] = useState<CrmLeadActivity[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -173,6 +177,14 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     finally { setSaving(false); }
   }
 
+  async function toggleLeadActivity(lead: CrmLead) {
+    if (activityLeadId === lead.id) { setActivityLeadId(""); setLeadActivities([]); setActivityError(""); return; }
+    setActivityLeadId(lead.id); setActivityLoading(true); setActivityError("");
+    try { setLeadActivities(await listCrmLeadActivity(organizationId, lead.id)); }
+    catch (e) { setActivityError(e instanceof Error ? e.message : "Activity could not be loaded."); }
+    finally { setActivityLoading(false); }
+  }
+
   async function removeLead(lead: CrmLead) {
     if (!window.confirm(`Delete lead "${lead.title}"?`)) return;
     setSaving(true); setError("");
@@ -271,7 +283,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
       </div>
       )}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">Pipeline board</h3><span className="text-xs text-gray-500">{leads.length} leads · {fields.filter(field => field.active).length} custom fields</span></div>
-      {loading ? <p className="rounded-xl border bg-white p-5 text-sm text-gray-500">Loading CRM...</p> : <div className="grid gap-3 xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2">{grouped.map(({ stage, leads: stageLeads }) => <section key={stage.id} className="min-h-48 rounded-xl border bg-gray-100 p-3"><div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">{stage.name}</h4><span className="rounded-full bg-white px-2 py-0.5 text-[10px] text-gray-500">{stageLeads.length}</span></div><div className="space-y-2">{stageLeads.map(lead => <article key={lead.id} className="rounded-lg border bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-2"><strong className="break-words text-xs">{lead.title}</strong><div className="flex gap-2"><button type="button" title="Edit lead" onClick={() => startEditLead(lead)} disabled={saving} className="text-gray-400 hover:text-[#075e54]"><Pencil size={13}/></button><button type="button" title="Delete lead" onClick={() => void removeLead(lead)} disabled={saving} className="text-gray-400 hover:text-red-600"><Trash2 size={13}/></button></div></div>{lead.value !== null && <p className="mt-2 text-xs font-semibold text-[#075e54]">{new Intl.NumberFormat("en-IN", { style: "currency", currency: lead.currency || "INR", maximumFractionDigits: 0 }).format(lead.value)}</p>}{lead.source && <p className="mt-1 text-[10px] text-gray-500">Source: {lead.source}</p>}{lead.nextFollowUpAt && <p className={`mt-1 text-[10px] ${new Date(lead.nextFollowUpAt).getTime() < Date.now() ? "font-semibold text-red-600" : "text-amber-700"}`}>Follow-up: {new Date(lead.nextFollowUpAt).toLocaleString()}</p>}{lead.contactId && <p className="mt-1 text-[10px] text-gray-500">Customer: {contacts.find(contact => contact.id === lead.contactId)?.name || lead.contactId}</p>}{lead.ownerUid && <p className="mt-1 text-[10px] text-gray-500">Owner: {members.find(member => member.uid === lead.ownerUid)?.displayName || members.find(member => member.uid === lead.ownerUid)?.email || "Workspace member"}</p>}<label className="mt-3 block text-[10px] text-gray-500">Move to<select value={lead.stageId} onChange={event => void moveLead(lead, event.target.value)} disabled={saving} className="mt-1 w-full rounded-md border bg-white p-1.5 text-xs">{activeStages.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label></article>)}</div>{!stageLeads.length && <p className="rounded-lg border border-dashed bg-white/60 p-3 text-center text-[10px] text-gray-400">No leads here</p>}</section>)}</div>}
+      {loading ? <p className="rounded-xl border bg-white p-5 text-sm text-gray-500">Loading CRM...</p> : <div className="grid gap-3 xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2">{grouped.map(({ stage, leads: stageLeads }) => <section key={stage.id} className="min-h-48 rounded-xl border bg-gray-100 p-3"><div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">{stage.name}</h4><span className="rounded-full bg-white px-2 py-0.5 text-[10px] text-gray-500">{stageLeads.length}</span></div><div className="space-y-2">{stageLeads.map(lead => <article key={lead.id} className="rounded-lg border bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-2"><strong className="break-words text-xs">{lead.title}</strong><div className="flex gap-2"><button type="button" title="Lead activity" onClick={() => void toggleLeadActivity(lead)} disabled={saving} className={activityLeadId === lead.id ? "text-[#075e54]" : "text-gray-400 hover:text-[#075e54]"}><History size={13}/></button><button type="button" title="Edit lead" onClick={() => startEditLead(lead)} disabled={saving} className="text-gray-400 hover:text-[#075e54]"><Pencil size={13}/></button><button type="button" title="Delete lead" onClick={() => void removeLead(lead)} disabled={saving} className="text-gray-400 hover:text-red-600"><Trash2 size={13}/></button></div></div>{lead.value !== null && <p className="mt-2 text-xs font-semibold text-[#075e54]">{new Intl.NumberFormat("en-IN", { style: "currency", currency: lead.currency || "INR", maximumFractionDigits: 0 }).format(lead.value)}</p>}{lead.source && <p className="mt-1 text-[10px] text-gray-500">Source: {lead.source}</p>}{lead.nextFollowUpAt && <p className={`mt-1 text-[10px] ${new Date(lead.nextFollowUpAt).getTime() < Date.now() ? "font-semibold text-red-600" : "text-amber-700"}`}>Follow-up: {new Date(lead.nextFollowUpAt).toLocaleString()}</p>}{lead.contactId && <p className="mt-1 text-[10px] text-gray-500">Customer: {contacts.find(contact => contact.id === lead.contactId)?.name || lead.contactId}</p>}{lead.ownerUid && <p className="mt-1 text-[10px] text-gray-500">Owner: {members.find(member => member.uid === lead.ownerUid)?.displayName || members.find(member => member.uid === lead.ownerUid)?.email || "Workspace member"}</p>}<label className="mt-3 block text-[10px] text-gray-500">Move to<select value={lead.stageId} onChange={event => void moveLead(lead, event.target.value)} disabled={saving} className="mt-1 w-full rounded-md border bg-white p-1.5 text-xs">{activeStages.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>{activityLeadId === lead.id && <div className="mt-3 border-t pt-3"><p className="mb-2 flex items-center gap-1 text-[10px] font-semibold text-gray-600"><History size={12}/> Activity timeline</p>{activityLoading ? <p className="text-[10px] text-gray-400">Loading activity...</p> : activityError ? <p role="alert" className="text-[10px] text-red-600">{activityError}</p> : leadActivities.length ? <ol className="space-y-2">{leadActivities.map(activity => <li key={activity.id} className="border-l-2 border-emerald-200 pl-2"><p className="text-[10px] font-medium text-gray-700">{activity.action === "created" ? "Lead created" : activity.action === "deleted" ? "Lead deleted" : `Lead updated${activity.changedFields.length ? ` · ${activity.changedFields.join(", ")}` : ""}`}</p><p className="text-[9px] text-gray-400">{activity.actorUid} · {new Date(typeof activity.createdAt === "string" ? activity.createdAt : (activity.createdAt?._seconds || activity.createdAt?.seconds || 0) * 1000).toLocaleString()}</p></li>)}</ol> : <p className="text-[10px] text-gray-400">No activity recorded yet.</p>}</div>}</article>)}</div>{!stageLeads.length && <p className="rounded-lg border border-dashed bg-white/60 p-3 text-center text-[10px] text-gray-400">No leads here</p>}</section>)}</div>}
     </div>
   </section>;
 }
