@@ -1,0 +1,219 @@
+"use strict";
+
+const crypto = require("crypto");
+
+const DEFAULT_GRAPH_VERSION = "v26.0";
+const SESSION_TTL_MS = 10 * 60 * 1000;
+
+function httpError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function validId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+}
+
+function getEmbeddedSignupConfig(env = process.env) {
+  const appId = String(env.META_APP_ID || "").trim();
+  const configId = String(env.META_EMBEDDED_SIGNUP_CONFIG_ID || "").trim();
+  if (!/^\d{5,32}$/.test(appId) || !/^\d{5,32}$/.test(configId)) return null;
+  return {
+    appId,
+    configId,
+    graphApiVersion: /^v\d+\.\d+$/.test(env.GRAPH_API_VERSION || "")
+      ? env.GRAPH_API_VERSION
+      : DEFAULT_GRAPH_VERSION,
+    solutionId: /^\d{5,32}$/.test(env.META_EMBEDDED_SIGNUP_SOLUTION_ID || "")
+      ? env.META_EMBEDDED_SIGNUP_SOLUTION_ID
+      : null
+  };
+}
+
+async function createSignupSession(db, organizationId, uid, now = Date.now()) {
+  if (!validId(organizationId) || typeof uid !== "string" || !uid) {
+    throw httpError("A valid workspace and signed-in user are required.", 400);
+  }
+  const sessionId = crypto.randomBytes(32).toString("base64url");
+  const sessionHash = crypto.createHash("sha256").update(sessionId).digest("hex");
+  const ref = db.collection("organizations").doc(organizationId)
+    .collection("whatsappSignupSessions").doc(sessionHash);
+  await ref.create({
+    organizationId,
+    uid,
+    status: "pending",
+    createdAt: new Date(now),
+    expiresAt: new Date(now + SESSION_TTL_MS)
+  });
+  return { sessionId, expiresAt: new Date(now + SESSION_TTL_MS).toISOString() };
+}
+
+async function claimSignupSession(db, organizationId, uid, sessionId, now = Date.now()) {
+  if (!validId(organizationId) || typeof uid !== "string" || !uid ||
+      typeof sessionId !== "string" || !/^[A-Za-z0-9_-]{40,64}$/.test(sessionId)) {
+    throw httpError("The WhatsApp signup session is invalid. Start again.", 400);
+  }
+  const sessionHash = crypto.createHash("sha256").update(sessionId).digest("hex");
+  const ref = db.collection("organizations").doc(organizationId)
+    .collection("whatsappSignupSessions").doc(sessionHash);
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw httpError("The WhatsApp signup session was not found. Start again.", 400);
+    const data = snapshot.data() || {};
+    const expiresAt = data.expiresAt instanceof Date
+      ? data.expiresAt.getTime()
+      : new Date(data.expiresAt).getTime();
+    if (data.organizationId !== organizationId || data.uid !== uid) {
+      throw httpError("This WhatsApp signup session belongs to a different workspace or user.", 403);
+    }
+    if (data.status !== "pending") throw httpError("This WhatsApp signup session has already been used. Start again.", 409);
+    if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+      transaction.set(ref, { status: "expired", updatedAt: new Date(now) }, { merge: true });
+      throw httpError("The WhatsApp signup session expired. Start again.", 410);
+    }
+    transaction.set(ref, { status: "processing", processingAt: new Date(now) }, { merge: true });
+    return { ref, sessionHash };
+  });
+}
+
+async function finishSignupSession(ref, status, errorCode = null) {
+  if (!ref || !["completed", "failed"].includes(status)) return;
+  await ref.set({
+    status,
+    ...(errorCode ? { errorCode: String(errorCode).slice(0, 80) } : {}),
+    updatedAt: new Date()
+  }, { merge: true });
+}
+
+function buildGraphUrl(version, path, params = {}) {
+  const url = new URL(`https://graph.facebook.com/${version}/${path}`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
+  }
+  return url;
+}
+
+async function metaRequest(fetchImpl, url, accessToken, options = {}) {
+  const response = await fetchImpl(url.toString(), {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${accessToken}`,
+      ...(options.body ? { "Content-Type": "application/json" } : {})
+    }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.error) {
+    const error = new Error(String(payload.error?.message || "Meta could not complete WhatsApp onboarding.").slice(0, 240));
+    error.statusCode = 502;
+    error.metaCode = String(payload.error?.code || "META_REQUEST_FAILED");
+    throw error;
+  }
+  return payload;
+}
+
+async function completeEmbeddedSignup({
+  code,
+  wabaId,
+  phoneNumberId,
+  env = process.env,
+  fetchImpl = fetch,
+  registrationPin
+}) {
+  const config = getEmbeddedSignupConfig(env);
+  const appSecret = String(env.META_APP_SECRET || "").trim();
+  if (!config || !appSecret) throw httpError("Joy Inbox WhatsApp onboarding is not configured yet.", 503);
+  if (typeof code !== "string" || code.length < 10 || code.length > 4096 || /\s/.test(code)) {
+    throw httpError("Meta did not return a valid authorization code. Start again.", 400);
+  }
+  if (!/^\d{5,32}$/.test(wabaId || "") || !/^\d{5,32}$/.test(phoneNumberId || "")) {
+    throw httpError("Meta did not return a valid WhatsApp Business Account and phone number. Start again.", 400);
+  }
+  if (!/^\d{6}$/.test(registrationPin || "")) {
+    throw httpError("A secure six-digit WhatsApp registration PIN could not be prepared.", 500);
+  }
+
+  const tokenPayload = await metaRequest(
+    fetchImpl,
+    buildGraphUrl(config.graphApiVersion, "oauth/access_token", {
+      client_id: config.appId,
+      client_secret: appSecret,
+      code
+    }),
+    undefined
+  ).catch(async (error) => {
+    // OAuth token exchange uses app credentials in the query string, not a bearer token.
+    if (error.statusCode === 502) throw error;
+    throw error;
+  });
+
+  const accessToken = String(tokenPayload.access_token || "");
+  if (accessToken.length < 20 || accessToken.length > 4096 || /\s/.test(accessToken)) {
+    throw httpError("Meta did not return a usable business access token.", 502);
+  }
+
+  const phone = await metaRequest(
+    fetchImpl,
+    buildGraphUrl(config.graphApiVersion, phoneNumberId, {
+      fields: "id,display_phone_number,verified_name"
+    }),
+    accessToken
+  );
+  if (String(phone.id || "") !== phoneNumberId) {
+    throw httpError("The selected WhatsApp phone number could not be verified with Meta.", 502);
+  }
+
+  const waba = await metaRequest(
+    fetchImpl,
+    buildGraphUrl(config.graphApiVersion, `${wabaId}/phone_numbers`, {
+      fields: "id,display_phone_number,verified_name",
+      limit: 100
+    }),
+    accessToken
+  );
+  const belongsToWaba = Array.isArray(waba.data) && waba.data.some(item => String(item.id || "") === phoneNumberId);
+  if (!belongsToWaba) {
+    throw httpError("The selected phone number does not belong to the WhatsApp Business Account shared with Joy Inbox.", 403);
+  }
+
+  // Embedded Signup verifies ownership; Cloud API registration and two-step
+  // verification are a separate required step. The PIN is generated server-side.
+  await metaRequest(
+    fetchImpl,
+    buildGraphUrl(config.graphApiVersion, `${phoneNumberId}/register`),
+    accessToken,
+    { method: "POST", body: JSON.stringify({ messaging_product: "whatsapp", pin: registrationPin }) }
+  );
+
+  // Subscribe Joy Inbox's Meta app to the customer's WABA so webhook events arrive.
+  await metaRequest(
+    fetchImpl,
+    buildGraphUrl(config.graphApiVersion, `${wabaId}/subscribed_apps`),
+    accessToken,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+
+  return {
+    accessToken,
+    wabaId,
+    phoneNumberId,
+    displayPhoneNumber: String(phone.display_phone_number || "").slice(0, 40),
+    verifiedName: String(phone.verified_name || "").slice(0, 100),
+    registrationPin
+  };
+}
+
+function generateRegistrationPin() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+}
+
+module.exports = {
+  SESSION_TTL_MS,
+  getEmbeddedSignupConfig,
+  createSignupSession,
+  claimSignupSession,
+  finishSignupSession,
+  completeEmbeddedSignup,
+  generateRegistrationPin
+};
