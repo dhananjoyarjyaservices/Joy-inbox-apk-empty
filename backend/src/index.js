@@ -510,7 +510,11 @@ async function handleTenantCrm(event, resource) {
     const snapshot = resource === "fields"
       ? await collection.orderBy("createdAt", "asc").get()
       : await collection.orderBy("updatedAt", "desc").limit(100).get();
-    return jsonResponse(event, 200, { items: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+    let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (resource === "leads" && organization.role === "agent") {
+      items = items.filter(item => item.ownerUid === decoded.uid);
+    }
+    return jsonResponse(event, 200, { items });
   }
 
   if (method === "DELETE") {
@@ -519,6 +523,9 @@ async function handleTenantCrm(event, resource) {
     const ref = collection.doc(resourceId);
     const snapshot = await ref.get();
     if (!snapshot.exists) return jsonResponse(event, 404, { error: "CRM resource was not found." });
+    if (resource === "leads" && organization.role === "agent" && snapshot.data()?.ownerUid !== decoded.uid) {
+      return jsonResponse(event, 403, { error: "Agents can only delete leads assigned to them." });
+    }
     if (resource === "fields") {
       await ref.set({ active: false, updatedAt: new Date() }, { merge: true });
       return jsonResponse(event, 200, { success: true, active: false });
@@ -573,6 +580,10 @@ async function handleTenantCrm(event, resource) {
   const fieldSnapshot = await organization.ref.collection("crmFields").get();
   const definitions = fieldSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   const lead = normalizeCrmLead(body.data, definitions);
+  if (organization.role === "agent") {
+    if (lead.ownerUid && lead.ownerUid !== decoded.uid) return jsonResponse(event, 403, { error: "Agents can only assign leads to themselves." });
+    if (!lead.ownerUid) lead.ownerUid = decoded.uid;
+  }
   const stageSnapshot = await organization.ref.collection("crmStages").doc(lead.stageId).get();
   if (!stageSnapshot.exists || stageSnapshot.data()?.active === false) {
     return jsonResponse(event, 400, { error: "Choose an active stage from this workspace's sales pipeline." });
@@ -595,6 +606,9 @@ async function handleTenantCrm(event, resource) {
     ref = collection.doc(resourceId);
     const existing = await ref.get();
     if (!existing.exists) return jsonResponse(event, 404, { error: "Lead was not found." });
+    if (organization.role === "agent" && existing.data()?.ownerUid !== decoded.uid) {
+      return jsonResponse(event, 403, { error: "Agents can only update leads assigned to them." });
+    }
     createdAt = existing.data()?.createdAt || now;
   } else {
     ref = collection.doc();
