@@ -23,11 +23,11 @@ test("billing plan discovery returns only Stripe price IDs configured by the bac
     STRIPE_PRICE_STARTER: "price_starter",
     STRIPE_PRICE_GROWTH: "",
     STRIPE_PRICE_BUSINESS: "price_business",
-    STRIPE_PRICE_PRO: "price_pro"
+    STRIPE_PRICE_PRO: "price_pro",\n    STRIPE_PRICE_LITE_ANNUAL: "price_lite_year",\n    STRIPE_PRICE_STARTER_ANNUAL: "price_starter_year",\n    STRIPE_PRICE_GROWTH_ANNUAL: "price_growth_year",\n    STRIPE_PRICE_BUSINESS_ANNUAL: "price_business_year",\n    STRIPE_PRICE_PRO_ANNUAL: "price_pro_year"
   });
   assert.deepEqual(plans.map(plan => plan.key), ["lite", "starter", "business", "pro"]);
   assert.equal(plans[0].priceId, "price_lite");
-  assert.equal(plans[1].monthlyPriceInr, 599);
+  assert.equal(plans[1].monthlyPriceInr, 599);\n  assert.equal(plans[1].annualPriceInr, 5990);\n  assert.equal(plans[1].annualPriceId, "price_starter_year");
   assert.deepEqual(plans[2].limits, { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 });
   assert.equal(TRIAL_PERIOD_DAYS, 7);
 });
@@ -134,7 +134,7 @@ test("checkout session creation uses server price IDs and a Stripe idempotency k
     decoded: { email: "owner@example.com" },
     planKey: "starter",
     env: {
-      STRIPE_PRICE_STARTER: "price_starter",
+      STRIPE_PRICE_STARTER: "price_starter",\n      STRIPE_PRICE_STARTER_ANNUAL: "price_starter_year",
       BILLING_SUCCESS_URL: process.env.BILLING_SUCCESS_URL,
       BILLING_CANCEL_URL: process.env.BILLING_CANCEL_URL
     }
@@ -154,7 +154,39 @@ test("checkout session creation uses server price IDs and a Stripe idempotency k
 });
 
 
-test("checkout does not repeat a free trial for a workspace that already used it", async t => {
+
+test("annual checkout selects the annual Stripe Price and preserves one-time trial", async t => {
+  const oldKey = process.env.STRIPE_SECRET_KEY;
+  const oldFetch = global.fetch;
+  t.after(() => {
+    if (oldKey === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = oldKey;
+    global.fetch = oldFetch;
+  });
+  process.env.STRIPE_SECRET_KEY = "sk_test_123";
+  let request;
+  global.fetch = async (_url, options) => {
+    request = options;
+    return { ok: true, async json() { return { id: "cs_annual_123", url: "https://checkout.stripe.com/c/pay/cs_annual_123" }; } };
+  };
+  const organization = {
+    id: "org_annual",
+    ref: { collection() { return { doc() { return {
+      async get() { return { exists: false }; },
+      async set() {}
+    }; } }; } }
+  };
+  const session = await createCheckoutSession({
+    organization, decoded: { email: "owner@example.com" }, planKey: "growth", interval: "year",
+    env: { STRIPE_PRICE_GROWTH: "price_growth", STRIPE_PRICE_GROWTH_ANNUAL: "price_growth_year", BILLING_SUCCESS_URL: "https://app.example.com/success", BILLING_CANCEL_URL: "https://app.example.com/cancel" }
+  });
+  const form = new URLSearchParams(request.body);
+  assert.equal(form.get("line_items[0][price]"), "price_growth_year");
+  assert.equal(form.get("metadata[billingInterval]"), "year");
+  assert.equal(form.get("subscription_data[metadata][billingInterval]"), "year");
+  assert.equal(session.interval, "year");
+  assert.equal(session.trialDays, 7);
+});
+\ntest("checkout does not repeat a free trial for a workspace that already used it", async t => {
   const oldKey = process.env.STRIPE_SECRET_KEY;
   const oldFetch = global.fetch;
   t.after(() => {
