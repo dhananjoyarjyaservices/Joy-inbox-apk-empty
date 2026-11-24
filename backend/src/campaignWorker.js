@@ -5,6 +5,7 @@ const { getDb } = require("./firebase");
 const { getWhatsAppCredentials } = require("./tenancy");
 const { suppressionDocumentId } = require("./campaignCompliance");
 const { isDefinitiveWhatsAppSendRejection } = require("./whatsapp");
+const { reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 
 const MAX_CAMPAIGNS_PER_RUN = 5;
 const MAX_RECIPIENTS_PER_CAMPAIGN = 10;
@@ -283,6 +284,7 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
     if (!recipient) continue;
 
     let acceptedMessageId = "";
+    let quotaReservation = null;
     try {
       if (recipient.optedIn !== true || !recipient.consentSource ||
           !Number.isFinite(Date.parse(String(recipient.consentAt || ""))) ||
@@ -352,13 +354,27 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
         break;
       }
 
+      quotaReservation = await reserveOutboundMessage(db, campaign.organizationId, `campaign_${campaignRef.id}_${document.id}`);
       const result = await (dependencies.sendRecipient || sendCampaignRecipient)(campaign, recipient, credentials, fetchImpl);
       acceptedMessageId = String(result.messageId || "");
+      await finishOutboundReservation(db, quotaReservation, "sent");
       await finishRecipient(db, campaignRef, document.ref, recipient, "sent", {
         messageId: acceptedMessageId
       }, dependencies);
       sent += 1;
     } catch (error) {
+      if (quotaReservation) {
+        const definitiveFailure = error?.definitive === true || Number(error?.metaStatusCode) === 429;
+        await finishOutboundReservation(db, quotaReservation, definitiveFailure ? "failed" : "sent");
+      }
+      if (error?.code === "MESSAGE_QUOTA_EXCEEDED") {
+        await finishRecipient(db, campaignRef, document.ref, recipient, "skipped", {
+          reason: "message_quota_exceeded", error: String(error.message || "Workspace message quota reached.").slice(0, 300)
+        }, dependencies);
+        await campaignRef.set({ status: "paused", pauseReason: "message_quota_exceeded", updatedAt: now }, { merge: true });
+        skipped += 1;
+        break;
+      }
       const disposition = classifyCampaignSendError(error, Number(recipient.attempts || 1));
       const details = {
         error: String(error.message || "Campaign send failed.").slice(0, 300),
