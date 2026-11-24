@@ -38,7 +38,7 @@ Workspace WhatsApp credentials are encrypted with AES-256-GCM. The 32-byte tenan
 - Organization-scoped chat and message listeners.
 - Text, supported media, approved templates, interactive buttons/lists/CTA links and 2–10-card media carousels.
 - Quoted replies, message pin/save, chat pin/archive/read/delete, assignment and open/pending/resolved states.
-- Contacts with tags/notes and Quick Replies with searchable `/` shortcut insertion.
+- Contacts with tags/notes, validated customer-phone links that open the WhatsApp contact/chat view, and Quick Replies with searchable `/` shortcut insertion.
 - Quick Reply image upload/send, internal conversation notes, greeting settings and notification preferences.
 - Authenticated tenant media proxy. Customer inbound media bytes are not permanently copied to Firebase Storage, S3, local disk or Lambda temporary storage; only bounded metadata and Meta media IDs are retained. Preview bytes are fetched from Meta on demand and held temporarily by the browser.
 
