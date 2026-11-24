@@ -263,8 +263,8 @@ export async function saveOrganizationNotificationPreferences(organizationId: st
 export interface OrganizationAutomationRule {
   id: string;
   name: string;
-  keyword: string;
-  matchType: "contains" | "exact" | "starts_with";
+  keyword?: string;
+  matchType?: "contains" | "exact" | "starts_with";
   conditions?: { keyword: string; matchType: "contains" | "exact" | "starts_with" }[];
   conditionMode?: "all" | "any";
   response: string;
