@@ -3,6 +3,7 @@
 const crypto = require("crypto");
 const net = require("net");
 const dns = require("dns").promises;
+const https = require("https");
 const { encryptSecret, decryptSecret } = require("./tenancy");
 
 const WEBHOOK_EVENTS = new Set([
@@ -176,14 +177,42 @@ function millis(value) {
 
 async function resolvePublicWebhookHost(hostname, lookupImpl = dns.lookup) {
   hostname = String(hostname || "").toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
-  if (net.isIP(hostname)) {
+  const family = net.isIP(hostname);
+  if (family) {
     if (isPrivateAddress(hostname)) throw httpError("Webhook destination resolves to a private network address.", 400);
-    return;
+    return { address: hostname, family };
   }
   const records = await lookupImpl(hostname, { all: true, verbatim: true });
   if (!Array.isArray(records) || !records.length || records.some(record => isPrivateAddress(record.address))) {
     throw httpError("Webhook destination must resolve only to public IP addresses.", 400);
   }
+  return records[0];
+}
+
+function sendPinnedWebhookRequest(endpoint, resolvedAddress, options) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(endpoint);
+    const hostname = url.hostname.replace(/^\[/, "").replace(/\]$/, "");
+    const request = https.request({
+      protocol: "https:",
+      hostname,
+      port: url.port || 443,
+      path: url.pathname + url.search,
+      method: options.method || "POST",
+      headers: options.headers,
+      servername: net.isIP(hostname) ? undefined : hostname,
+      lookup: (_host, _lookupOptions, callback) => callback(null, resolvedAddress.address, resolvedAddress.family)
+    }, response => {
+      response.on("data", () => {});
+      response.on("end", () => {
+        const status = Number(response.statusCode || 0);
+        resolve({ ok: status >= 200 && status < 300, status });
+      });
+    });
+    request.setTimeout(10_000, () => request.destroy(new Error("Webhook endpoint timed out.")));
+    request.on("error", reject);
+    request.end(options.body || "");
+  });
 }
 
 async function processPendingWebhookDeliveries(db, {
@@ -232,7 +261,7 @@ async function processPendingWebhookDeliveries(db, {
       const config = subscription.data();
       const endpoint = normalizeWebhookUrl(config.url);
       const hostname = new URL(endpoint).hostname;
-      await resolvePublicWebhookHost(hostname, lookupImpl);
+      const resolvedAddress = await resolvePublicWebhookHost(hostname, lookupImpl);
       const secret = decryptSecret(config.secretEncrypted);
       const body = JSON.stringify({
         id: document.id,
@@ -241,7 +270,7 @@ async function processPendingWebhookDeliveries(db, {
         data: current.payload
       });
       const signature = "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("hex");
-      const response = await fetchImpl(endpoint, {
+      const requestOptions = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -251,9 +280,11 @@ async function processPendingWebhookDeliveries(db, {
           "X-Joy-Signature": signature,
           "User-Agent": "Joy-Inbox-Webhooks/1.0"
         },
-        body,
-        signal: AbortSignal.timeout(10_000)
-      });
+        body
+      };
+      const response = fetchImpl
+        ? await fetchImpl(endpoint, { ...requestOptions, signal: AbortSignal.timeout(10_000) })
+        : await sendPinnedWebhookRequest(endpoint, resolvedAddress, requestOptions);
       if (!response.ok) throw new Error(`Webhook endpoint returned HTTP ${response.status}.`);
       await ref.set({ status: "delivered", responseStatus: response.status, deliveredAt: new Date(now), lockUntil: null, updatedAt: new Date(now) }, { merge: true });
       await subscriptionRef.set({ lastDeliveryAt: new Date(now) }, { merge: true });
@@ -284,5 +315,6 @@ module.exports = {
   revokeOrganizationWebhook,
   enqueueOrganizationWebhookEvent,
   resolvePublicWebhookHost,
+  sendPinnedWebhookRequest,
   processPendingWebhookDeliveries
 };
