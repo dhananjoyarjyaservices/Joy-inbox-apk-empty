@@ -2675,7 +2675,7 @@ async function handleTenantBilling(event) {
   if (method === "GET") {
     const [snapshot, plans] = await Promise.all([
       subscriptionRef.get(),
-      Promise.resolve(getConfiguredBillingPlans().map(({ key, name, monthlyPriceInr, limits }) => ({ key, name, monthlyPriceInr, currency: "INR", interval: "month", limits, trialDays: 7 })))
+      Promise.resolve(getConfiguredBillingPlans().map(({ key, name, monthlyPriceInr, annualPriceInr, priceId, annualPriceId, limits }) => ({ key, name, monthlyPriceInr, annualPriceInr, monthlyAvailable: Boolean(priceId), annualAvailable: Boolean(annualPriceId), currency: "INR", intervals: ["month", "year"], limits, trialDays: 7 })))
     ]);
     const value = snapshot.exists ? snapshot.data() || {} : {};
     const asIso = input => input?.toDate ? input.toDate().toISOString()
@@ -2697,7 +2697,7 @@ async function handleTenantBilling(event) {
     const session = await createCheckoutSession({
       organization,
       decoded,
-      planKey: String(body.plan || "")
+      planKey: String(body.plan || ""),\n      interval: String(body.interval || "month")
     });
     return jsonResponse(event, 200, { success: true, checkout: session });
   }
