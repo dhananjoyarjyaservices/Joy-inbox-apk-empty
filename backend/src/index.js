@@ -316,7 +316,7 @@ async function handlePublicApiContacts(event) {
     try { body = parseBody(event); } catch {
       return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
     }
-    const contact = await saveTenantResource(getDb(), authenticatedKey.organizationId, "contacts", body);
+    const contact = await saveTenantResource(getDb(), authenticatedKey.organizationId, "contacts", { ...body, source: "local" });
     return jsonResponse(event, 201, { data: contact });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
