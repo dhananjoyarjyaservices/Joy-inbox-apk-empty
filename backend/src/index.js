@@ -563,7 +563,15 @@ async function saveTenantQuickReplyImage(event) {
   }
   const buffer = Buffer.from(encoded, "base64");
   if (buffer.toString("base64") !== encoded) return jsonResponse(event, 400, { error: "Image payload is not valid base64." });
-  const saved = await saveQuickReplyImage(organization.id, body.quickReplyId, buffer, body.mimeType);
+  const mediaQuotaReservation = await reserveTenantMediaQuota(db, organization.id, `quick_reply_${body.quickReplyId}_${crypto.randomUUID()}`, buffer.length);
+  let saved;
+  try {
+    saved = await saveQuickReplyImage(organization.id, body.quickReplyId, buffer, body.mimeType);
+    await settleTenantMediaQuota(db, mediaQuotaReservation, "sent", buffer.length);
+  } catch (error) {
+    await settleTenantMediaQuota(db, mediaQuotaReservation, error?.definitive === true ? "failed" : "sent", error?.definitive === true ? 0 : buffer.length);
+    throw error;
+  }
   await ref.set({ hasImage: true, imageMimeType: saved.mimeType, updatedAt: new Date() }, { merge: true });
   return jsonResponse(event, 200, { success: true, hasImage: true, imageMimeType: saved.mimeType });
 }
@@ -2527,7 +2535,18 @@ async function retrieveTenantMessageMedia(event) {
   const message = snapshot.data();
   if (!message.mediaId) return jsonResponse(event, 404, { error: "This message has no WhatsApp media ID." });
   const credentials = await getWhatsAppCredentials(getDb(), organization.id, message.phoneNumberId || undefined);
-  const media = await fetchWhatsAppMediaForProxy(message.mediaId, credentials);
+  const mediaQuotaReservation = await reserveTenantMediaQuota(
+    getDb(), organization.id, `media_proxy_${messageId}_${crypto.randomUUID()}`,
+    Number.isSafeInteger(Number(message.mediaSize)) && Number(message.mediaSize) > 0 ? Number(message.mediaSize) : null
+  );
+  let media;
+  try {
+    media = await fetchWhatsAppMediaForProxy(message.mediaId, credentials);
+    await settleTenantMediaQuota(getDb(), mediaQuotaReservation, "sent", media.buffer.length);
+  } catch (error) {
+    await settleTenantMediaQuota(getDb(), mediaQuotaReservation, "failed", 0);
+    throw error;
+  }
   return {
     statusCode: 200,
     isBase64Encoded: true,
