@@ -98,6 +98,7 @@ export async function retryTenantFailedText(organizationId: string, chatId: stri
 export interface WhatsAppConnection {
   phoneNumberId: string;
   wabaId?: string;
+  billingModel?: "meta_direct" | "joy_inbox_partner_credit_line";
   displayPhoneNumber: string;
   verifiedName: string;
   connected: boolean;
