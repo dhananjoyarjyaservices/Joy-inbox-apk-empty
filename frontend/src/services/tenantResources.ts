@@ -116,7 +116,7 @@ export async function addTenantInternalNote(org: string, chatId: string, text: s
 export type TenantInteractiveMessageInput =
   | { type: "button"; body: string; header?: string; footer?: string; buttons: Array<{ id: string; title: string }> }
   | { type: "list"; body: string; header?: string; footer?: string; buttonTitle: string; sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }> }
-  | { type: "cta_url"; body: string; header?: string; footer?: string; displayText: string; url: string };
+  | { type: "cta_url"; body: string; header?: string; footer?: string; displayText: string; url: string }
   | { type: "carousel"; body: string; cards: Array<{ imageUrl: string; body: string; displayText: string; url: string }> };
 export async function sendTenantInteractiveMessage(
   org: string,
