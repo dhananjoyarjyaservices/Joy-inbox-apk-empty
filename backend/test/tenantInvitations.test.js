@@ -28,6 +28,7 @@ function createInvitationDb(seed = {}) {
   });
   const collection = path => ({
     doc(id) { return ref(path + "/" + id); },
+    where(field, operator, value) { assert.equal(operator, "=="); return { path, isQuery: true, field, value }; },
     orderBy() { return this; },
     limit() { return this; },
     async get() {
@@ -43,6 +44,13 @@ function createInvitationDb(seed = {}) {
     async runTransaction(callback) {
       return callback({
         async get(documentRef) {
+          if (documentRef?.isQuery) {
+            const prefix = documentRef.path + "/";
+            const docs = [...values.entries()]
+              .filter(([path, value]) => path.startsWith(prefix) && !path.slice(prefix.length).includes("/") && value?.[documentRef.field] === documentRef.value)
+              .map(([path, value]) => ({ id: path.split("/").pop(), data: () => value }));
+            return { docs, size: docs.length };
+          }
           const value = values.get(documentRef.path);
           return { exists: Boolean(value), data: () => value, get: key => value?.[key] };
         },
@@ -112,6 +120,26 @@ test("accepts an invitation once and creates member plus workspace index", async
   await assert.rejects(acceptTenantInvitation(db, "org_1", invitation.token, {
     uid: "agent_1", email: "agent@example.com", email_verified: true
   }), error => error.statusCode === 409);
+});
+
+test("invitation acceptance enforces active agent seat cap", async () => {
+  const { db, values } = createInvitationDb({
+    "organizations/org_1": { status: "active", name: "Joy Inbox" },
+    "organizations/org_1/billing/subscription": { status: "active", plan: "lite" },
+    "organizations/org_1/members/owner_1": { uid: "owner_1", role: "owner", status: "active" }
+  });
+  const invitation = await createTenantInvitation(db, "org_1", { uid: "owner_1" }, {
+    email: "agent@example.com", role: "agent"
+  }, { now: () => new Date("2026-11-23T12:00:00.000Z") });
+  await assert.rejects(
+    () => acceptTenantInvitation(db, "org_1", invitation.token, {
+      uid: "agent_1", email: "agent@example.com", email_verified: true
+    }, { now: () => new Date("2026-11-23T13:00:00.000Z") }),
+    error => error.statusCode === 409
+  );
+  assert.equal(values.has("organizations/org_1/members/agent_1"), false);
+  const pending = [...values.entries()].find(([path]) => path.startsWith("organizations/org_1/invitations/"))?.[1];
+  assert.equal(pending.status, "pending");
 });
 
 test("requires verified matching email and rejects expired invitations", async () => {
