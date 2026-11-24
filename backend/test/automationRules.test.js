@@ -61,3 +61,24 @@ test("validates delay seconds for later workflow steps", () => {
     steps: [{ message: "Welcome" }, { message: "Follow up", delaySeconds: 1.5 }]
   }), { statusCode: 400 });
 });
+
+
+test("rejects unknown workflow-step fields and invalid explicit match types", () => {
+  assert.throws(() => normalizeAutomationRule({
+    name: "Unsafe step", keyword: "hello",
+    steps: [{ message: "Welcome", delaySeconds: 0, action: "send_payment" }]
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Invalid match", keyword: "hello", response: "Welcome", matchType: "regex"
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Invalid priority", keyword: "hello", response: "Welcome", priority: 1001
+  }), { statusCode: 400 });
+});
+
+test("accepts only documented workflow step properties", () => {
+  assert.deepEqual(normalizeAutomationRule({
+    name: "Welcome", keyword: "hello",
+    steps: [{ message: "Welcome", delaySeconds: 30 }]
+  }).steps, [{ message: "Welcome", delaySeconds: 30 }]);
+});
