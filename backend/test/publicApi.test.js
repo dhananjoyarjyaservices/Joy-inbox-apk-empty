@@ -20,6 +20,9 @@ function fakeDb(seed = {}) {
         if (records.has(path)) throw new Error("already exists");
         records.set(path, value);
       },
+      async set(value, options = {}) {
+        records.set(path, options.merge ? { ...(records.get(path) || {}), ...value } : value);
+      },
       async get() {
         const value = records.get(path);
         return { exists: Boolean(value), data: () => value };
