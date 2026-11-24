@@ -134,19 +134,20 @@ async function completeEmbeddedSignup({
     throw httpError("A secure six-digit WhatsApp registration PIN could not be prepared.", 500);
   }
 
-  const tokenPayload = await metaRequest(
-    fetchImpl,
-    buildGraphUrl(config.graphApiVersion, "oauth/access_token", {
-      client_id: config.appId,
-      client_secret: appSecret,
-      code
-    }),
-    undefined
-  ).catch(async (error) => {
-    // OAuth token exchange uses app credentials in the query string, not a bearer token.
-    if (error.statusCode === 502) throw error;
+  // OAuth code exchange is the one Graph API request authenticated with
+  // app credentials in its query string rather than a bearer token.
+  const tokenResponse = await fetchImpl(buildGraphUrl(config.graphApiVersion, "oauth/access_token", {
+    client_id: config.appId,
+    client_secret: appSecret,
+    code
+  }).toString());
+  const tokenPayload = await tokenResponse.json().catch(() => ({}));
+  if (!tokenResponse.ok || tokenPayload.error) {
+    const error = new Error(String(tokenPayload.error?.message || "Meta could not authorize this WhatsApp connection.").slice(0, 240));
+    error.statusCode = 502;
+    error.metaCode = String(tokenPayload.error?.code || "META_CODE_EXCHANGE_FAILED");
     throw error;
-  });
+  }
 
   const accessToken = String(tokenPayload.access_token || "");
   if (accessToken.length < 20 || accessToken.length > 4096 || /\s/.test(accessToken)) {
