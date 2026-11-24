@@ -1,79 +1,76 @@
 # Joy Inbox
 
-Joy Inbox is being migrated from a single-owner WhatsApp Cloud API inbox to a multi-tenant SaaS product.
+Joy Inbox is a multi-tenant WhatsApp Business inbox SaaS built with React, TypeScript, Vite, Node.js 22, AWS Lambda, Firebase Authentication/Firestore and the WhatsApp Cloud API.
 
-## Existing application stack
+## Product capabilities in the SaaS branch
 
-- React, TypeScript and Vite frontend
-- Firebase Authentication and Cloud Firestore
-- Node.js 22 AWS Lambda backend
-- WhatsApp Cloud API and Firebase Admin SDK
+- Workspace onboarding, account switching, owner/admin/agent roles and workspace invitations.
+- Shared tenant inbox with assignment, status management, pin/archive, search, paginated history, customer contacts and internal notes.
+- Tenant-scoped text, media, approved-template and interactive WhatsApp messaging, including reply buttons, lists, CTA links, media carousels and quoted replies.
+- Searchable saved Quick Replies, greeting automation, keyword automation and scheduled automation workers.
+- SLA settings, notification center, per-agent notification preferences and delivery monitoring.
+- Campaign drafts, opt-in evidence checks, STOP/START suppression, approved-template revalidation, scheduling, pause/cancel and delivery reports.
+- Workspace billing foundation with monthly/annual plan discovery, seven-day one-time trial, Stripe Checkout/Billing Portal/webhooks and server-side usage/seat enforcement.
+- Plan-based history-retention worker code and a disabled-by-default retention schedule template.
+- Dry-run-first legacy migration tooling with customer media bytes and legacy media URLs excluded.
 
-## Existing functionality carried forward
+## Pricing policy
 
-- Real-time chats and text message history
-- Incoming and outgoing WhatsApp text
-- Saved Quick Replies and slash search
-- Chat pin/archive/restore/read state and message actions
-- Contacts, conversation search and paginated history
-- Image, video, audio and document messaging
-- Greeting automation and backend diagnostics
-- Light/dark/system appearance
-- FCM web push integration (device delivery still requires end-to-end testing)
+The approved product design is documented in [docs/PRICING-AND-USAGE-POLICY.md](docs/PRICING-AND-USAGE-POLICY.md).
 
-## SaaS migration status
+| Plan | Monthly | Annual |
+|---|---:|---:|
+| Lite | ₹299 | ₹2,990 |
+| Starter | ₹599 | ₹5,990 |
+| Growth | ₹999 | ₹9,990 |
+| Business | ₹1,499 | ₹14,990 |
+| Pro | ₹1,999 | ₹19,990 |
 
-The SaaS branch now contains an integrated tenant foundation: organization onboarding and membership/role checks; encrypted per-organization WhatsApp credentials; tenant-scoped text/media messaging, chat state and resource APIs; Meta webhook routing by Phone Number ID; campaign and automation workers; billing integration foundations; and a dry-run-first legacy migration utility. See [docs/SAAS-MIGRATION.md](docs/SAAS-MIGRATION.md) for the implementation notes and migration sequence, [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md) for the remaining acceptance gates, and [docs/DEPLOYMENT-CLOUDFLARE-AWS.md](docs/DEPLOYMENT-CLOUDFLARE-AWS.md) for deployment preparation.
+Annual billing charges for 10 months and provides 12 months of service. Eligible workspaces receive one seven-day trial. The configured usage policy blocks outbound activity at hard limits without automatic overages. Meta WhatsApp charges are separate. These prices are approved product design, not proof that live Stripe prices have been configured.
 
-**This branch is not production-ready.** Legacy owner-only routes and data paths remain for compatibility, and not every legacy endpoint has been retired. The tenant implementation still requires automated CI confirmation, real Firebase/Meta/Stripe staging validation, full tenant-isolation review, migration/rollback rehearsal and explicit deployment approval. Do not connect real customer tenants until those gates pass.
+## Architecture and repository layout
 
-## Customer media policy
+- `frontend/` — responsive React/TypeScript/Vite application.
+- `backend/` — Node.js 22 Lambda API, WhatsApp integration, billing and scheduled worker handlers.
+- `firestore.rules`, `storage.rules`, `firestore.indexes.json`, `firebase.json` — Firebase security, indexes and emulator configuration.
+- `infra/aws/` — EventBridge schedule templates for automation, campaigns, SLA monitoring and history retention.
+- `docs/` — onboarding, billing, deployment, migration and release-readiness guidance.
 
-The tenant webhook stores customer media metadata and Meta media IDs only; it does not download or persist inbound customer media bytes to Firebase Storage, S3, local disk or Lambda /tmp. The authenticated tenant media proxy fetches previews from Meta on demand and applies size/MIME/host checks. Outbound uploads are processed in bounded Lambda memory and sent directly to Meta. Legacy owner-only media routes still exist and must not be used as the tenant media path.
+Customer inbound media bytes are not permanently copied into tenant storage by the webhook. Tenant message records retain bounded metadata and Meta media IDs; authenticated previews are proxied from Meta on demand.
 
-## Development
+## Development and automated checks
 
-Backend regression tests:
+Backend tests:
 
 ```sh
+npm ci --prefix backend
 npm test --prefix backend
 ```
 
-Frontend build:
+Frontend tests and production build:
 
 ```sh
 npm ci --prefix frontend
+npm test --prefix frontend
 npm run build --prefix frontend
 ```
 
-Do not deploy AWS Lambda, Firebase rules, storage policies or Meta webhook settings without an explicit production deployment approval. Use `backend/.env.example` and `frontend/.env.example` as configuration references; never commit real tokens, service-account keys, or encryption keys.
+GitHub Actions runs backend tests with the Firestore emulator and builds/tests the frontend using Node.js 22. Check the latest commit's workflow status before treating a change as verified.
 
-## Repository layout
+## Release status
 
-- `frontend/` — React/TypeScript/Vite application
-- `backend/` — Node.js Lambda API, WhatsApp integration and tests
-- `firestore.rules`, `storage.rules` — existing Firebase security rules
-- `docs/SAAS-MIGRATION.md` — SaaS architecture and phased migration plan
+The current development branch is `feature/saas-foundation`, with draft PR [#1](https://github.com/dhananjoyarjyaservices/Joy-inbox-apk-empty/pull/1) targeting `main`.
 
-## Latest SaaS implementation notes
+The code foundation and automated tests are substantially implemented, but this branch is **not production-ready**. Remaining acceptance work includes staging integration tests, transactional email delivery, worker deployment and verification, backup/restore, tenant-isolation/concurrency/security review, legal/billing review, mobile/accessibility checks and production migration/cutover rehearsal.
 
-The tenant webhook path now resolves inbound WhatsApp events through Meta's phone-number mapping and writes tenant messages below the organization chat path. Customer media is retained as bounded metadata and Meta media IDs only; inbound media bytes are not copied to Firebase Storage. The separate legacy owner-only media routes still exist and must remain disabled for tenant traffic until the migration is complete.
+**Execution order:** finish repository-only code, documentation, review and CI first. Keep Firebase connection and Firebase staging acceptance until the final external integration phase. Then verify Firebase Auth, Firestore indexes/rules, workspace creation, membership isolation and rollback before accepting real tenants. Meta and Stripe staging validation, AWS worker deployment and all production actions remain gated by credentials, tests and explicit approval.
 
-Campaign creation validates Meta-approved templates and recorded opt-in evidence, then saves a draft. Owners/admins can explicitly start or schedule a campaign, pause/resume it, or cancel it. A separate EventBridge-triggered Lambda worker revalidates template approval, checks opt-in evidence and re-checks STOP suppression immediately before each send. It uses recipient leases, bounded batches, 429 backoff, and uncertain-delivery handling to avoid automatic duplicate sends. Meta delivery status webhooks update campaign recipient status and delivered/read/failed counters; this reconciliation must still be validated end-to-end in staging.
+No production Firebase rules/indexes, AWS Lambda/EventBridge resources, Meta webhook settings, Stripe live payments, production data migration or PR merge are performed by repository-only development work. Never commit secrets or place server credentials in frontend `VITE_*` variables.
 
-These improvements do not change the overall release gate: all legacy routes, tenant frontend actions, billing, migration/rollback, staging Meta/Firebase tests, and production deployment configuration still require completion and review.
+## Current authoritative checklists
 
-
-## Subscription billing foundation
-
-The tenant inbox includes a Workspace Billing screen and a Stripe integration foundation for Checkout, Billing Portal and signed subscription webhooks. Configure real Stripe test-mode secrets and recurring Price IDs before enabling checkout. No pricing, entitlements or payment configuration is assumed; see [docs/BILLING-STRIPE.md](docs/BILLING-STRIPE.md). Billing is not enabled until Stripe credentials and Price IDs are configured and staging checks pass.
-
-
-## Additional tenant inbox features
-
-The tenant inbox now includes private conversation internal notes, interactive WhatsApp reply buttons/list menus, 2–10-card media carousels using public HTTPS image links, searchable incoming interactive selections, and workspace-scoped billing controls. A dry-run-first legacy migration utility is available; it is never run automatically and strips old customer media storage paths and URLs.
-
-
-## Release gate
-
-Track staging, migration and production blockers in [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md). This branch is still a development foundation; CI success is not production acceptance.
+- [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md)
+- [docs/DEPLOYMENT-CLOUDFLARE-AWS.md](docs/DEPLOYMENT-CLOUDFLARE-AWS.md)
+- [docs/BILLING-STRIPE.md](docs/BILLING-STRIPE.md)
+- [docs/ORGANIZATION-ONBOARDING.md](docs/ORGANIZATION-ONBOARDING.md)
+- [docs/SAAS-MIGRATION.md](docs/SAAS-MIGRATION.md)
