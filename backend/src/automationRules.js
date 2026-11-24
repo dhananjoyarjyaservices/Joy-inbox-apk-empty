@@ -74,8 +74,16 @@ function sortAutomationRules(rules) {
   });
 }
 
+function normalizeAutomationMatchText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\\s+/gu, " ")
+    .toLocaleLowerCase("und");
+}
+
 function matchesKeyword(message, keyword, matchType) {
-  const normalizedKeyword = String(keyword || "").trim().toLowerCase();
+  const normalizedKeyword = normalizeAutomationMatchText(keyword);
   if (!message || !normalizedKeyword) return false;
   if (matchType === "exact") return message === normalizedKeyword;
   if (matchType === "starts_with") return message.startsWith(normalizedKeyword);
@@ -83,7 +91,7 @@ function matchesKeyword(message, keyword, matchType) {
 }
 
 function matchesAutomationRule(rule, messageText) {
-  const message = String(messageText || "").trim().toLowerCase();
+  const message = normalizeAutomationMatchText(messageText);
   if (!message) return false;
   if (Array.isArray(rule.conditions) && rule.conditions.length) {
     const results = rule.conditions.map(condition =>
