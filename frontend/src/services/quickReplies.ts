@@ -12,7 +12,8 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 
-import { auth, db } from "../firebase/config";
+import { auth } from "../firebase/config";
+import { db } from "../firebase/firestore";
 import type { QuickReply } from "../types";
 
 function getQuickReplyCollection(userId: string) {
