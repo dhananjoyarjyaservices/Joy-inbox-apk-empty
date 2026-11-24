@@ -98,8 +98,8 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
           </label>
           <div className="space-y-2">
             <p className="text-sm font-medium text-gray-600">Permissions</p>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readContacts} onChange={event => setReadContacts(event.target.checked}/> Read contacts</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={writeContacts} onChange={event => setWriteContacts(event.target.checked}/> Create/update contacts</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readContacts} onChange={event => setReadContacts(event.target.checked)}/> Read contacts</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={writeContacts} onChange={event => setWriteContacts(event.target.checked)}/> Create/update contacts</label>
           </div>
           <label className="block text-sm text-gray-600">Key expires after
             <select value={expiryDays} onChange={event => setExpiryDays(Number(event.target.value))} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">
