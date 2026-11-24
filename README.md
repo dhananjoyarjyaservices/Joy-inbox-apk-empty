@@ -71,7 +71,7 @@ The tenant inbox includes a Workspace Billing screen and a Stripe integration fo
 
 ## Additional tenant inbox features
 
-The tenant inbox now includes private conversation internal notes, interactive WhatsApp reply buttons/list menus, searchable incoming interactive selections, and workspace-scoped billing controls. A dry-run-first legacy migration utility is available; it is never run automatically and strips old customer media storage paths and URLs.
+The tenant inbox now includes private conversation internal notes, interactive WhatsApp reply buttons/list menus, 2–10-card media carousels using public HTTPS image links, searchable incoming interactive selections, and workspace-scoped billing controls. A dry-run-first legacy migration utility is available; it is never run automatically and strips old customer media storage paths and URLs.
 
 
 ## Release gate
