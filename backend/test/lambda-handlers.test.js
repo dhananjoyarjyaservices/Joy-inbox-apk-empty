@@ -12,3 +12,25 @@ test("Lambda entry points export the configured HTTP and scheduled handlers", ()
   }
   assert.equal(typeof automation.handler, "function", "src/automationWorker.handler must be an exported Lambda handler");
 });
+
+test("CRM API endpoints require Firebase authentication before workspace data access", async () => {
+  const { handler } = require("../src/index");
+  for (const [method, path] of [
+    ["GET", "/organizations/crm/fields"],
+    ["POST", "/organizations/crm/fields"],
+    ["GET", "/organizations/crm/stages"],
+    ["POST", "/organizations/crm/stages"],
+    ["GET", "/organizations/crm/leads"],
+    ["POST", "/organizations/crm/leads"],
+    ["DELETE", "/organizations/crm/leads"]
+  ]) {
+    const response = await handler({
+      httpMethod: method,
+      path,
+      headers: {},
+      queryStringParameters: { organizationId: "org_a" },
+      body: method === "GET" ? undefined : JSON.stringify({ organizationId: "org_a", data: {} })
+    });
+    assert.equal(response.statusCode, 401, `${method} ${path} must reject anonymous requests`);
+  }
+});
