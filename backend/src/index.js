@@ -775,6 +775,10 @@ async function handleTenantCrmBulkImport(event) {
   requirePermission(organization, "contacts:manage");
   const rows = Array.isArray(body.rows) ? body.rows : Array.isArray(body.data?.rows) ? body.data.rows : null;
   const result = await importCrmLeads(getDb(), organization, decoded.uid, rows);
+  await Promise.all(result.items.map(item => recordCrmActivity(getDb(), {
+    organizationId: organization.id, organizationRef: organization.ref, leadId: item.id,
+    actorUid: decoded.uid, action: "created", after: item, at: new Date()
+  }).catch(error => console.error("CRM import activity record failed:", error.statusCode || "CRM_ACTIVITY_WRITE_FAILED"))));
   await Promise.all(result.items.map(item => enqueueOrganizationWebhookEvent(
     getDb(), organization.id, "lead.created",
     `crm-import:${item.id}:${crypto.randomUUID()}`,
