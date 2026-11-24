@@ -56,6 +56,7 @@ const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = requ
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
+const { reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
@@ -66,6 +67,21 @@ const {
   isValidInstallationId,
   sendTenantSlaOverdueNotification
 } = require("./push");
+
+async function reserveTenantMessageQuota(db, organizationId, clientMessageId, sendRequestRef) {
+  try {
+    return await reserveOutboundMessage(db, organizationId, clientMessageId);
+  } catch (error) {
+    if (sendRequestRef) await markTenantSendRequestFailed(sendRequestRef, error);
+    throw error;
+  }
+}
+
+async function settleTenantMessageQuota(db, reservation, error = null) {
+  if (!reservation?.enforced) return;
+  // Ambiguous outcomes are charged conservatively so retries cannot bypass the quota.
+  await finishOutboundReservation(db, reservation, error?.definitive === true ? "failed" : "sent");
+}
 
 function getMethod(event) {
   return (
