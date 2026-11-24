@@ -1603,6 +1603,7 @@ async function sendTenantTemplate(event) {
     return jsonResponse(event, 409, { success: false, deliveryUnknown: true, retryable: false, clientMessageId, error: "WhatsApp delivery could not be confirmed. Check the conversation in WhatsApp before sending again." });
   }
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
+  const quotaReservation = await reserveTenantMessageQuota(db, organization.id, clientMessageId, claim.ref);
   const template = { name: templateName, language: { code: language } };
   const components = [];
   let uploadedHeaderMediaId = "";
@@ -1611,7 +1612,7 @@ async function sendTenantTemplate(event) {
     const buffer = Buffer.from(headerMedia.base64, "base64");
     let uploaded;
     try { uploaded = await uploadWhatsAppMedia(buffer, mimeType, headerMedia.filename, credentials); }
-    catch (error) { await markTenantSendRequestFailed(claim.ref, error); throw error; }
+    catch (error) { await settleTenantMessageQuota(db, quotaReservation, { definitive: true }); await markTenantSendRequestFailed(claim.ref, error); throw error; }
     uploadedHeaderMediaId = uploaded.mediaId;
     const mediaType = mediaHeaderFormat.toLowerCase();
     components.push({ type: "header", parameters: [{ type: mediaType, [mediaType]: { id: uploaded.mediaId } }] });
@@ -1642,7 +1643,9 @@ async function sendTenantTemplate(event) {
       throw error;
     }
     result = { messageId: payload.messages[0].id };
+    await settleTenantMessageQuota(db, quotaReservation);
   } catch (error) {
+    await settleTenantMessageQuota(db, quotaReservation, error);
     await markTenantSendRequestFailed(claim.ref, error);
     throw error;
   }
