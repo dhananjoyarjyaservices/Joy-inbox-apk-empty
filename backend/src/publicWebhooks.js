@@ -8,6 +8,9 @@ const { encryptSecret, decryptSecret } = require("./tenancy");
 
 const WEBHOOK_EVENTS = new Set([
   "contact.upserted",
+  "lead.created",
+  "lead.updated",
+  "lead.deleted",
   "message.received",
   "message.sent",
   "message.delivered",
