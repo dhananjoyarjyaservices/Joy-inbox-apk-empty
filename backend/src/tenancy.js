@@ -230,6 +230,7 @@ async function saveWhatsAppConnection(db, organization, input) {
   const verifiedName = String(input?.verifiedName || "").trim().slice(0, 100);
   const wabaId = input?.wabaId === undefined ? "" : String(input.wabaId).trim();
   const registrationPin = input?.registrationPin === undefined ? "" : String(input.registrationPin);
+  const billingModel = input?.billingModel === "joy_inbox_partner_credit_line" ? "joy_inbox_partner_credit_line" : "meta_direct";
   if (!validPhoneNumberId(phoneNumberId) || !/^[A-Za-z0-9._|=-]{8,4096}$/.test(accessToken) ||
       (wabaId && !/^[0-9]{5,32}$/.test(wabaId)) ||
       (registrationPin && !/^\d{6}$/.test(registrationPin))) {
@@ -248,6 +249,7 @@ async function saveWhatsAppConnection(db, organization, input) {
       accessToken: encrypted,
       ...(wabaId ? { wabaId } : {}),
       ...(registrationPin ? { registrationPin: encryptSecret(registrationPin) } : {}),
+      billingModel,
       displayPhoneNumber,
       verifiedName,
       connected: true,
@@ -332,6 +334,7 @@ async function listWhatsAppConnections(db, organizationId) {
     return {
       phoneNumberId: item.id,
       ...(data.wabaId ? { wabaId: data.wabaId } : {}),
+      billingModel: data.billingModel || "meta_direct",
       displayPhoneNumber: data.displayPhoneNumber || "",
       verifiedName: data.verifiedName || "",
       connected: data.connected === true,
