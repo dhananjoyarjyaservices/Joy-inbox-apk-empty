@@ -58,6 +58,10 @@ export type TeamNotificationDeliveryAnalytics = {
   failed: number; retried: number; attempts: number; rate: number;
   byType: Record<string, TeamNotificationTypeStats>; lastActivityAt: string | null;
 };
+export type TeamNotificationDeliveryAnalyticsResult = {
+  agents: TeamNotificationDeliveryAnalytics[]; sampledMembers: number; capped: boolean;
+  perMemberLimit: number; from: string | null; to: string | null;
+};
 
 export type MemberNotificationDeliveryReport = {
   member: { uid: string; name: string; role: string };
@@ -189,14 +193,21 @@ export async function listNotificationDeliveries(organizationId: string): Promis
 export async function listTeamNotificationDeliveryAnalytics(
   organizationId: string,
   range: { from?: string; to?: string } = {},
-): Promise<TeamNotificationDeliveryAnalytics[]> {
+): Promise<TeamNotificationDeliveryAnalyticsResult> {
   const params = new URLSearchParams({ organizationId });
   if (range.from) params.set("from", range.from);
   if (range.to) params.set("to", range.to);
-  const result = await authenticatedGet<{ agents?: TeamNotificationDeliveryAnalytics[] }>(
+  const result = await authenticatedGet<Partial<TeamNotificationDeliveryAnalyticsResult>>(
     `/organizations/notifications/team-deliveries?${params.toString()}`
   );
-  return Array.isArray(result.agents) ? result.agents : [];
+  return {
+    agents: Array.isArray(result.agents) ? result.agents : [],
+    sampledMembers: Number(result.sampledMembers || 0),
+    capped: Boolean(result.capped),
+    perMemberLimit: Number(result.perMemberLimit || 500),
+    from: result.from || null,
+    to: result.to || null
+  };
 }
 
 export async function getMemberNotificationDeliveryReport(
