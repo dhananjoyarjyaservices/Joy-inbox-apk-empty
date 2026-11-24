@@ -14,6 +14,23 @@
 
 ## Priority 0 — Interakt-style self-service WhatsApp onboarding
 
+**Repository implementation status:** Initial code path now added; real Meta activation remains blocked on the owner's Meta app configuration and Meta approval.
+
+Implemented in code:
+- Customer-facing **Continue with Facebook** flow using Meta Embedded Signup v4-compatible configuration.
+- Authenticated, tenant/user-bound, expiring, single-use onboarding sessions.
+- Server-side authorization-code exchange; app secret never sent to the browser.
+- WABA/phone-number membership validation.
+- Server-generated six-digit registration PIN, Cloud API phone registration and WABA app subscription.
+- Encrypted access-token and registration-PIN storage, WABA/phone metadata, and owner/admin-only PIN retrieval.
+- Removed manual Phone Number ID/access-token entry from the customer-facing setup screen.
+
+Still required before live customer onboarding:
+- Configure Meta App ID, App Secret and Embedded Signup v4 Configuration ID in protected backend settings; optional Partner Solution ID only if Meta issued one.
+- Complete Meta business verification, Tech Provider/Solution Partner eligibility, App Review/Advanced Access and production app mode.
+- Validate OTP, new number, existing WABA, eligible coexistence, phone registration, webhook delivery and retry/recovery against Meta staging assets.
+- Confirm customer Meta payment responsibility and the selected Tech Provider/Solution Partner billing model.
+
 This is a launch-critical onboarding requirement and must be implemented before CRM expansion.
 
 Customer experience:
