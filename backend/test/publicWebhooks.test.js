@@ -225,3 +225,18 @@ test("accepts CRM lead lifecycle events as webhook subscription types", () => {
   });
   assert.deepEqual(result.events, ["lead.created", "lead.updated", "lead.deleted"]);
 });
+
+
+test("rotates an active workspace webhook secret and refuses revoked or foreign subscriptions", async () => {
+  const { createOrganizationWebhook, rotateOrganizationWebhookSecret } = require("../src/publicWebhooks");
+  const db = fakeDb();
+  const created = await createOrganizationWebhook(db, "org_a", "owner_a", {
+    name: "CRM sync", url: "https://hooks.example.com/joy", events: ["lead.created"]
+  }, 1000);
+  const rotated = await rotateOrganizationWebhookSecret(db, "org_a", created.webhook.id, 2000);
+  assert.equal(rotated.id, created.webhook.id);
+  assert.match(rotated.secret, /^joywhsec_/);
+  assert.notEqual(rotated.secret, created.secret);
+  assert.equal(rotated.rotatedAt, new Date(2000).toISOString());
+  await assert.rejects(() => rotateOrganizationWebhookSecret(db, "org_b", created.webhook.id), { statusCode: 404 });
+});
