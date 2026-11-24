@@ -46,6 +46,7 @@ export interface WhatsAppEmbeddedSignupConfig {
   appId?: string;
   configId?: string;
   graphApiVersion?: string;
+  partnerMode?: "tech_provider" | "solution_partner";
   solutionId?: string;
 }
 export async function getWhatsAppEmbeddedSignupConfig(organizationId: string): Promise<WhatsAppEmbeddedSignupConfig> {
