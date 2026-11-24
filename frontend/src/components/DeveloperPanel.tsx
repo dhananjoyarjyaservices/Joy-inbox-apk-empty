@@ -6,6 +6,7 @@ import {
   listOrganizationWebhooks,
   createOrganizationWebhook,
   revokeOrganizationWebhook,
+  rotateOrganizationWebhookSecret,
   listOrganizationWebhookDeliveries,
   replayOrganizationWebhookDelivery,
   type OrganizationApiKey,
@@ -111,6 +112,18 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
     finally { setWebhookSaving(false); }
   }
 
+  async function rotateWebhookSecret(webhook: OrganizationWebhook) {
+    if (!confirm(`Rotate the signing secret for “${webhook.name}”? The old secret will stop working immediately.`)) return;
+    setWebhookSaving(true); setError(""); setNotice(""); setWebhookSecret(""); setWebhookCopied(false);
+    try {
+      const result = await rotateOrganizationWebhookSecret(organizationId, webhook.id);
+      setWebhookSecret(result.secret);
+      setNotice("Webhook signing secret rotated. Copy the new secret and update your receiving endpoint now.");
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Webhook secret could not be rotated."); }
+    finally { setWebhookSaving(false); }
+  }
+
   async function replayDelivery(delivery: OrganizationWebhookDelivery) {
     if (!confirm(`Replay failed ${delivery.event} webhook delivery?`)) return;
     setReplayingDeliveryId(delivery.id); setError(""); setNotice("");
@@ -203,7 +216,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <div className="sm:col-span-2"><p className="mb-2 text-xs font-medium text-gray-600">Events</p><div className="grid gap-2 sm:grid-cols-2">{[["contact.upserted", "Contact created or updated"], ["lead.created", "CRM lead created"], ["lead.updated", "CRM lead updated"], ["lead.deleted", "CRM lead deleted"], ["message.received", "Incoming WhatsApp message"], ["message.sent", "Outgoing message accepted"], ["message.delivered", "Message delivered"], ["message.read", "Message read"], ["message.failed", "Message failed"]].map(([eventName, label]) => <label key={eventName} className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={webhookEvents.includes(eventName)} onChange={event => setWebhookEvents(current => event.target.checked ? [...current, eventName] : current.filter(item => item !== eventName))}/><span><code>{eventName}</code> · {label}</span></label>)}</div></div>
             <button disabled={webhookSaving || !organizationId || !webhookEvents.length} className="justify-self-start rounded-lg bg-[#075e54] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{webhookSaving ? "Creating..." : "Create webhook"}</button>
           </form>
-          <div className="space-y-2">{webhooks.length ? webhooks.map(webhook => <article key={webhook.id} className="rounded-lg border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{webhook.name}</strong><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${webhook.status === "active" ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{webhook.status}</span></div><p className="mt-1 break-all text-xs text-gray-500">{webhook.url}</p><p className="mt-1 text-[11px] text-gray-500">Events: {webhook.events.join(", ")} · Last delivery: {displayDate(webhook.lastDeliveryAt)}</p>{webhook.status === "active" && <button type="button" onClick={() => void revokeWebhook(webhook)} className="mt-2 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600">Disable webhook</button>}</article>) : <p className="text-xs text-gray-500">No webhook subscriptions created.</p>}</div>
+          <div className="space-y-2">{webhooks.length ? webhooks.map(webhook => <article key={webhook.id} className="rounded-lg border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{webhook.name}</strong><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${webhook.status === "active" ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{webhook.status}</span></div><p className="mt-1 break-all text-xs text-gray-500">{webhook.url}</p><p className="mt-1 text-[11px] text-gray-500">Events: {webhook.events.join(", ")} · Last delivery: {displayDate(webhook.lastDeliveryAt)}</p>{webhook.status === "active" && <div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => void rotateWebhookSecret(webhook)} disabled={webhookSaving} className="rounded-lg border px-3 py-1.5 text-xs text-[#075e54] disabled:opacity-50">Rotate secret</button><button type="button" onClick={() => void revokeWebhook(webhook)} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600">Disable webhook</button></div>}</article>) : <p className="text-xs text-gray-500">No webhook subscriptions created.</p>}</div>
           <div className="mt-4 border-t pt-4">
             <div className="mb-2 flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">Delivery history</h4><button type="button" onClick={() => void refresh()} disabled={loading} className="text-xs font-medium text-[#075e54]">Refresh</button></div>
             {deliveries.length ? <div className="max-h-80 space-y-2 overflow-y-auto">{deliveries.map(delivery => <article key={delivery.id} className="rounded-lg border p-3">
