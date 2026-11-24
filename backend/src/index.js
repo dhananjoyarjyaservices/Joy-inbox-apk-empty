@@ -372,7 +372,7 @@ async function handlePublicApiLeads(event) {
   const method = getMethod(event);
   if (method === "GET") {
     requireApiScope(authenticatedKey, "leads:read");
-    const result = await listPublicLeads(db, authenticatedKey.organizationId, event.queryStringParameters?.limit || 50);
+    const result = await listPublicLeads(db, authenticatedKey.organizationId, event.queryStringParameters?.limit, event.queryStringParameters?.cursor);
     return jsonResponse(event, 200, result);
   }
   let body;
