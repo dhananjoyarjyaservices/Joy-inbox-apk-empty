@@ -123,7 +123,7 @@ test("rejects malformed, unknown, revoked, expired and inactive-workspace API ke
     name: "Temporary", scopes: ["contacts:read"], expiryDays: 1
   }, 1000);
   await assert.rejects(
-    () => authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, 86400001),
+    () => authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, 86401000),
     { statusCode: 401 }
   );
   await revokeOrganizationApiKey(db, "org_one", created.id, 2000);
