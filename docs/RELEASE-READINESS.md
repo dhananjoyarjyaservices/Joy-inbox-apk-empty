@@ -45,6 +45,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] CI concurrency no longer cancels the validation run on every subsequent push.
 - [x] Dependabot weekly update groups target `feature/saas-foundation`; repository security and contribution policies are documented in `SECURITY.md` and `CONTRIBUTING.md`.
 - [x] Add a regression test proving concurrent outbound reservations cannot consume more than the final available message quota.
+- [x] Draft the staging/production incident triage, secret-rotation and rollback runbook in `docs/OPERATIONS-RUNBOOK.md`.
 - [x] Add Lambda entry-point export tests for HTTP, SLA, history retention, campaign and automation workers.
 - [x] Add a reproducible production-only Lambda ZIP packaging script; CI installs locked production dependencies in an isolated directory and verifies the ZIP archive.
 
@@ -67,7 +68,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [ ] Exercise campaign STOP/START, suppression re-check, throttling, pause/cancel and uncertain-delivery reconciliation end-to-end.
 - [x] Implement invitation lifecycle in code: pending invitations, hashed one-time tokens, verified-email acceptance, seven-day expiry, revocation, audit-safe tenant membership creation, copyable fragment-based invitation links that preserve configured deployment base paths, email verification/resend, login redirect preservation and expired-status display in the team UI.
 - [ ] Configure a transactional email provider and verify delivery/retry/bounce handling; until then, workspace owners/admins must distribute the generated invitation links through a trusted channel.
-- [ ] Run load tests, concurrency tests and security review for all legacy routes; keep `LEGACY_OWNER_API_ENABLED` unset/false outside a controlled migration window.
+- [ ] Run real Firestore staging concurrency/load tests and complete the route-by-route security review of legacy paths; keep `LEGACY_OWNER_API_ENABLED` unset/false outside a controlled migration window.
 - [ ] Review data retention, privacy notice, consent language, WhatsApp template policy and billing/tax requirements.
 
 ## Required before migrating production data
