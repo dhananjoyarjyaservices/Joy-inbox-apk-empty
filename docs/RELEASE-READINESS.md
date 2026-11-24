@@ -97,15 +97,12 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-Latest source-bearing commits:
-- Backend: `e72f67e691799439dac5e63a41ac98409637d2df` (includes the concurrency quota test, Lambda handler export test and production ZIP packaging command).
-- Frontend: `fd16ab16b499800a06278fd8615405b3899a6482` (includes lazy Firestore loading and validated WhatsApp contact links).
-- Current branch documentation head at this verification: `300b61e527f075f285a490b3a732cca4cc66f033`.
-
-Latest verified GitHub Actions:
-- Backend tests with Firestore emulator (run 45350622599): all 284 tests passed, zero failures/skips; production-only Lambda ZIP built and integrity-checked.
-- Frontend build (run 45350622660): all 8 frontend tests passed; TypeScript and Vite production build passed with no oversized-chunk warning.
-- Joy Inbox CI (run 45350622593): backend unit tests and frontend tests/build passed.
-- Cloudflare Pages branch preview for the same frontend source has deployed successfully; the build does not validate Firebase/API runtime connectivity.
+Latest branch head verified:
+- Pull request #1 head: `e42dae234c361088a24eb46b34f8c6516bdcf59f`.
+- The latest head has all three GitHub Actions workflows completed successfully:
+  - Backend tests (run 45350846765): 284 tests passed, zero failures or skips; Firestore emulator suite completed; production-only Lambda ZIP was created and integrity-checked.
+  - Frontend build (run 45350846516): 8 frontend tests passed; TypeScript and Vite production build passed. Largest generated chunk is 400.22 KB (Firestore SDK), and the build emitted no oversized-chunk warning.
+  - Joy Inbox CI (run 45350846545): backend unit tests and frontend TypeScript/tests/build both passed.
+- The Cloudflare Pages preview must still be checked independently for this exact head before treating the preview as current. A successful Vite build does not prove Firebase/API runtime connectivity.
 
 The Lambda ZIP is a validation artifact only; no AWS Lambda was deployed. These checks do not prove that a live Firebase project, Meta account, Stripe account, email provider or customer device is correctly configured. Keep the PR draft until all external staging, security, backup/restore, accessibility and operational launch gates pass.
