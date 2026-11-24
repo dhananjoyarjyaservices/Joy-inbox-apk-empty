@@ -50,7 +50,7 @@ Legend:
 | Instagram inbox and Instagram automation | Missing | No Instagram channel integration or inbox implementation found. |
 | RCS channel and WhatsApp-to-RCS fallback | Missing | No RCS provider/channel implementation found. |
 | Click-to-WhatsApp ads launcher/conversion analytics | Missing | No CTWA ad management or Meta conversion-event pipeline found. |
-| Sales CRM pipeline, lead stages and owner routing | Partial | Initial tenant-scoped pipeline, five default stages, custom stages, typed lead fields, contact linking, member owner assignment, lead editing, follow-up dates, scheduled deduplicated reminders and validated CSV bulk import now exist. Lead activity timeline, forecasting and sales reporting remain missing. |
+| Sales CRM pipeline, lead stages and owner routing | Partial | Initial tenant-scoped pipeline, five default stages, custom stages, typed lead fields, contact linking, member owner assignment, lead editing, follow-up dates, scheduled deduplicated reminders and validated CSV bulk import now exist. Sales reporting now covers recent pipeline totals, won revenue, conversion rate and stage/owner/source breakdowns. Lead activity timeline and forecasting remain missing. |
 | Shopify/WooCommerce and other commerce integrations | Missing | No production commerce integration/sync workflow found. |
 | WhatsApp Forms / lead capture forms | Missing | No form builder, form send workflow or response-management module found. |
 | AI Copilot, AI AnswerBot, AI agents and intent automation | Missing | No AI generation/runtime, knowledge base ingestion, agent tool execution or AI workflow code found. |
