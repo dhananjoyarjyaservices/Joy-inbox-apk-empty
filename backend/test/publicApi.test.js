@@ -313,3 +313,19 @@ test("API key accepts the messages:write scope and rejects unknown message scope
   const auth = await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey);
   assert.equal(auth.organizationId, "org_one");
 });
+
+
+test("campaign control is a separate least-privilege API key scope", async () => {
+  const db = fakeDb({ "organizations/org_one": { status: "active" } });
+  const draftKey = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "Draft only", scopes: ["campaigns:write"]
+  });
+  const controlKey = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "Campaign operator", scopes: ["campaigns:control"]
+  });
+  const draftAuth = await authenticateOrganizationApiKey(db, "Bearer " + draftKey.apiKey);
+  const controlAuth = await authenticateOrganizationApiKey(db, "Bearer " + controlKey.apiKey);
+  assert.throws(() => requireApiScope(draftAuth, "campaigns:control"), { statusCode: 403 });
+  assert.throws(() => requireApiScope(controlAuth, "campaigns:write"), { statusCode: 403 });
+  assert.doesNotThrow(() => requireApiScope(controlAuth, "campaigns:control"));
+});
