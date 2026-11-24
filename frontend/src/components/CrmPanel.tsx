@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, RefreshCw, BriefcaseBusiness, ArrowRight, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, BriefcaseBusiness, Trash2 } from "lucide-react";
 import {
   listCrmFields, listCrmLeads, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead,
   type CrmField, type CrmLead, type CrmStage
