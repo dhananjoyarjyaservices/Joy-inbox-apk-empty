@@ -86,7 +86,7 @@ const { runScheduledCrmFollowUpReminders } = require("./crmFollowUpScheduler");
 const { runScheduledAutomationSteps } = require("./automationScheduler");
 const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_SLA_MINUTES } = require("./slaSettings");
 const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
-const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = require("./automationRules");
+const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule, sortAutomationRules } = require("./automationRules");
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
@@ -993,7 +993,7 @@ async function handleTenantAutomationRules(event) {
   const collection = organization.ref.collection("automationRules");
   if (method === "GET") {
     const snapshot = await collection.limit(100).get();
-    const rules = snapshot.docs.map((document) => ({
+    const rules = sortAutomationRules(snapshot.docs.map((document) => ({
       id: document.id,
       name: String(document.data().name || ""),
       keyword: String(document.data().keyword || ""),
@@ -1001,10 +1001,10 @@ async function handleTenantAutomationRules(event) {
       response: String(document.data().response || document.data().steps?.[0] || ""),
       steps: Array.isArray(document.data().steps) && document.data().steps.length ? document.data().steps.slice(0, 5).map((step) => typeof step === "string" ? { message: step, delaySeconds: 0 } : { message: String(step?.message || ""), delaySeconds: Number.isInteger(step?.delaySeconds) ? step.delaySeconds : 0 }) : [{ message: String(document.data().response || ""), delaySeconds: 0 }],
       enabled: document.data().enabled === true,
-      priority: Number(document.data().priority || 100),
+      priority: Number.isInteger(document.data().priority) ? document.data().priority : 100,
       createdAt: document.data().createdAt?.toDate ? document.data().createdAt.toDate().toISOString() : null,
       updatedAt: document.data().updatedAt?.toDate ? document.data().updatedAt.toDate().toISOString() : null
-    })).sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name));
+    })));
     return jsonResponse(event, 200, { rules, capped: snapshot.size === 100 });
   }
   if (method === "POST" || method === "PUT") {
