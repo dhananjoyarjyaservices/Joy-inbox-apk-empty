@@ -58,6 +58,7 @@ const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
 const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
+const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const {
@@ -473,6 +474,142 @@ async function handleTenantAutomationRules(event) {
     return jsonResponse(event, 200, { success: true });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+async function handleTenantCrm(event, resource) {
+  const method = getMethod(event);
+  const decoded = await authenticateUser(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  if (resource === "leads") requirePermission(organization, "contacts:manage");
+  else if (method === "GET") requirePermission(organization, "contacts:manage");
+  else requirePermission(organization, "settings:manage");
+
+  const db = getDb();
+  const collectionName = resource === "fields" ? "crmFields" : resource === "stages" ? "crmStages" : "crmLeads";
+  const collection = organization.ref.collection(collectionName);
+
+  if (method === "GET") {
+    if (resource === "stages") {
+      const existing = await collection.get();
+      if (!existing.docs.length) {
+        const batch = db.batch();
+        const now = new Date();
+        for (const stage of DEFAULT_PIPELINE_STAGES) {
+          batch.create(collection.doc(stage.id), { ...stage, createdAt: now, updatedAt: now });
+        }
+        await batch.commit();
+      }
+      const snapshot = await collection.orderBy("position", "asc").get();
+      return jsonResponse(event, 200, { items: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+    }
+    const snapshot = resource === "fields"
+      ? await collection.orderBy("createdAt", "asc").get()
+      : await collection.orderBy("updatedAt", "desc").limit(100).get();
+    return jsonResponse(event, 200, { items: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+  }
+
+  if (method === "DELETE") {
+    const resourceId = String(body.resourceId || "");
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(resourceId)) return jsonResponse(event, 400, { error: "A valid CRM resource ID is required." });
+    const ref = collection.doc(resourceId);
+    const snapshot = await ref.get();
+    if (!snapshot.exists) return jsonResponse(event, 404, { error: "CRM resource was not found." });
+    if (resource === "fields") {
+      await ref.set({ active: false, updatedAt: new Date() }, { merge: true });
+      return jsonResponse(event, 200, { success: true, active: false });
+    }
+    if (resource === "stages") {
+      if (snapshot.data()?.isDefault) return jsonResponse(event, 409, { error: "The default pipeline stage cannot be deleted." });
+      const linked = await organization.ref.collection("crmLeads").where("stageId", "==", resourceId).limit(1).get();
+      if (!linked.empty) return jsonResponse(event, 409, { error: "Move or close leads in this stage before deleting it." });
+    }
+    await ref.delete();
+    return jsonResponse(event, 200, { success: true });
+  }
+
+  if (method !== "POST" && method !== "PUT") return jsonResponse(event, 405, { error: "Method not allowed." });
+  const now = new Date();
+
+  if (resource === "fields") {
+    const definition = normalizeCrmFieldDefinition(body.data);
+    const ref = collection.doc(definition.key);
+    const existing = await ref.get();
+    if (method === "PUT" && (!body.resourceId || body.resourceId !== definition.key || !existing.exists)) {
+      return jsonResponse(event, 404, { error: "Custom field was not found or its key cannot be changed." });
+    }
+    if (method === "POST" && !existing.exists) {
+      const count = await collection.get();
+      if (count.size >= 30) return jsonResponse(event, 409, { error: "This workspace supports up to 30 custom CRM fields." });
+    }
+    await ref.set({ ...definition, ...(existing.exists ? {} : { createdAt: now }), updatedAt: now, updatedBy: decoded.uid }, { merge: true });
+    return jsonResponse(event, method === "POST" ? 201 : 200, { item: { id: definition.key, ...definition } });
+  }
+
+  if (resource === "stages") {
+    const stage = normalizePipelineStage(body.data);
+    const ref = collection.doc(stage.id);
+    const existing = await ref.get();
+    if (method === "PUT" && (!body.resourceId || body.resourceId !== stage.id || !existing.exists)) {
+      return jsonResponse(event, 404, { error: "Pipeline stage was not found or its ID cannot be changed." });
+    }
+    const allStages = await collection.get();
+    if (method === "POST" && !existing.exists && allStages.size >= 20) {
+      return jsonResponse(event, 409, { error: "A workspace can have up to 20 pipeline stages." });
+    }
+    if (stage.isDefault && allStages.docs.some(doc => doc.id !== stage.id && doc.data()?.isDefault && doc.data()?.active !== false)) {
+      return jsonResponse(event, 409, { error: "Only one active default pipeline stage is allowed." });
+    }
+    await ref.set({ ...stage, ...(existing.exists ? {} : { createdAt: now }), updatedAt: now, updatedBy: decoded.uid }, { merge: true });
+    return jsonResponse(event, method === "POST" ? 201 : 200, { item: { id: stage.id, ...stage } });
+  }
+
+  const fieldSnapshot = await organization.ref.collection("crmFields").get();
+  const definitions = fieldSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const lead = normalizeCrmLead(body.data, definitions);
+  const stageSnapshot = await organization.ref.collection("crmStages").doc(lead.stageId).get();
+  if (!stageSnapshot.exists || stageSnapshot.data()?.active === false) {
+    return jsonResponse(event, 400, { error: "Choose an active stage from this workspace's sales pipeline." });
+  }
+  if (lead.contactId) {
+    const contactSnapshot = await organization.ref.collection("contacts").doc(lead.contactId).get();
+    if (!contactSnapshot.exists) return jsonResponse(event, 404, { error: "The selected customer contact was not found in this workspace." });
+  }
+  if (lead.ownerUid) {
+    const memberSnapshot = await organization.ref.collection("members").doc(lead.ownerUid).get();
+    if (!memberSnapshot.exists || memberSnapshot.data()?.status !== "active") {
+      return jsonResponse(event, 400, { error: "Lead owner must be an active member of this workspace." });
+    }
+  }
+  let ref;
+  let createdAt = now;
+  if (method === "PUT") {
+    const resourceId = String(body.resourceId || "");
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(resourceId)) return jsonResponse(event, 400, { error: "A valid lead ID is required." });
+    ref = collection.doc(resourceId);
+    const existing = await ref.get();
+    if (!existing.exists) return jsonResponse(event, 404, { error: "Lead was not found." });
+    createdAt = existing.data()?.createdAt || now;
+  } else {
+    ref = collection.doc();
+  }
+  const stage = stageSnapshot.data() || {};
+  const item = {
+    ...lead,
+    stageName: String(stage.name || ""),
+    organizationId: organization.id,
+    createdAt,
+    updatedAt: now,
+    updatedBy: decoded.uid
+  };
+  if (method === "POST") item.createdBy = decoded.uid;
+  await ref.set(item, { merge: method === "PUT" });
+  return jsonResponse(event, method === "POST" ? 201 : 200, { item: { id: ref.id, ...item } });
 }
 
 async function handleTenantResource(event, resource) {
