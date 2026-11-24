@@ -1,5 +1,6 @@
-const { getBillingPlanCatalog } = require("./billing");
 "use strict";
+
+const { getBillingPlanCatalog } = require("./billing");
 
 const crypto = require("crypto");
 
