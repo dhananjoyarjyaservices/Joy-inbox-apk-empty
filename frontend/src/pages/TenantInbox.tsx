@@ -1290,7 +1290,6 @@ export default function TenantInbox() {
   }), [messages, messageSearch, savedOnly, messageDateFrom, messageDateTo]);
   const currentChat = useMemo(() => chats.find((chat) => chat.id === selected), [chats, selected]);
   const currentContactWhatsAppUrl = getWhatsAppContactUrl(currentChat?.customerPhone || selected);
-  const currentCustomerLeads = useMemo(() => currentContact ? crmLeads.filter(lead => lead.contactId === currentContact.id) : [], [crmLeads, currentContact]);
   useEffect(() => {
     setReplyTarget(null);
     swipeGesture.current = null;
@@ -1302,6 +1301,7 @@ export default function TenantInbox() {
     const phone = (currentChat?.customerPhone || selected).replace(/[^0-9]/g, "");
     return contacts.find(contact => contact.phone.replace(/[^0-9]/g, "") === phone);
   }, [contacts, currentChat, selected]);
+  const currentCustomerLeads = useMemo(() => currentContact ? crmLeads.filter(lead => lead.contactId === currentContact.id) : [], [crmLeads, currentContact]);
 
   useEffect(() => {
     setCustomerName(currentContact?.name || currentChat?.customerName || "");
