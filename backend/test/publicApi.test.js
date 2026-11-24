@@ -8,7 +8,8 @@ const {
   revokeOrganizationApiKey,
   authenticateOrganizationApiKey,
   requireApiScope,
-  listOrganizationApiUsage
+  listOrganizationApiUsage,
+  runIdempotentApiRequest
 } = require("../src/publicApi");
 
 function fakeDb(seed = {}) {
@@ -24,6 +25,7 @@ function fakeDb(seed = {}) {
       async set(value, options = {}) {
         records.set(path, options.merge ? { ...(records.get(path) || {}), ...value } : value);
       },
+      async delete() { records.delete(path); },
       async get() {
         const value = records.get(path);
         return { exists: Boolean(value), data: () => value };
@@ -227,4 +229,54 @@ test("API usage analytics are tenant scoped and validate reporting windows", asy
   assert.equal(usage.totals.requests, 5);
   assert.equal(usage.daily.length, 1);
   await assert.rejects(() => listOrganizationApiUsage(db, "org_a", { days: 91 }), { statusCode: 400 });
+});
+
+
+test("idempotency returns the original result without repeating a mutation", async () => {
+  const db = fakeDb();
+  const auth = { keyId: "a".repeat(64), organizationId: "org_one" };
+  let executions = 0;
+  const operation = async () => ({ data: { id: "created_once" }, statusCode: 201 });
+  const first = await runIdempotentApiRequest(db, auth, "request-123", { method: "POST", body: { name: "Alex" } }, async () => {
+    executions += 1;
+    return operation();
+  }, 1000);
+  const replay = await runIdempotentApiRequest(db, auth, "request-123", { method: "POST", body: { name: "Alex" } }, async () => {
+    executions += 1;
+    return operation();
+  }, 2000);
+  assert.equal(first.statusCode, 201);
+  assert.equal(first.replayed, false);
+  assert.equal(replay.statusCode, 201);
+  assert.equal(replay.replayed, true);
+  assert.deepEqual(replay.data, { id: "created_once" });
+  assert.equal(executions, 1);
+});
+
+test("idempotency rejects reuse with a different request and malformed keys", async () => {
+  const db = fakeDb();
+  const auth = { keyId: "b".repeat(64), organizationId: "org_one" };
+  const request = { method: "POST", body: { name: "Alex" } };
+  await runIdempotentApiRequest(db, auth, "request-456", request, async () => ({ data: { id: "one" }, statusCode: 201 }), 1000);
+  await assert.rejects(
+    () => runIdempotentApiRequest(db, auth, "request-456", { method: "POST", body: { name: "Sam" } }, async () => ({ data: { id: "two" } }), 2000),
+    { statusCode: 409 }
+  );
+  await assert.rejects(
+    () => runIdempotentApiRequest(db, auth, "bad", request, async () => ({}), 2000),
+    { statusCode: 400 }
+  );
+});
+
+test("idempotency reports an in-progress duplicate and releases failed reservations", async () => {
+  const db = fakeDb();
+  const auth = { keyId: "c".repeat(64), organizationId: "org_one" };
+  const request = { method: "POST", body: { name: "Alex" } };
+  await assert.rejects(
+    () => runIdempotentApiRequest(db, auth, "request-789", request, async () => { throw new Error("upstream failed"); }, 1000),
+    /upstream failed/
+  );
+  assert.equal(db.records.size, 0);
+  const result = await runIdempotentApiRequest(db, auth, "request-789", request, async () => ({ data: { ok: true }, statusCode: 201 }), 2000);
+  assert.equal(result.data.ok, true);
 });
