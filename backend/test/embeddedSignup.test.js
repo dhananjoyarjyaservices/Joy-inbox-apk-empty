@@ -151,7 +151,9 @@ test("Embedded Signup exchanges code, validates selected WABA/phone, registers p
   assert.equal(result.verifiedName, "Example Business");
   assert.equal(calls.length, 5);
   assert.ok(calls.every(call => call.url.hostname === "graph.facebook.com"));
-  assert.equal(calls[3].options.headers.Authorization, "Bearer " + "EAA" + "x".repeat(40));
+  assert.equal(calls[3].url.pathname.endsWith("/111111111111111/subscribed_apps"), true);
+  assert.equal(calls[4].url.pathname.endsWith("/123456789012345/register"), true);
+  assert.equal(calls[4].options.headers.Authorization, "Bearer " + "EAA" + "x".repeat(40));
 });
 
 test("Embedded Signup refuses a phone number that is not part of the selected WABA", async () => {
