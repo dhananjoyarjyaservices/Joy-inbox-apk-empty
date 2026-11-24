@@ -1,74 +1,87 @@
-# Joy Inbox Public API — v1 (initial release)
+# Joy Inbox Public API — v1
 
-This document describes the first implemented server-to-server API surface. It is intentionally limited to workspace contacts until additional resource scopes, rate limits, pagination and outbound webhook delivery are complete.
+This document describes the workspace-scoped server-to-server API. API keys are scoped, hashed at rest, expiring and rate limited.
 
 ## Authentication
 
-1. In Joy Inbox, open **Developer** in the workspace inbox.
+1. Open **Developer** in the workspace inbox.
 2. Create an API key with only the required permissions and an expiry.
 3. Copy the key once and store it in a server-side secret manager.
 4. Send it as an HTTP Bearer token. Never put it in browser JavaScript, mobile app bundles or public source repositories.
 
-Example header:
+The raw key is generated from cryptographic random bytes. Joy Inbox stores only its SHA-256 hash. Keys are workspace-scoped, expire within 1–365 days, can be revoked immediately and are limited to 60 requests per key per minute. The workspace ID is derived from the key and is never accepted from API requests.
 
-```http
-Authorization: Bearer joy_live_REPLACE_WITH_YOUR_KEY
-```
-
-The raw key is generated from cryptographic random bytes. Joy Inbox stores only its SHA-256 hash. Keys are workspace-scoped, expire within 1–365 days, can be revoked immediately, update a throttled last-used timestamp and are limited to 60 requests per key per minute. Rate-limit counter documents include an `expiresAt` field; the Firestore TTL policy must be enabled in the project before production so old buckets are deleted. The workspace ID is derived from the key and is never accepted from the API request.
-
-## Endpoints
+## Contacts
 
 ### List contacts
-
 ```http
 GET /public/v1/contacts?limit=50
 Authorization: Bearer YOUR_JOY_API_KEY
 ```
-
-Required scope: `contacts:read`
-
-The limit is clamped to 1–100. Response includes `data` and a `pagination.hasMore` indicator. Cursor pagination is not yet available.
+Required scope: `contacts:read`. Limit is clamped to 1–100.
 
 ### Create or update a contact
-
 ```http
 POST /public/v1/contacts
 Authorization: Bearer YOUR_JOY_API_KEY
 Content-Type: application/json
 ```
+Required scope: `contacts:write`. Contacts are keyed by normalized international phone number; repeated POST requests update the same workspace contact.
 
-Required scope: `contacts:write`
+## Sales CRM leads
 
-Example body:
+### List leads
+```http
+GET /public/v1/leads?limit=50
+Authorization: Bearer YOUR_JOY_API_KEY
+```
+Required scope: `leads:read`. Results are limited to 1–100 and ordered by most recently updated. Response contains `data` and `pagination`.
 
+### Create a lead
+```http
+POST /public/v1/leads
+Authorization: Bearer YOUR_JOY_API_KEY
+Content-Type: application/json
+```
+Required scope: `leads:write`.
 ```json
 {
-  "name": "Asha",
-  "phone": "+919876543210",
-  "email": "asha@example.com",
-  "notes": "Website enquiry",
-  "source": "local",
-  "tags": ["website", "new-lead"]
+  "title": "Website enquiry",
+  "stageId": "new",
+  "source": "website",
+  "value": 2500,
+  "currency": "INR",
+  "contactId": "workspace-contact-document-id",
+  "ownerUid": "active-workspace-member-uid",
+  "nextFollowUpAt": "2026-12-01T10:00:00.000Z",
+  "notes": "Asked for a product demo",
+  "customFields": {}
 }
 ```
+The stage, linked contact, owner and custom field values are validated against the API key's workspace. Do not send an organization ID; it is derived from the API key.
 
-Contacts are keyed by normalized international phone number. A repeated POST for the same phone updates the existing contact within that workspace.
+### Update a lead
+```http
+PUT /public/v1/leads
+Authorization: Bearer YOUR_JOY_API_KEY
+Content-Type: application/json
+```
+Required scope: `leads:write`. Send `resourceId` plus the complete `data` object:
+```json
+{ "resourceId": "lead-document-id", "data": { "title": "Updated enquiry", "stageId": "qualified" } }
+```
 
-## Key management
+### Delete a lead
+```http
+DELETE /public/v1/leads
+Authorization: Bearer YOUR_JOY_API_KEY
+Content-Type: application/json
+```
+Required scope: `leads:write`. Send `{ "resourceId": "lead-document-id" }`.
 
-- Workspace owners and admins can create, list and revoke keys.
-- Agents cannot manage developer keys.
-- The full key is returned only at creation time.
-- Revocation takes effect immediately.
-- Only `contacts:read` and `contacts:write` scopes are currently supported.
+## Key management and limits
 
-## Not yet included
-
-- Public API endpoints for leads, messages, campaigns and templates.
-- Customer-managed outbound webhook subscriptions, signed delivery, retries and replay.
-- Configurable per-key rate limits and usage analytics (a fixed 60 requests/minute limit is active).
-- Cursor pagination and idempotency keys for write requests.
-- Browser CORS allowlists for third-party frontend apps.
-
-Do not treat this initial API surface as a full Interakt developer API replacement until the remaining controls and endpoints are implemented and tested.
+- Workspace owners/admins manage API keys; the full key is shown only once.
+- Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`.
+- API rate limit is 60 requests per key per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` before production.
+- Public API keys must remain server-side. Browser CORS allowlists, cursor pagination, idempotency keys, usage analytics and delivery-history/replay UI remain future work.
