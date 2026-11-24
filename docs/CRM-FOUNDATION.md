@@ -53,9 +53,7 @@ The Tenant Inbox now has a Sales CRM workspace view with:
 
 ## Remaining CRM work
 
-- Searchable contact picker, edit existing lead details and custom field values from the UI.
-
-- Follow-up reminders and overdue queues.
+- Edit existing lead details and custom field values from the UI.
 - Follow-up reminders and overdue queues.
 - Bulk contact/lead import and deduplication.
 - Saved filters, segments, lead activity timeline, custom events and conversion analytics.
