@@ -175,6 +175,31 @@ export async function revokeOrganizationApiKey(organizationId: string, keyId: st
   await request("/organizations/developer/api-keys", "DELETE", { organizationId, keyId });
 }
 
+export interface OrganizationWebhook {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  status: "active" | "revoked";
+  createdAt?: unknown;
+  lastDeliveryAt?: unknown;
+}
+export async function listOrganizationWebhooks(organizationId: string): Promise<OrganizationWebhook[]> {
+  const result = await request(`/organizations/developer/webhooks?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.webhooks) ? result.webhooks : [];
+}
+export async function createOrganizationWebhook(input: {
+  organizationId: string;
+  name: string;
+  url: string;
+  events: string[];
+}): Promise<{ webhook: OrganizationWebhook; secret: string }> {
+  return request("/organizations/developer/webhooks", "POST", input);
+}
+export async function revokeOrganizationWebhook(organizationId: string, webhookId: string): Promise<void> {
+  await request("/organizations/developer/webhooks", "DELETE", { organizationId, webhookId });
+}
+
 export interface OrganizationSlaSettings { enabled: boolean; targetMinutes: number; }
 export async function getOrganizationSlaSettings(organizationId: string): Promise<OrganizationSlaSettings> {
   const result = await request(`/organizations/sla/settings?organizationId=${encodeURIComponent(organizationId)}`);
