@@ -14,6 +14,7 @@ This checklist separates code already present from work that requires real servi
 - [x] Campaign drafts, approved-template checks, consent evidence validation, STOP suppression, explicit START re-subscription, send worker, pause/cancel and recipient reports.
 - [x] Internal conversation notes served through authenticated tenant APIs.
 - [x] Interactive WhatsApp button and list messages.
+- [x] Interactive WhatsApp media carousel composer and server payload validation for 2–10 image cards with HTTPS image and CTA links; card images are referenced by public URL rather than stored in Joy Inbox. Real Meta delivery still requires staging verification.
 - [x] Tenant inbox quoted replies: swipe-right gesture and explicit Reply action, quoted-message preview, reply context sent with text/media messages, and backend validation that resolves the original message inside the same organization.
 - [x] Stripe Checkout/Billing Portal/webhook foundation and workspace billing screen.
 - [x] Dry-run-first legacy data migration utility with media sanitization and post-write verification.
