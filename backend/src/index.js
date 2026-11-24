@@ -347,6 +347,7 @@ async function handleWhatsAppEmbeddedSignupConfig(event) {
       appId: config.appId,
       configId: config.configId,
       graphApiVersion: config.graphApiVersion,
+      partnerMode: config.partnerMode,
       ...(config.solutionId ? { solutionId: config.solutionId } : {})
     } : {})
   });
@@ -409,10 +410,11 @@ async function handleWhatsAppEmbeddedSignupComplete(event) {
       accessToken: result.accessToken,
       registrationPin: result.registrationPin,
       displayPhoneNumber: result.displayPhoneNumber,
-      verifiedName: result.verifiedName
+      verifiedName: result.verifiedName,
+      billingModel: result.billingModel
     });
     await finishSignupSession(claimed.ref, "completed");
-    return jsonResponse(event, 200, { connection, onboarding: "connected" });
+    return jsonResponse(event, 200, { connection, onboarding: "connected", billingModel: result.billingModel });
   } catch (error) {
     await finishSignupSession(claimed.ref, "failed", error.metaCode || error.statusCode || "ONBOARDING_FAILED")
       .catch(() => {});
