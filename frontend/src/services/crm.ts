@@ -54,6 +54,20 @@ export async function deleteCrmLead(organizationId: string, id: string) {
   await request<{ success: boolean }>("leads", organizationId, "DELETE", undefined, id);
 }
 
+export interface CrmLeadActivity { id: string; leadId: string; actorUid: string; action: "created" | "updated" | "deleted"; changedFields: string[]; before: Record<string, unknown> | null; after: Record<string, unknown> | null; createdAt: string | { _seconds?: number; seconds?: number } }
+
+export async function listCrmLeadActivity(organizationId: string, leadId: string, limit = 50): Promise<CrmLeadActivity[]> {
+  const user = auth.currentUser;
+  if (!API_URL) throw new Error("AWS API URL is not configured.");
+  if (!user) throw new Error("Please sign in again.");
+  const token = await user.getIdToken();
+  const query = new URLSearchParams({ organizationId, leadId, limit: String(limit) });
+  const response = await fetch(`${API_URL.replace(/\\/$/, "")}/organizations/crm/activity?${query.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "CRM activity could not be loaded.");
+  return result.activities as CrmLeadActivity[];
+}
+
 export interface CrmLeadImportResult {
   imported: number;
   failed: number;
