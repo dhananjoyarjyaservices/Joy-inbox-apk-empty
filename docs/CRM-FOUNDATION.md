@@ -15,6 +15,7 @@ This repository now includes an initial tenant-scoped sales CRM module. It is a 
 - Server-side Firebase ID-token authentication, active organization membership checks and role permission checks.
 - Owner/admin-only custom field and pipeline configuration; workspace contacts permission required to read CRM definitions and manage leads.
 - Leads can only link to contacts and owners belonging to the same workspace.
+- Agent CRM access is limited server-side to leads assigned to that agent; agents cannot reassign or delete another agent's leads or configure pipeline/custom fields.
 
 ## API
 
