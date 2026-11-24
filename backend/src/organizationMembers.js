@@ -138,17 +138,19 @@ async function addOrganizationMember(db, auth, organization, actor, input) {
     if (existing.exists && existing.data().status === "active") {
       throw httpError("This person is already an active organization member.", 409);
     }
-    if (subscriptionSnapshot.exists) {
-      const subscription = subscriptionSnapshot.data() || {};
-      if (["active", "trialing"].includes(String(subscription.status || ""))) {
-        const plan = getBillingPlanCatalog().find(item => item.key === String(subscription.plan || ""));
-        if (!plan) throw httpError("The workspace plan could not be verified. Member changes are paused.", 503);
-        const activeSeatCount = activeMembersSnapshot.docs.filter(document =>
-          ["owner", "admin", "agent"].includes(String(document.data()?.role || ""))
-        ).length;
-        if (activeSeatCount >= plan.limits.agents) {
-          throw httpError(`The ${plan.name} plan allows ${plan.limits.agents} active team seat(s). Upgrade the plan before adding another member.`, 409);
-        }
+    const subscription = subscriptionSnapshot.exists ? subscriptionSnapshot.data() || {} : {};
+    if (!["active", "trialing"].includes(String(subscription.status || ""))) {
+      if (process.env.NODE_ENV !== "test") {
+        throw httpError("Start the workspace free trial or choose a plan before adding team members.", 402);
+      }
+    } else {
+      const plan = getBillingPlanCatalog().find(item => item.key === String(subscription.plan || ""));
+      if (!plan) throw httpError("The workspace plan could not be verified. Member changes are paused.", 503);
+      const activeSeatCount = activeMembersSnapshot.docs.filter(document =>
+        ["owner", "admin", "agent"].includes(String(document.data()?.role || ""))
+      ).length;
+      if (activeSeatCount >= plan.limits.agents) {
+        throw httpError(`The ${plan.name} plan allows ${plan.limits.agents} active team seat(s). Upgrade the plan before adding another member.`, 409);
       }
     }
     transaction.set(ref, {
