@@ -998,6 +998,13 @@ async function handleTenantAutomationRules(event) {
       name: String(document.data().name || ""),
       keyword: String(document.data().keyword || ""),
       matchType: String(document.data().matchType || "contains"),
+      ...(Array.isArray(document.data().conditions) ? {
+        conditions: document.data().conditions.slice(0, 5).map((condition) => ({
+          keyword: String(condition?.keyword || "").slice(0, 80),
+          matchType: ["contains", "exact", "starts_with"].includes(condition?.matchType) ? condition.matchType : "contains"
+        })).filter((condition) => condition.keyword),
+        conditionMode: document.data().conditionMode === "any" ? "any" : "all"
+      } : {}),
       response: String(document.data().response || document.data().steps?.[0] || ""),
       steps: Array.isArray(document.data().steps) && document.data().steps.length ? document.data().steps.slice(0, 5).map((step) => typeof step === "string" ? { message: step, delaySeconds: 0 } : { message: String(step?.message || ""), delaySeconds: Number.isInteger(step?.delaySeconds) ? step.delaySeconds : 0 }) : [{ message: String(document.data().response || ""), delaySeconds: 0 }],
       enabled: document.data().enabled === true,
