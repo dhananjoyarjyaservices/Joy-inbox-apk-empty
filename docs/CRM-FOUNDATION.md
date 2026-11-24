@@ -86,3 +86,8 @@ Every row is validated against the workspace's active pipeline stages, contacts,
 ## Sales performance reporting
 
 The Sales CRM screen includes a workspace-scoped report for total, open, won and lost leads; open pipeline value; won revenue; closed-deal win rate; pipeline stage totals; lead-owner performance; and lead sources. Owners/admins see workspace totals. Agents see only leads assigned to themselves. Reports scan the 1,000 most recently updated leads at most and display a capped-sample warning when that limit is reached. INR totals power the headline cards. Other currencies are shown in separate currency buckets and are never added together or converted automatically.
+
+
+## Lead activity timeline
+
+Each lead stores an append-only activity history in its own `crmLeads/{leadId}/activity` subcollection. Lead creation, tracked-field updates and deletion write an actor-attributed event. Update events list the fields that changed and retain a limited before/after snapshot (title, stage, owner, deal value/currency, source, follow-up date and linked contact). Free-form notes and custom-field values are deliberately excluded from the audit snapshot. The authenticated timeline endpoint checks workspace membership and agent lead assignment before returning the latest 1–100 events. The pipeline card exposes the timeline on demand.
