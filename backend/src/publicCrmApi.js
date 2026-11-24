@@ -3,6 +3,8 @@
 const { DEFAULT_PIPELINE_STAGES, normalizeCrmLead } = require("./crm");
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 100;
 
 function apiError(message, statusCode = 400) {
   const error = new Error(message);
@@ -15,11 +17,63 @@ function leadCollection(db, organizationId) {
   return db.collection("organizations").doc(organizationId).collection("crmLeads");
 }
 
-async function listPublicLeads(db, organizationId, rawLimit = 50) {
-  const limit = Number.isInteger(Number(rawLimit)) ? Math.min(100, Math.max(1, Number(rawLimit))) : 50;
-  const snapshot = await leadCollection(db, organizationId).orderBy("updatedAt", "desc").limit(limit + 1).get();
+function normalizePageSize(rawLimit) {
+  if (rawLimit === undefined || rawLimit === null || rawLimit === "") return DEFAULT_PAGE_SIZE;
+  const value = Number(rawLimit);
+  if (!Number.isInteger(value) || value < 1 || value > MAX_PAGE_SIZE) {
+    throw apiError(`Page limit must be an integer between 1 and ${MAX_PAGE_SIZE}.`);
+  }
+  return value;
+}
+
+function encodeLeadCursor(document) {
+  const data = document.data() || {};
+  const updatedAt = typeof data.updatedAt?.toDate === "function"
+    ? data.updatedAt.toDate()
+    : new Date(data.updatedAt);
+  if (!Number.isFinite(updatedAt.getTime())) {
+    throw apiError("A lead cannot be used as a pagination cursor because its update timestamp is invalid.", 500);
+  }
+  return Buffer.from(JSON.stringify({ v: 1, updatedAt: updatedAt.toISOString(), id: document.id }), "utf8").toString("base64url");
+}
+
+function decodeLeadCursor(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || value.length > 512 || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw apiError("Pagination cursor is invalid.");
+  }
+  let decoded;
+  try {
+    decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+  } catch {
+    throw apiError("Pagination cursor is invalid.");
+  }
+  const date = new Date(decoded?.updatedAt);
+  if (decoded?.v !== 1 || !ID_PATTERN.test(decoded?.id || "") || !Number.isFinite(date.getTime())) {
+    throw apiError("Pagination cursor is invalid.");
+  }
+  return { updatedAt: date, id: decoded.id };
+}
+
+async function listPublicLeads(db, organizationId, rawLimit = DEFAULT_PAGE_SIZE, rawCursor = null) {
+  const limit = normalizePageSize(rawLimit);
+  const cursor = decodeLeadCursor(rawCursor);
+  let query = leadCollection(db, organizationId)
+    .orderBy("updatedAt", "desc")
+    .orderBy("__name__", "desc");
+  if (cursor) query = query.startAfter(cursor.updatedAt, cursor.id);
+  const snapshot = await query.limit(limit + 1).get();
+  const hasMore = snapshot.docs.length > limit;
   const docs = snapshot.docs.slice(0, limit);
-  return { data: docs.map(doc => ({ id: doc.id, ...doc.data() })), pagination: { limit, returned: docs.length, hasMore: snapshot.docs.length > limit } };
+  return {
+    data: docs.map(doc => ({ id: doc.id, ...doc.data() })),
+    pagination: {
+      limit,
+      returned: docs.length,
+      hasMore,
+      nextCursor: hasMore && docs.length ? encodeLeadCursor(docs[docs.length - 1]) : null
+    }
+  };
 }
 
 async function savePublicLead(db, organizationId, input, resourceId = "") {
@@ -78,4 +132,4 @@ async function deletePublicLead(db, organizationId, resourceId) {
   return { id: resourceId, deleted: true };
 }
 
-module.exports = { listPublicLeads, savePublicLead, deletePublicLead };
+module.exports = { listPublicLeads, savePublicLead, deletePublicLead, normalizePageSize, encodeLeadCursor, decodeLeadCursor };
