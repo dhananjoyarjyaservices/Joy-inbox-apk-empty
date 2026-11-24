@@ -22,6 +22,7 @@ test("CRM API endpoints require Firebase authentication before workspace data ac
     ["POST", "/organizations/crm/stages"],
     ["GET", "/organizations/crm/leads"],
     ["POST", "/organizations/crm/leads"],
+    ["POST", "/organizations/crm/leads/import"],
     ["DELETE", "/organizations/crm/leads"]
   ]) {
     const response = await handler({
