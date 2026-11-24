@@ -43,6 +43,15 @@ Required scope: `messages:write`. The request must include the connected `phoneN
 ```
 The number must belong to the API key's workspace. The API sends through the WhatsApp Cloud API and stores the text and delivery metadata in the workspace inbox; it does not store customer media. A unique `Idempotency-Key` is required for every send and makes retries safe. Sends consume the workspace outbound-message allowance and obey its hard-block plan limit. WhatsApp policy, recipient opt-in, messaging windows and Meta account limits still apply. A successful response means Meta accepted the message, not that the recipient device received it.
 
+## Campaign reporting
+
+### List campaign summaries
+```http
+GET /public/v1/campaigns?limit=50
+Authorization: Bearer YOUR_JOY_API_KEY
+```
+Required scope: `campaigns:read`. The endpoint returns campaign summary fields and delivery counters for campaigns in the API key workspace only. It never returns recipient phone numbers or consent records. Results are ordered by creation time (newest first), with a page size from 1–100. Pass `pagination.nextCursor` as `cursor` to retrieve the next page.
+
 ## Approved WhatsApp templates
 
 ### List templates
@@ -106,7 +115,7 @@ Required scope: `leads:write`. Send `{ "resourceId": "lead-document-id" }`.
 ## Key management and limits
 
 - Workspace owners/admins manage API keys; the full key is shown only once.
-- Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`.
+- Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`, `messages:write`, `templates:read`, `campaigns:read`.
 - API rate limit is 60 requests per key per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` and `publicApiUsageDaily.expiresAt` before production.
 - Idempotency records are retained for 24 hours. Enable Firestore TTL on `publicApiIdempotency.expiresAt`; use a new key for a distinct logical mutation.
 - Daily usage analytics count accepted requests and rate-limited attempts by API key and UTC date.
