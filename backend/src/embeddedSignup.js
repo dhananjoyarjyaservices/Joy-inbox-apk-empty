@@ -28,7 +28,8 @@ function getEmbeddedSignupConfig(env = process.env) {
       (!/^\d{5,32}$/.test(env.META_SYSTEM_USER_ID || "") ||
        !String(env.META_SYSTEM_USER_ACCESS_TOKEN || "").trim() ||
        !/^\d{5,32}$/.test(env.META_EXTENDED_CREDIT_LINE_ID || "") ||
-       !solutionId)) return null;
+       !solutionId ||
+       env.META_USAGE_BILLING_ENABLED !== "true")) return null;
   return {
     appId,
     configId,
