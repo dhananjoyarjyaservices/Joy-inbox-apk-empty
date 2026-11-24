@@ -218,6 +218,30 @@ test("disconnect marks only the selected WhatsApp number inactive and preserves 
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
 
+test("legacy WhatsApp credential lookup falls back to a remaining connected number after primary disconnect", async () => {
+  const db = fakeTenantDb();
+  process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 44).toString("base64");
+  db.docs.set("organizations/org_primary_fallback", { status: "active" });
+  const organization = {
+    id: "org_primary_fallback",
+    ref: db.collection("organizations").doc("org_primary_fallback")
+  };
+  await saveWhatsAppConnection(db, organization, {
+    phoneNumberId: "777777777777771",
+    accessToken: "EAA_first_active_number"
+  });
+  await saveWhatsAppConnection(db, organization, {
+    phoneNumberId: "777777777777772",
+    accessToken: "EAA_second_primary_number"
+  });
+  await disconnectWhatsAppConnection(db, organization, "777777777777772");
+
+  const fallback = await getWhatsAppCredentials(db, "org_primary_fallback");
+  assert.equal(fallback.phoneNumberId, "777777777777771");
+  assert.equal(fallback.accessToken, "EAA_first_active_number");
+  delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
+});
+
 test("a workspace cannot disconnect another workspace's WhatsApp number", async () => {
   const db = fakeTenantDb();
   process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 4).toString("base64");
