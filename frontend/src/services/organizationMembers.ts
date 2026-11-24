@@ -1,3 +1,4 @@
+import { collectCursorPages } from "./pagination";
 import { auth } from "../firebase/config";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
@@ -44,20 +45,10 @@ export async function listOrganizationMembers(
   };
 }
 export async function listAllOrganizationMembers(organizationId: string): Promise<OrganizationMember[]> {
-  const members: OrganizationMember[] = [];
-  const seenCursors = new Set<string>();
-  let cursor: string | undefined;
-  do {
+  return collectCursorPages(async cursor => {
     const page = await listOrganizationMembers(organizationId, { limit: 100, ...(cursor ? { cursor } : {}) });
-    members.push(...page.members);
-    const nextCursor = page.nextCursor || undefined;
-    if (nextCursor && (nextCursor === cursor || seenCursors.has(nextCursor))) {
-      throw new Error("Member pagination returned a repeated cursor. Refresh the workspace and try again.");
-    }
-    if (nextCursor) seenCursors.add(nextCursor);
-    cursor = nextCursor;
-  } while (cursor);
-  return members;
+    return { items: page.members, nextCursor: page.nextCursor };
+  });
 }
 
 export async function addOrganizationMember(organizationId: string, email: string, role: "admin" | "agent") {
