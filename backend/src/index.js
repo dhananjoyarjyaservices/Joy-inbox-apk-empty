@@ -2675,7 +2675,7 @@ async function handleTenantBilling(event) {
   if (method === "GET") {
     const [snapshot, plans] = await Promise.all([
       subscriptionRef.get(),
-      Promise.resolve(getConfiguredBillingPlans().map(({ key, name }) => ({ key, name })))
+      Promise.resolve(getConfiguredBillingPlans().map(({ key, name, monthlyPriceInr, limits }) => ({ key, name, monthlyPriceInr, currency: "INR", interval: "month", limits, trialDays: 7 })))
     ]);
     const value = snapshot.exists ? snapshot.data() || {} : {};
     const asIso = input => input?.toDate ? input.toDate().toISOString()
