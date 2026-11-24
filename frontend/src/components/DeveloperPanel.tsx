@@ -126,7 +126,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <div><p className="font-mono text-xs font-semibold text-blue-700">POST /public/v1/contacts</p><p className="text-xs text-gray-500">Requires <code>contacts:write</code>. JSON body: name, phone, email, notes, source and tags.</p></div>
           </div>
           <pre className="mt-3 overflow-x-auto rounded-lg bg-gray-950 p-3 text-xs text-gray-100"><code>{`curl -H "Authorization: Bearer YOUR_JOY_API_KEY" \\\n  YOUR_API_BASE_URL/public/v1/contacts?limit=50`}</code></pre>
-          <p className="mt-2 text-[11px] text-gray-500">Workspace ID is derived from the API key, never accepted from the request. Keys cannot access another workspace. Rate limits and additional CRM/message scopes are being added before public launch.</p>
+          <p className="mt-2 text-[11px] text-gray-500">Workspace ID is derived from the API key, never accepted from the request. Keys cannot access another workspace. Each key is limited to 60 requests per minute; additional CRM/message scopes and cursor pagination are still being added.</p>
         </div>
       </div>
     </section>
