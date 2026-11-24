@@ -45,7 +45,7 @@ No cross-organization queries are used. The backend verifies linked contact and 
 
 The Tenant Inbox now has a Sales CRM workspace view with:
 - Create leads and set a starting stage, source and deal value.
-- Move leads between pipeline columns.
+- Edit leads and move them between pipeline columns.
 - Link leads to existing workspace contacts and assign them to active workspace members.
 - Add custom field definitions and capture values when creating leads.
 - Add pipeline stages.
