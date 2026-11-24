@@ -47,9 +47,13 @@ function getTenantResourceCollection(db, organizationId, resource) {
 }
 
 async function listTenantResource(db, organizationId, resource) {
-  const snapshot = await getTenantResourceCollection(db, organizationId, resource)
-    .orderBy(resource === "contacts" ? "name" : "createdAt", resource === "contacts" ? "asc" : "desc")
-    .limit(500).get();
+  const ordered = getTenantResourceCollection(db, organizationId, resource)
+    .orderBy(resource === "contacts" ? "name" : "createdAt", resource === "contacts" ? "asc" : "desc");
+  // Keep the customer directory bounded, but do not impose an artificial
+  // 500-item ceiling on saved Quick Replies.
+  const snapshot = resource === "quickReplies"
+    ? await ordered.get()
+    : await ordered.limit(500).get();
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
 }
 
