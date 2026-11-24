@@ -1385,10 +1385,13 @@ async function sendTenantMessage(event) {
     return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   }
 
+  const quotaReservation = await reserveTenantMessageQuota(db, organization.id, clientMessageId, claim.ref);
   let result;
   try {
     result = await sendWhatsAppText(to, messageText, replyContext?.contextMessageId, credentials);
+    await settleTenantMessageQuota(db, quotaReservation);
   } catch (error) {
+    await settleTenantMessageQuota(db, quotaReservation, error);
     await markTenantSendRequestFailed(claim.ref, error);
     throw error;
   }
