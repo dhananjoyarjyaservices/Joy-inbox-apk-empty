@@ -80,6 +80,7 @@ test("Solution Partner mode requires its system user and credit-line configurati
   const partnerEnv = {
     ...env,
     META_PARTNER_MODE: "solution_partner",
+    META_EMBEDDED_SIGNUP_SOLUTION_ID: "999999999999999",
     META_SYSTEM_USER_ID: "777777777777777",
     META_SYSTEM_USER_ACCESS_TOKEN: "EAA" + "s".repeat(40),
     META_EXTENDED_CREDIT_LINE_ID: "888888888888888",
@@ -176,6 +177,7 @@ test("Solution Partner onboarding assigns its system user and shares its credit 
   const partnerEnv = {
     ...env,
     META_PARTNER_MODE: "solution_partner",
+    META_EMBEDDED_SIGNUP_SOLUTION_ID: "999999999999999",
     META_SYSTEM_USER_ID: "777777777777777",
     META_SYSTEM_USER_ACCESS_TOKEN: "EAA" + "s".repeat(40),
     META_EXTENDED_CREDIT_LINE_ID: "888888888888888",
