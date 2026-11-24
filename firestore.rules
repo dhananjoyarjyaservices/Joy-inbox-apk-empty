@@ -71,6 +71,12 @@ service cloud.firestore {
       }
     }
 
+    // Public API key hashes and metadata are server-only. The plaintext key is
+    // returned once at creation and is never stored in Firestore.
+    match /publicApiKeys/{keyId} {
+      allow read, write: if false;
+    }
+
     // Legacy single-owner data is limited to these known root collections.
     // Do not grant the owner wildcard access to /users: that would bypass the
     // per-user rules below and expose every user's profile, contacts and replies.
