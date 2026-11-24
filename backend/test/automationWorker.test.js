@@ -176,6 +176,7 @@ test("does not send delayed automation steps after their rule is disabled or del
       return { doc(id) {
         if (name === "automationRuns" && id === "run_1") return runRef;
         if (name === "automationRules" && id === "rule_1") return ruleRef;
+        if (name === "chats" && id === "919876543210") return { collection(child) { assert.equal(child, "messages"); return {}; } };
         throw new Error("Unexpected automation reference " + name + "/" + id);
       } };
     }
