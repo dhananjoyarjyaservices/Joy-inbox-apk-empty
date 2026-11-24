@@ -149,6 +149,7 @@ function extractSubscriptionFields(subscription, plans = getConfiguredBillingPla
   return {
     plan,
     priceId,
+    interval,
     status: String(subscription.status || "unknown"),
     stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : String(subscription.customer?.id || ""),
     stripeSubscriptionId: String(subscription.id || ""),
