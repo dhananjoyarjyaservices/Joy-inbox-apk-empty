@@ -50,6 +50,13 @@ const {
   generateRegistrationPin
 } = require("./embeddedSignup");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
+const {
+  createOrganizationApiKey,
+  listOrganizationApiKeys,
+  revokeOrganizationApiKey,
+  authenticateOrganizationApiKey,
+  requireApiScope
+} = require("./publicApi");
 const { isValidBase64, isAllowedTemplateMedia } = require("./templateValidation");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
@@ -261,6 +268,58 @@ async function handleWhatsAppConnectionHealth(event) {
     }
   }));
   return jsonResponse(event, 200, { results, checkedAt });
+}
+
+async function handleOrganizationApiKeys(event) {
+  const decoded = await authenticateUser(event);
+  const method = getMethod(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); } catch {
+      return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+    }
+  }
+  const organizationId = method === "GET"
+    ? event.queryStringParameters?.organizationId
+    : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "api:manage");
+  if (method === "GET") {
+    const apiKeys = await listOrganizationApiKeys(getDb(), organization.id);
+    return jsonResponse(event, 200, { apiKeys });
+  }
+  if (method === "DELETE") {
+    const result = await revokeOrganizationApiKey(getDb(), organization.id, String(body.keyId || ""));
+    return jsonResponse(event, 200, result);
+  }
+  const apiKey = await createOrganizationApiKey(getDb(), organization.id, decoded.uid, body);
+  return jsonResponse(event, 201, { apiKey });
+}
+
+async function handlePublicApiContacts(event) {
+  const authorization = getHeader(event, "authorization");
+  const authenticatedKey = await authenticateOrganizationApiKey(getDb(), authorization);
+  const method = getMethod(event);
+  if (method === "GET") {
+    requireApiScope(authenticatedKey, "contacts:read");
+    const rawLimit = Number(event.queryStringParameters?.limit || 50);
+    const limit = Number.isInteger(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 50;
+    const contacts = await listTenantResource(getDb(), authenticatedKey.organizationId, "contacts");
+    return jsonResponse(event, 200, {
+      data: contacts.slice(0, limit),
+      pagination: { limit, returned: Math.min(contacts.length, limit), hasMore: contacts.length > limit }
+    });
+  }
+  if (method === "POST") {
+    requireApiScope(authenticatedKey, "contacts:write");
+    let body;
+    try { body = parseBody(event); } catch {
+      return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+    }
+    const contact = await saveTenantResource(getDb(), authenticatedKey.organizationId, "contacts", body);
+    return jsonResponse(event, 201, { data: contact });
+  }
+  return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
 async function handleWhatsAppRegistrationPin(event) {
@@ -3375,6 +3434,22 @@ exports.handler = async (event) => {
     return jsonResponse(event, 410, {
       error: "This legacy endpoint is disabled. Use the organization-scoped Joy Inbox API."
     });
+  }
+
+  if (["GET", "POST", "DELETE"].includes(method) && path.endsWith("/organizations/developer/api-keys")) {
+    try { return await handleOrganizationApiKeys(event); }
+    catch (error) {
+      console.error("Organization API key request failed:", error.statusCode || "API_KEY_REQUEST_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "API key request could not be completed." });
+    }
+  }
+
+  if (["GET", "POST"].includes(method) && path.endsWith("/public/v1/contacts")) {
+    try { return await handlePublicApiContacts(event); }
+    catch (error) {
+      console.error("Public contacts API request failed:", error.statusCode || "PUBLIC_API_REQUEST_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Public API request could not be completed." });
+    }
   }
 
   if (method === "GET" && path.endsWith("/whatsapp/registration-pin")) {
