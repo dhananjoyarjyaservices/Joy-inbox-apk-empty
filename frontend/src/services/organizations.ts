@@ -276,6 +276,14 @@ export async function updateOrganizationCampaign(
 export interface OrganizationBillingPlan {
   key: string;
   name: string;
+  monthlyPriceInr: number;
+  annualPriceInr: number;
+  monthlyAvailable: boolean;
+  annualAvailable: boolean;
+  currency: "INR";
+  intervals: ("month" | "year")[];
+  limits: { messages: number; agents: number; mediaTransferGb: number; historyMonths: number };
+  trialDays: number;
 }
 export interface OrganizationBillingState {
   billingEnabled: boolean;
@@ -291,8 +299,8 @@ export interface OrganizationBillingState {
 export async function getOrganizationBilling(organizationId: string): Promise<OrganizationBillingState> {
   return request(`/organizations/billing?organizationId=${encodeURIComponent(organizationId)}`);
 }
-export async function createOrganizationBillingCheckout(organizationId: string, plan: string): Promise<string> {
-  const result = await request("/organizations/billing", "POST", { organizationId, action: "checkout", plan });
+export async function createOrganizationBillingCheckout(organizationId: string, plan: string, interval: "month" | "year" = "month"): Promise<string> {
+  const result = await request("/organizations/billing", "POST", { organizationId, action: "checkout", plan, interval });
   if (typeof result.checkout?.url !== "string") throw new Error("Stripe checkout URL was not returned.");
   return result.checkout.url;
 }
