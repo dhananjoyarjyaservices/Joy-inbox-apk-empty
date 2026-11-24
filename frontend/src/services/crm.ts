@@ -15,7 +15,7 @@ export type CrmLead = {
   customFields: Record<string, string | number | boolean>; createdAt?: unknown; updatedAt?: unknown;
 };
 
-async function request<T>(resource: "fields" | "stages" | "leads", organizationId: string, method = "GET", data?: unknown, resourceId?: string): Promise<T> {
+async function request<T>(resource: "fields" | "stages" | "leads" | "leads/import", organizationId: string, method = "GET", data?: unknown, resourceId?: string): Promise<T> {
   if (!API_URL) throw new Error("AWS API URL is not configured.");
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in again.");
@@ -52,4 +52,13 @@ export async function saveCrmLead(organizationId: string, lead: Omit<CrmLead, "i
 }
 export async function deleteCrmLead(organizationId: string, id: string) {
   await request<{ success: boolean }>("leads", organizationId, "DELETE", undefined, id);
+}
+
+export interface CrmLeadImportResult {
+  imported: number;
+  failed: number;
+  errors: Array<{ row: number; error: string }>;
+}
+export async function importCrmLeads(organizationId: string, rows: Array<Record<string, unknown>>): Promise<CrmLeadImportResult> {
+  return request<CrmLeadImportResult>("leads/import", organizationId, "POST", { rows });
 }
