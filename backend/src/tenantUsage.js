@@ -111,7 +111,7 @@ async function reserveOutboundMessage(db, organizationId, clientMessageId, now =
     if (!subscriptionSnapshot.exists) return { enforced: false, reservationRef: null };
     const subscription = subscriptionSnapshot.data() || {};
     const status = String(subscription.status || "");
-    if (!status) return { enforced: false, reservationRef: null };
+    if (!status && !subscription.checkoutPlan) return { enforced: false, reservationRef: null };
     const window = getUsageWindow(subscription, now);
     const usageRef = organizationRef.collection("billingUsage").doc(window.key);
     const [usageSnapshot, reservationSnapshot] = await Promise.all([
