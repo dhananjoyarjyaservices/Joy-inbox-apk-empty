@@ -48,6 +48,23 @@ Register `https://YOUR_API_DOMAIN/billing/stripe-webhook` in Stripe and subscrib
 6. Replay a processed webhook event; it must be acknowledged without applying changes twice. Simulate a concurrent in-progress event and verify the endpoint returns 503 for Stripe retry.
 7. Confirm agents and users from another workspace cannot create Checkout/Portal sessions or read billing documents through Firestore.
 
-## Not yet production-ready
+## Implemented entitlement and launch boundaries
 
-This is an integration foundation, not a complete commercial billing rollout. It does not configure a Stripe account, create Products/Prices, deploy webhook endpoints, enforce message/media/agent quotas, implement usage alerts or retention deletion, provide a grace-period policy, tax/VAT handling, invoices UI, or test live payments. The seven-day trial is wired into Checkout, but billing must remain disabled until quotas are enforced and Stripe secrets and real Price IDs are configured. Complete staging acceptance and legal/accounting review before production activation.
+The application now enforces the core hard-limit policy server-side:
+- Transaction-backed message reservations and idempotent inbound counting cover tenant outbound message paths, including text, media, templates, interactive messages, campaigns, greetings, retries and automation.
+- Media-transfer reservations cover tenant media uploads, template header uploads, Quick Reply image uploads and media proxy downloads.
+- Active-agent seat caps are checked transactionally for member additions and invitation acceptance.
+- Workspace billing surfaces usage meters and 80% / 95% / 100% message and media warnings.
+- Workspaces without an active trial or paid subscription are blocked from outbound messaging and adding team members. Inbound webhooks and existing history remain available when outbound quota is exhausted.
+- The one-time seven-day trial is applied at Checkout; trial usage is limited to 25% of the selected plan's monthly message and media allowance, rounded up. A workspace with a recorded trial cannot receive another trial.
+- Five monthly and five annual plan Price ID environment variables are supported. Annual billing charges ten monthly payments upfront for twelve months of service; the two-month-free annual prices are documented in `PRICING-AND-USAGE-POLICY.md`.
+
+Still outstanding before commercial launch:
+- Create and verify the real Stripe Products/Prices, configure test-mode secrets, webhook signing secret and trusted HTTPS return URLs, then complete the full staging Checkout/Portal/webhook lifecycle tests.
+- Verify trial-end payment behavior, cancellation/refund terms, invoices/tax handling and customer support workflows.
+- Complete concurrency and tenant-isolation testing against isolated Firebase/Meta/Stripe staging resources.
+- Configure external push/email alert delivery; the current in-app usage warnings do not imply email or push delivery.
+- Deploy and test the history-retention worker in staging, verify backups/restores, and only then consider enabling its disabled-by-default schedule.
+- Complete operational monitoring, incident/rollback rehearsal, legal/accounting review and explicit production approval.
+
+Do not enable live paid checkout or claim staging/production acceptance until these gates are complete. CI success validates committed code and tests only; it does not validate external service configuration or real payment/webhook behavior.
