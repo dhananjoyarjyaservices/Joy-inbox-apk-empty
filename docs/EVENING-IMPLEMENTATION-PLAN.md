@@ -27,7 +27,7 @@ Implemented in code:
 
 Still required before live customer onboarding:
 - Configure Meta App ID, App Secret and Embedded Signup v4 Configuration ID in protected backend settings.
-- Select the approved billing model: Tech Provider (Meta bills each customer directly) or Solution Partner (requires Meta-issued Partner Solution ID, system-user token and extended credit line; Joy Inbox assumes payment liability).
+- Select the approved billing model: Tech Provider (Meta bills each customer directly) or Solution Partner (requires Meta-issued Partner Solution ID, system-user token and extended credit line; Joy Inbox assumes payment liability). Solution Partner mode stays disabled until Meta usage metering, customer invoicing, tax and collections are implemented and approved.
 - Complete Meta business verification, Tech Provider/Solution Partner eligibility, App Review/Advanced Access and production app mode.
 - Validate OTP, new number, existing WABA, eligible coexistence, phone registration, webhook delivery and retry/recovery against Meta staging assets.
 - Confirm customer Meta payment responsibility and the selected Tech Provider/Solution Partner billing model.
