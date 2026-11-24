@@ -242,3 +242,31 @@ test("rotates an active workspace webhook secret and refuses revoked or foreign 
   await assert.rejects(() => rotateOrganizationWebhookSecret(db, "org_b", created.webhook.id), { statusCode: 404 });
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
+
+
+test("lists workspace-scoped webhook delivery history and replays only failed deliveries", async () => {
+  const { listOrganizationWebhookDeliveries, replayOrganizationWebhookDelivery } = require("../src/publicWebhooks");
+  const db = fakeDb();
+  const deliveryId = "a".repeat(64);
+  db.records.set("webhookDeliveryQueue/" + deliveryId, {
+    organizationId: "org_a",
+    subscriptionId: "sub_a",
+    event: "lead.created",
+    eventId: "lead-1",
+    status: "failed",
+    attempts: 8,
+    lastError: "Endpoint returned HTTP 503.",
+    createdAt: new Date("2026-11-24T10:00:00Z")
+  });
+  const listed = await listOrganizationWebhookDeliveries(db, "org_a", 20);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].event, "lead.created");
+  assert.equal(listed[0].status, "failed");
+  await assert.rejects(() => replayOrganizationWebhookDelivery(db, "org_b", deliveryId), { statusCode: 404 });
+  const replayed = await replayOrganizationWebhookDelivery(db, "org_a", deliveryId, 2000);
+  assert.deepEqual(replayed, { id: deliveryId, status: "pending" });
+  const stored = db.records.get("webhookDeliveryQueue/" + deliveryId);
+  assert.equal(stored.attempts, 0);
+  assert.equal(stored.nextAttemptAt.getTime(), 2000);
+  await assert.rejects(() => replayOrganizationWebhookDelivery(db, "org_a", deliveryId), { statusCode: 409 });
+});
