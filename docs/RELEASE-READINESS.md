@@ -14,18 +14,19 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Automated CRM follow-up reminders: scheduled scan, transactional deduplication, active-owner validation, in-app notification, push delivery, member opt-out and retry after failure. Notification Center routes CRM alerts to Sales CRM. See `docs/CRM-FOUNDATION.md`.
 - [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.
 - [x] CRM sales performance report: pipeline totals, won revenue, conversion rate, stage, owner and source breakdowns with agent-scoped visibility and a 1,000-lead sample cap.
-- [ ] CRM forecasting and activity timeline remain open.\n\n## Public developer API — initial contacts slice
+- [ ] CRM forecasting and activity timeline remain open.\n\n## Public developer API and outbound webhooks — initial contacts/CRM leads slice
 
 - [x] Add owner/admin API key creation, metadata listing and revocation with one-time raw-key display, SHA-256-only storage, scopes, expiry and throttled last-used metadata.
 - [x] Add API-key authentication that derives the workspace from the key, checks active workspace state and enforces contacts read/write scopes.
 - [x] Add versioned `GET /public/v1/contacts` and `POST /public/v1/contacts` endpoints.
+- [x] Add versioned `GET`, `POST`, `PUT` and `DELETE /public/v1/leads` endpoints with workspace-scoped CRM validation.
 - [x] Add a workspace Developer panel to create/revoke keys and view API examples.
 - [x] Deny client-side Firestore access to API key and rate-limit records.
 - [ ] Enable Firestore TTL on `publicApiRateLimits.expiresAt` in the staging/production project.
 - [x] Enforce a fixed 60-requests-per-minute rate limit per API key using server-only Firestore counters.
 - [ ] Add configurable rate-limit tiers, cursor pagination, idempotency and request-usage analytics.
 - [x] Add public API `leads:read` and `leads:write` scopes with workspace-derived list/create/update/delete endpoints and CRM stage/contact/owner/custom-field validation; add unit coverage and explicitly classify the API-key route in the HTTP route-security inventory. Message/campaign/template scopes remain open.
-- [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact-upsert events.
+- [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact/message/CRM lead lifecycle events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
 - [x] Add workspace-scoped webhook delivery history API/UI and manual replay for failed deliveries.
 - [x] Add owner/admin endpoint secret rotation with one-time secret display in the Developer panel.
@@ -33,7 +34,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [ ] Enable Firestore TTL on `webhookDeliveryQueue.expiresAt`; split the delivery worker into its own schedule after staging load tests.
 - [ ] Validate external integration traffic, abuse controls and production CORS strategy before public launch.
 
-## Product parity audit\n\n- [x] Compare the implemented Joy Inbox code paths against Interakt's current public product categories and document implemented, partial, missing and externally gated capabilities in [docs/INTERAKT-FEATURE-PARITY.md](INTERAKT-FEATURE-PARITY.md).\n- [ ] Implement the missing product capabilities listed in that audit before claiming Interakt feature parity. Instagram, RCS, AI/voice, commerce, forms, sales pipeline and public API/webhook modules are not complete in this branch.\n\n## WhatsApp Embedded Signup onboarding
+## Product parity audit\n\n- [x] Compare the implemented Joy Inbox code paths against Interakt's current public product categories and document implemented, partial, missing and externally gated capabilities in [docs/INTERAKT-FEATURE-PARITY.md](INTERAKT-FEATURE-PARITY.md).\n- [ ] Implement the remaining missing/partial product capabilities listed in that audit before claiming Interakt feature parity. CRM pipeline, follow-up reminders, CSV import and recent sales reporting are implemented as an initial slice; public contacts/leads APIs and webhook operations are implemented as initial slices. Instagram, RCS, AI/voice, commerce, forms, CTWA ads, CRM activity timeline/forecasting and public message/campaign/template APIs remain incomplete.\n\n## WhatsApp Embedded Signup onboarding
 
 - [x] Replace customer-facing manual Phone Number ID/access-token entry with a Meta-hosted Facebook Login for Business Embedded Signup flow.
 - [x] Add authenticated, workspace-bound, expiring and single-use signup sessions.
