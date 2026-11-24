@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus, RefreshCw, BriefcaseBusiness, Trash2, Pencil, Upload } from "lucide-react";
 import {
-  listCrmFields, listCrmLeads, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead, importCrmLeads,
+  listCrmFields, listCrmLeads, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead, importCrmLeads, getCrmSalesReport,
+  type CrmSalesReport,
   type CrmField, type CrmLead, type CrmStage
 } from "../services/crm";
 
@@ -14,6 +15,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const [fields, setFields] = useState<CrmField[]>([]);
   const [stages, setStages] = useState<CrmStage[]>([]);
   const [leads, setLeads] = useState<CrmLead[]>([]);
+  const [salesReport, setSalesReport] = useState<CrmSalesReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -37,10 +39,10 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const [nextFields, nextStages, nextLeads] = await Promise.all([
-        listCrmFields(organizationId), listCrmStages(organizationId), listCrmLeads(organizationId)
+      const [nextFields, nextStages, nextLeads, nextReport] = await Promise.all([
+        listCrmFields(organizationId), listCrmStages(organizationId), listCrmLeads(organizationId), getCrmSalesReport(organizationId)
       ]);
-      setFields(nextFields); setStages(nextStages); setLeads(nextLeads);
+      setFields(nextFields); setStages(nextStages); setLeads(nextLeads); setSalesReport(nextReport);
       setCustomValues(current => {
         const next = { ...current };
         nextFields.filter(field => field.active && field.type === "boolean").forEach(field => { if (next[field.key] === undefined) next[field.key] = false; });
@@ -222,6 +224,21 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
       </div>
       {error && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {importSummary && <p role="status" className="mb-4 rounded-lg border bg-white p-3 text-xs text-gray-700">{importSummary}</p>}
+      {salesReport && <section className="mb-5 rounded-xl border bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-semibold">Sales performance</h3><p className="text-[10px] text-gray-500">Pipeline summary · updated {new Date(salesReport.generatedAt).toLocaleString()}</p></div><span className="text-[10px] text-gray-500">Up to 1,000 recent leads</span></div>
+        {salesReport.limited && <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">This is a capped sample of the 1,000 most recently updated leads. Totals may be partial for larger workspaces.</p>}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg bg-gray-50 p-3"><p className="text-[10px] text-gray-500">Total leads</p><strong className="text-xl tabular-nums">{salesReport.total}</strong></div>
+          <div className="rounded-lg bg-gray-50 p-3"><p className="text-[10px] text-gray-500">Open pipeline</p><strong className="text-lg tabular-nums">{new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(salesReport.openValue)}</strong><p className="text-[10px] text-gray-500">{salesReport.open} open</p></div>
+          <div className="rounded-lg bg-gray-50 p-3"><p className="text-[10px] text-gray-500">Won revenue</p><strong className="text-lg tabular-nums text-green-700">{new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(salesReport.wonValue)}</strong><p className="text-[10px] text-gray-500">{salesReport.won} won</p></div>
+          <div className="rounded-lg bg-gray-50 p-3"><p className="text-[10px] text-gray-500">Win rate</p><strong className="text-xl tabular-nums">{salesReport.conversionRate}%</strong><p className="text-[10px] text-gray-500">{salesReport.won + salesReport.lost} closed</p></div>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div><h4 className="mb-2 text-xs font-semibold">Pipeline by stage</h4>{salesReport.byStage.length ? <div className="space-y-2">{salesReport.byStage.map(stage => <div key={stage.id}><div className="mb-1 flex justify-between gap-2 text-[10px]"><span>{stage.name}</span><span>{stage.total} · {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(stage.value)}</span></div><div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-[#128c7e]" style={{ width: `${salesReport.total ? stage.total / salesReport.total * 100 : 0}%` }}/></div></div>)}</div> : <p className="text-xs text-gray-400">No pipeline data yet.</p>}</div>
+          <div><h4 className="mb-2 text-xs font-semibold">Performance by owner</h4>{salesReport.byOwner.length ? <div className="space-y-2">{salesReport.byOwner.map(owner => <div key={owner.uid} className="flex items-center justify-between gap-3 border-b pb-2 text-xs"><span className="min-w-0 truncate">{owner.name}</span><span className="shrink-0 text-right tabular-nums">{owner.won}/{owner.total} won · {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(owner.wonValue)}</span></div>)}</div> : <p className="text-xs text-gray-400">No owner data yet.</p>}</div>
+        </div>
+        {salesReport.bySource.length > 0 && <div className="mt-4"><h4 className="mb-2 text-xs font-semibold">Lead sources</h4><div className="flex flex-wrap gap-2">{salesReport.bySource.map(source => <span key={source.source} className="rounded-full border bg-gray-50 px-3 py-1 text-[10px] text-gray-600">{source.source}: {source.total}</span>)}</div></div>}
+      </section>}
       <div className="mb-4 grid gap-2 sm:grid-cols-3">
         <button type="button" onClick={() => setFollowUpFilter("all")} aria-pressed={followUpFilter === "all"} className={`rounded-xl border p-3 text-left ${followUpFilter === "all" ? "border-[#075e54] bg-emerald-50" : "bg-white"}`}>
           <span className="block text-[10px] font-medium uppercase tracking-wide text-gray-500">All leads</span><strong className="mt-1 block text-xl">{leads.length}</strong>
