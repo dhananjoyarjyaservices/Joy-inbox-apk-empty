@@ -43,6 +43,23 @@ export async function listOrganizationMembers(
     nextCursor: typeof result.nextCursor === "string" ? result.nextCursor : null
   };
 }
+export async function listAllOrganizationMembers(organizationId: string): Promise<OrganizationMember[]> {
+  const members: OrganizationMember[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await listOrganizationMembers(organizationId, { limit: 100, ...(cursor ? { cursor } : {}) });
+    members.push(...page.members);
+    const nextCursor = page.nextCursor || undefined;
+    if (nextCursor && (nextCursor === cursor || seenCursors.has(nextCursor))) {
+      throw new Error("Member pagination returned a repeated cursor. Refresh the workspace and try again.");
+    }
+    if (nextCursor) seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  } while (cursor);
+  return members;
+}
+
 export async function addOrganizationMember(organizationId: string, email: string, role: "admin" | "agent") {
   return request("/organizations/members", "POST", { organizationId, email, role });
 }
