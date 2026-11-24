@@ -22,7 +22,8 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [ ] Add configurable rate-limit tiers, cursor pagination, idempotency and request-usage analytics.
 - [ ] Add public API scopes and endpoints for leads, messages, campaigns and templates.
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact-upsert events.
-- [ ] Wire inbound/outbound message and status events, delivery history UI, manual replay and secret rotation.
+- [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
+- [ ] Add delivery history UI, manual replay and endpoint secret rotation.
 - [ ] Enable Firestore TTL on `webhookDeliveryQueue.expiresAt`; split the delivery worker into its own schedule after staging load tests.
 - [ ] Validate external integration traffic, abuse controls and production CORS strategy before public launch.
 
