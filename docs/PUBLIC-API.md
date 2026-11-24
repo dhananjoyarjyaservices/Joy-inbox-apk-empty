@@ -85,3 +85,14 @@ Required scope: `leads:write`. Send `{ "resourceId": "lead-document-id" }`.
 - Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`.
 - API rate limit is 60 requests per key per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` before production.
 - Public API keys must remain server-side. Browser CORS allowlists, cursor pagination, idempotency keys, usage analytics and delivery-history/replay UI remain future work.
+
+
+## CRM lead webhook events
+
+Workspace webhook subscriptions can also select:
+
+- `lead.created` — a lead is created in Sales CRM or through the public API.
+- `lead.updated` — a lead is edited, reassigned or moved to another pipeline stage.
+- `lead.deleted` — a lead is deleted; payload contains the workspace lead ID and organization ID.
+
+Events use the same signed delivery queue, retry policy and idempotent event envelope as contact and message events. A webhook enqueue failure is logged and does not roll back a CRM save.
