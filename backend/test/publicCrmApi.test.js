@@ -68,3 +68,17 @@ test("rejects invalid lead payloads, inactive stages and foreign contacts", asyn
   await assert.rejects(() => savePublicLead(db, "org_a", { title: "Test", stageId: "new" }), { statusCode: 400 });
   await assert.rejects(() => savePublicLead(db, "org_a", { title: "Test", stageId: "qualified", contactId: "missing" }), { statusCode: 404 });
 });
+
+
+test("lead listing reports hasMore only when an additional record exists", async () => {
+  const db = fakeDb({
+    "organizations/org_a/crmLeads/lead_a": { title: "A", updatedAt: new Date("2026-11-24T10:00:00Z") },
+    "organizations/org_a/crmLeads/lead_b": { title: "B", updatedAt: new Date("2026-11-24T11:00:00Z") }
+  });
+  const firstPage = await listPublicLeads(db, "org_a", 1);
+  assert.equal(firstPage.data.length, 1);
+  assert.equal(firstPage.pagination.hasMore, true);
+  const completePage = await listPublicLeads(db, "org_a", 2);
+  assert.equal(completePage.data.length, 2);
+  assert.equal(completePage.pagination.hasMore, false);
+});
