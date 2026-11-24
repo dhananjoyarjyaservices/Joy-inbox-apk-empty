@@ -65,3 +65,12 @@ The Tenant Inbox now has a Sales CRM workspace view with:
 ## Security and rollout
 
 All data remains under the authenticated workspace path. Custom field keys and stage IDs are normalized and constrained. Stage deletion is blocked while leads still reference it; custom field deletion is a soft deactivation. Firebase connection and staging verification remain deferred until the repository-only phase is complete, as requested. Do not put service credentials in the frontend.
+
+## Automated follow-up reminders
+
+- Leads with a due `nextFollowUpAt` are scanned by the scheduled worker.
+- A reminder is sent to the assigned active workspace member only; unassigned leads are left for manual triage.
+- Won, lost and inactive-stage leads are excluded.
+- The worker writes an in-app notification and sends a push notification, using a deterministic notification ID.
+- Reminder claims are transactional and keyed to the exact follow-up timestamp to avoid duplicate sends across overlapping scheduler invocations. Failed deliveries release the claim for retry.
+- The existing EventBridge `src/index.slaScheduledHandler` now runs this worker alongside SLA and automation checks. Schedule it at a five-minute cadence in staging after deploying the updated Lambda package.
