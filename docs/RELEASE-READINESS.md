@@ -19,6 +19,7 @@ This checklist separates code already present from work that requires real servi
 - [x] Interactive WhatsApp media carousel composer and server payload validation for 2–10 image cards with HTTPS image and CTA links; card images are referenced by public URL rather than stored in Joy Inbox. Real Meta delivery still requires staging verification.
 - [x] Tenant inbox quoted replies: swipe-right gesture and explicit Reply action, quoted-message preview, reply context sent with text/media messages, and backend validation that resolves the original message inside the same organization.
 - [x] Transaction-backed message quota reservations and hard outbound enforcement across tenant text, media, templates, interactive messages, campaigns, greetings, retries and automation; unique inbound messages are counted idempotently.
+- [x] Production paths fail closed when a workspace has no active trial or paid subscription; backend tests explicitly isolate this gate to the test environment.
 - [x] Media-transfer byte reservations for tenant media uploads, template header uploads, Quick Reply image uploads and media proxy downloads.
 - [x] Transactional active-agent seat caps and billing-screen usage meters with 80%/95%/100% warnings for messages and media transfer.
 - [x] Stripe Checkout/Billing Portal/webhook foundation and workspace billing screen.
