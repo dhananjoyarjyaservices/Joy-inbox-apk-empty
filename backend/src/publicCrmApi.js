@@ -17,8 +17,9 @@ function leadCollection(db, organizationId) {
 
 async function listPublicLeads(db, organizationId, rawLimit = 50) {
   const limit = Number.isInteger(Number(rawLimit)) ? Math.min(100, Math.max(1, Number(rawLimit))) : 50;
-  const snapshot = await leadCollection(db, organizationId).orderBy("updatedAt", "desc").limit(limit).get();
-  return { data: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })), pagination: { limit, returned: snapshot.size ?? snapshot.docs.length, hasMore: snapshot.docs.length === limit } };
+  const snapshot = await leadCollection(db, organizationId).orderBy("updatedAt", "desc").limit(limit + 1).get();
+  const docs = snapshot.docs.slice(0, limit);
+  return { data: docs.map(doc => ({ id: doc.id, ...doc.data() })), pagination: { limit, returned: docs.length, hasMore: snapshot.docs.length > limit } };
 }
 
 async function savePublicLead(db, organizationId, input, resourceId = "") {
