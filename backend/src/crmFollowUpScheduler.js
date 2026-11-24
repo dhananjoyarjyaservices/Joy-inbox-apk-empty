@@ -2,6 +2,7 @@
 
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const { sendTenantCrmFollowUpNotification } = require("./push");
+const { getTenantNotificationPreferences } = require("./notificationPreferences");
 
 function timestampMillis(value) {
   if (value && typeof value.toMillis === "function") return value.toMillis();
@@ -67,6 +68,12 @@ async function runScheduledCrmFollowUpReminders(options = {}) {
             continue;
           }
 
+          const preferences = await getTenantNotificationPreferences(db, organizationId, ownerUid);
+          if (!preferences.crm) {
+            skipped += 1;
+            continue;
+          }
+
           const leadRef = leadDocument.ref;
           const claimed = await db.runTransaction(async transaction => {
             const latest = await transaction.get(leadRef);
@@ -101,7 +108,7 @@ async function runScheduledCrmFollowUpReminders(options = {}) {
               read: false
             }, { merge: true });
 
-          await notify(organizationId, ownerUid, leadDocument.id, lead.title || "your lead");
+          await notify(organizationId, ownerUid, leadDocument.id, lead.title || "your lead", preferences);
           await leadRef.set({
             crmFollowUpReminderSentFor: dueMillis,
             crmFollowUpReminderSentAt: now,
