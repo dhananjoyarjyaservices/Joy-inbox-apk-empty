@@ -14,7 +14,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Automated CRM follow-up reminders: scheduled scan, transactional deduplication, active-owner validation, in-app notification, push delivery, member opt-out and retry after failure. Notification Center routes CRM alerts to Sales CRM. See `docs/CRM-FOUNDATION.md`.
 - [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.
 - [x] CRM sales performance report: pipeline totals, won revenue, conversion rate, stage, owner and source breakdowns with agent-scoped visibility and a 1,000-lead sample cap.
-- [x] CRM lead activity timeline: append-only actor-attributed create/update/delete events, tracked-field before/after snapshots, agent assignment checks and on-demand pipeline-card history.\n- [x] Probability-weighted CRM pipeline forecast using configurable stage win probabilities; expected open value is calculated separately per currency.\n- [ ] Validate forecast accuracy and stage-probability configuration with real workspace sales data.\n\n## Public developer API and outbound webhooks — initial contacts, CRM, text-send and template-read slice
+- [x] CRM lead activity timeline: append-only actor-attributed create/update/delete events, tracked-field before/after snapshots, agent assignment checks and on-demand pipeline-card history.\n- [x] Probability-weighted CRM pipeline forecast using configurable stage win probabilities; expected open value is calculated separately per currency.\n- [ ] Validate forecast accuracy and stage-probability configuration with real workspace sales data.\n\n## Public developer API and outbound webhooks — contacts, CRM, text-send, template-read and campaign-reporting slices
 
 - [x] Add owner/admin API key creation, metadata listing and revocation with one-time raw-key display, SHA-256-only storage, scopes, expiry and throttled last-used metadata.
 - [x] Add API-key authentication that derives the workspace from the key, checks active workspace state and enforces contacts read/write scopes.
@@ -22,6 +22,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add versioned `GET`, `POST`, `PUT` and `DELETE /public/v1/leads` endpoints with workspace-scoped CRM validation.
 - [x] Add `POST /public/v1/messages` for workspace-connected WhatsApp text sends with `messages:write`, required idempotency keys and server-side quota enforcement.
 - [x] Add `GET /public/v1/templates` for listing the first Meta template page with `templates:read` and workspace phone/WABA ownership checks.
+- [x] Add paginated `GET /public/v1/campaigns` summaries with `campaigns:read`; results expose aggregate delivery counters only and never recipient phone numbers or consent records.
 - [x] Add a workspace Developer panel to create/revoke keys and view API examples.
 - [x] Deny client-side Firestore access to API key and rate-limit records.
 - [ ] Enable Firestore TTL on `publicApiRateLimits.expiresAt` in the staging/production project.
@@ -29,7 +30,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add cursor pagination for contacts and CRM leads, 24-hour idempotency for public API mutations, and daily per-key request/rate-limit usage analytics.
 - [ ] Add configurable rate-limit tiers.
 - [x] Add public API `leads:read` and `leads:write` scopes with workspace-derived list/create/update/delete endpoints and CRM stage/contact/owner/custom-field validation; add unit coverage and explicitly classify the API-key route in the HTTP route-security inventory.
-- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Campaign endpoints, template sending/management, media/interactive sends and richer webhook delivery filters/pagination remain open.
+- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Campaign creation/control endpoints, template sending/management, media/interactive sends, configurable rate-limit tiers and richer webhook delivery filters/pagination remain open.
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact/message/CRM lead lifecycle events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
 - [x] Add workspace-scoped webhook delivery history API/UI and manual replay for failed deliveries.
