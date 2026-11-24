@@ -6,12 +6,18 @@ on:
     paths:
       - "backend/**"
       - "firestore.rules"
+      - "firestore.indexes.json"
+      - "storage.rules"
+      - "firebase.json"
       - ".github/workflows/backend-tests.yml"
   push:
     branches: [main, "feature/**"]
     paths:
       - "backend/**"
       - "firestore.rules"
+      - "firestore.indexes.json"
+      - "storage.rules"
+      - "firebase.json"
       - ".github/workflows/backend-tests.yml"
 
 permissions:
