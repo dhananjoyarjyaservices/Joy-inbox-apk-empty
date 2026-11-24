@@ -631,14 +631,14 @@ export default function TenantInbox() {
         setError("A carousel needs between two and ten cards.");
         return;
       }
-      const cards = optionLines.map((line, index) => {
-        const fields = line.split("|").map(value => value.trim());
-        if (fields.length !== 4 || fields.some(value => !value)) {
-          throw new Error(`Card ${index + 1}: enter Image HTTPS URL | Card text | Button label | Button HTTPS URL.`);
-        }
-        return { imageUrl: fields[0], body: fields[1], displayText: fields[2], url: fields[3] };
-      });
       try {
+        const cards = optionLines.map((line, index) => {
+          const fields = line.split("|").map(value => value.trim());
+          if (fields.length !== 4 || fields.some(value => !value)) {
+            throw new Error(`Card ${index + 1}: enter Image HTTPS URL | Card text | Button label | Button HTTPS URL.`);
+          }
+          return { imageUrl: fields[0], body: fields[1], displayText: fields[2], url: fields[3] };
+        });
         interactive = { type: "carousel", body: interactiveBody, cards };
       } catch (error) {
         setError(error instanceof Error ? error.message : "Carousel details are invalid.");
