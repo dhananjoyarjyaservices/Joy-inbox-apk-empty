@@ -236,6 +236,7 @@ function createCampaignHarness(suppressionStatus = null) {
       return callback({
         async get(ref) {
           if (ref === suppressionRef) return { exists: Boolean(suppressionStatus), get: () => suppressionStatus };
+          if (ref?.path?.includes("/billing/")) return { exists: false, data: () => ({}), get: () => undefined };
           const value = ref === campaignRef ? campaign : recipient;
           return { exists: true, data: () => value, get: key => value[key] };
         },
