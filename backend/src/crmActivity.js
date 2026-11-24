@@ -39,7 +39,7 @@ function buildCrmActivityEvent({ organizationId, leadId, actorUid, action, befor
 
 async function recordCrmActivity(db, input) {
   const event = buildCrmActivityEvent(input);
-  const ref = db.collection("organizations").doc(input.organizationId).collection("crmActivity").doc();
+  const ref = input.organizationRef.collection("crmActivity").doc();
   await ref.create(event);
   return { id: ref.id, ...event };
 }
