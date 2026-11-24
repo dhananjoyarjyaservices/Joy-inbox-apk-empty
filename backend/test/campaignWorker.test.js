@@ -62,6 +62,13 @@ test("claims a pending recipient only while its campaign is queued or sending", 
   const recipient = { status: "pending", attempts: 1, phone: "919876543210" };
   const writes = [];
   const db = {
+    collection(name) {
+      assert.equal(name, "organizations");
+      return { doc(id) {
+        assert.equal(id, "org_1");
+        return { collection(child) { return { doc(documentId) { return { path: `organizations/org_1/${child}/${documentId}` }; } }; } };
+      } };
+    },
     async runTransaction(callback) {
       return callback({
         async get(ref) {
