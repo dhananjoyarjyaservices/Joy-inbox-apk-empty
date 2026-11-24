@@ -77,6 +77,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /publicApiRateLimits/{bucketId} {
+      allow read, write: if false;
+    }
+
     // Legacy single-owner data is limited to these known root collections.
     // Do not grant the owner wildcard access to /users: that would bypass the
     // per-user rules below and expose every user's profile, contacts and replies.
