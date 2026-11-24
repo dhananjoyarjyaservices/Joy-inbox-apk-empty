@@ -5,7 +5,7 @@ Joy Inbox is a multi-tenant WhatsApp Business inbox SaaS built with React, TypeS
 ## Product capabilities in the SaaS branch
 
 - Workspace onboarding, account switching, owner/admin/agent roles and workspace invitations.
-- Shared tenant inbox with assignment, status management, pin/archive, search, paginated history, customer contacts and internal notes.
+- Shared tenant inbox with assignment, status management, pin/archive, search, paginated history, customer contacts, one-tap WhatsApp contact links and internal notes.
 - Tenant-scoped text, media, approved-template and interactive WhatsApp messaging, including reply buttons, lists, CTA links, media carousels and quoted replies.
 - Searchable saved Quick Replies, greeting automation, keyword automation and scheduled automation workers.
 - SLA settings, notification center, per-agent notification preferences and delivery monitoring.
