@@ -794,13 +794,18 @@ async function handleTenantCrmActivity(event) {
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "contacts:manage");
   const leadSnapshot = await organization.ref.collection("crmLeads").doc(String(leadId || "")).get();
-  if (!leadSnapshot.exists) return jsonResponse(event, 404, { error: "Lead was not found." });
-  if (!canAccessCrmLead(organization.role, decoded.uid, leadSnapshot.data())) {
-    return jsonResponse(event, 403, { error: "Agents can only view activity for leads assigned to them." });
-  }
   const rawLimit = Number(event.queryStringParameters?.limit || 50);
   const limit = Number.isInteger(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 50;
-  const activities = await listCrmActivity(organization, String(leadId), limit);
+  const activities = await listCrmActivity(organization, String(leadId || ""), limit);
+  if (leadSnapshot.exists) {
+    if (!canAccessCrmLead(organization.role, decoded.uid, leadSnapshot.data())) {
+      return jsonResponse(event, 403, { error: "Agents can only view activity for leads assigned to them." });
+    }
+  } else if (!activities.length) {
+    return jsonResponse(event, 404, { error: "Lead was not found." });
+  } else if (organization.role === "agent" && activities[0]?.before?.ownerUid !== decoded.uid) {
+    return jsonResponse(event, 403, { error: "Agents can only view activity for leads assigned to them." });
+  }
   return jsonResponse(event, 200, { activities });
 }
 
