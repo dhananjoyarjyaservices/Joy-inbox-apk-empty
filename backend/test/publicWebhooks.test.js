@@ -214,3 +214,14 @@ test("retries failed webhook deliveries with exponential backoff and marks the e
   assert.equal(deliveryEntry[1].status, "failed");
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
+
+
+test("accepts CRM lead lifecycle events as webhook subscription types", () => {
+  const { normalizeWebhookInput } = require("../src/publicWebhooks");
+  const result = normalizeWebhookInput({
+    name: "CRM sync",
+    url: "https://hooks.example.com/joy",
+    events: ["lead.created", "lead.updated", "lead.deleted"]
+  });
+  assert.deepEqual(result.events, ["lead.created", "lead.updated", "lead.deleted"]);
+});
