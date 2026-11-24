@@ -42,6 +42,7 @@ function tenantResourceDb(seed = {}) {
   function reference(path) {
     return {
       id: path.split("/").pop(),
+      path,
       async get() {
         const value = records.get(path);
         return { exists: Boolean(value), data: () => value };
