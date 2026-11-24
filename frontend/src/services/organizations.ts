@@ -40,6 +40,29 @@ export async function createOrganization(name: string): Promise<Organization> {
 export async function connectWhatsApp(organizationId: string, phoneNumberId: string, accessToken: string) {
   return request("/whatsapp/connect", "POST", { organizationId, phoneNumberId, accessToken });
 }
+
+export interface WhatsAppEmbeddedSignupConfig {
+  enabled: boolean;
+  appId?: string;
+  configId?: string;
+  graphApiVersion?: string;
+  solutionId?: string;
+}
+export async function getWhatsAppEmbeddedSignupConfig(organizationId: string): Promise<WhatsAppEmbeddedSignupConfig> {
+  return request(`/whatsapp/embedded-signup/config?organizationId=${encodeURIComponent(organizationId)}`);
+}
+export async function startWhatsAppEmbeddedSignup(organizationId: string): Promise<{ sessionId: string; expiresAt: string }> {
+  return request("/whatsapp/embedded-signup/session", "POST", { organizationId });
+}
+export async function completeWhatsAppEmbeddedSignup(input: {
+  organizationId: string;
+  sessionId: string;
+  code: string;
+  wabaId: string;
+  phoneNumberId: string;
+}): Promise<{ connection: WhatsAppConnection; onboarding: string }> {
+  return request("/whatsapp/embedded-signup/complete", "POST", input);
+}
 export async function disconnectWhatsApp(organizationId: string, phoneNumberId: string) {
   return request("/whatsapp/connect", "DELETE", { organizationId, phoneNumberId });
 }
@@ -73,6 +96,7 @@ export async function retryTenantFailedText(organizationId: string, chatId: stri
 
 export interface WhatsAppConnection {
   phoneNumberId: string;
+  wabaId?: string;
   displayPhoneNumber: string;
   verifiedName: string;
   connected: boolean;
