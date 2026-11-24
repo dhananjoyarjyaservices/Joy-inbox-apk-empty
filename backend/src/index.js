@@ -58,7 +58,7 @@ const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
 const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
-const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmLead } = require("./crm");
+const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, canAccessCrmLead, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const {
@@ -523,7 +523,7 @@ async function handleTenantCrm(event, resource) {
     const ref = collection.doc(resourceId);
     const snapshot = await ref.get();
     if (!snapshot.exists) return jsonResponse(event, 404, { error: "CRM resource was not found." });
-    if (resource === "leads" && organization.role === "agent" && snapshot.data()?.ownerUid !== decoded.uid) {
+    if (resource === "leads" && !canAccessCrmLead(organization.role, decoded.uid, snapshot.data())) {
       return jsonResponse(event, 403, { error: "Agents can only delete leads assigned to them." });
     }
     if (resource === "fields") {
@@ -606,7 +606,7 @@ async function handleTenantCrm(event, resource) {
     ref = collection.doc(resourceId);
     const existing = await ref.get();
     if (!existing.exists) return jsonResponse(event, 404, { error: "Lead was not found." });
-    if (organization.role === "agent" && existing.data()?.ownerUid !== decoded.uid) {
+    if (!canAccessCrmLead(organization.role, decoded.uid, existing.data())) {
       return jsonResponse(event, 403, { error: "Agents can only update leads assigned to them." });
     }
     createdAt = existing.data()?.createdAt || now;
