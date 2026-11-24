@@ -3,10 +3,10 @@
 const { getBillingPlanCatalog } = require("./billing");
 const crypto = require("crypto");
 
-function usageError(message, statusCode = 429) {
+function usageError(message, statusCode = 429, code = "MESSAGE_QUOTA_EXCEEDED") {
   const error = new Error(message);
   error.statusCode = statusCode;
-  error.code = "MESSAGE_QUOTA_EXCEEDED";
+  error.code = code;
   error.definitive = true;
   error.retryable = false;
   return error;
@@ -137,7 +137,7 @@ async function reserveMediaTransfer(db, organizationId, transferId, expectedByte
     const bytes = expectedBytes === null || expectedBytes === undefined
       ? available : Number(expectedBytes);
     if (!Number.isSafeInteger(bytes) || bytes <= 0 || bytes > available) {
-      throw usageError("Media transfer limit reached for this service month. Upgrade your plan to transfer more media.");
+      throw usageError("Media transfer limit reached for this service month. Upgrade your plan to transfer more media.", 429, "MEDIA_QUOTA_EXCEEDED");
     }
     transaction.set(usageRef, {
       plan: window.plan.key, periodKey: window.key, periodStart: window.start, periodEnd: window.end,
