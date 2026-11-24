@@ -7,6 +7,8 @@ function usageError(message, statusCode = 429) {
   const error = new Error(message);
   error.statusCode = statusCode;
   error.code = "MESSAGE_QUOTA_EXCEEDED";
+  error.definitive = true;
+  error.retryable = false;
   return error;
 }
 
