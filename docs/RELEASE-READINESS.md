@@ -98,12 +98,14 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-Latest branch head verified:
-- Pull request #1 head: `e27794bd3d82172abef43b8d7e6a038ba3db75fe`.
-- Backend tests (run 45355850518): **285 passed, 0 failed, 0 skipped**. Firestore emulator suite completed, and the production-only Lambda ZIP was created and integrity-checked.
-- Frontend build (run 45355850664): **8 tests passed, 0 failed, 0 skipped**; TypeScript and Vite production build passed.
-- Joy Inbox CI (run 45355850659): backend unit tests and frontend TypeScript/tests/build both passed.
-- Cloudflare Pages preview deployed successfully for this exact head: `https://75cd8b0a.joy-inbox-apk-empty.pages.dev`. Branch preview: `https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev`.
+Last fully verified branch head before the CRM feature commits:
+- Verified commit: `fa045719159cd83bbd94de195f32cd41482e47bb`.
+- Backend tests (run 45356103884): **285 passed, 0 failed, 0 skipped**. Firestore emulator suite completed, and the production-only Lambda ZIP was created and integrity-checked.
+- Frontend build (run 45356103852): **8 tests passed, 0 failed, 0 skipped**; TypeScript and Vite production build passed.
+- Joy Inbox CI (run 45356103837): backend unit tests and frontend TypeScript/tests/build both passed.
+- Cloudflare Pages preview deployed successfully for the verified head: `https://36702ad2.joy-inbox-apk-empty.pages.dev`. Branch preview: `https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev`.
+
+Current development head after the CRM implementation: `6a53878749e6e5e410cb8721fb82d6c926b7b195`. The connected GitHub status/run lookups have not returned checks for this newer head yet. Treat the CRM commits as **not CI-verified** until fresh backend tests, frontend TypeScript/build and preview deployment complete.
 
 ## Static security review completed in repository
 
