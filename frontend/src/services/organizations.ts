@@ -295,6 +295,16 @@ export interface OrganizationBillingState {
     currentPeriodEnd: string | null;
     trialEnd: string | null;
     cancelAtPeriodEnd: boolean;
+    usage: {
+      messagesUsed: number;
+      messagesReserved: number;
+      messageLimit: number;
+      percent: number;
+      thresholdsReached: number[];
+      periodStart: string;
+      periodEnd: string;
+      trial: boolean;
+    } | { error: string } | null;
   } | null;
 }
 export async function getOrganizationBilling(organizationId: string): Promise<OrganizationBillingState> {
