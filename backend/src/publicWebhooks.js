@@ -174,6 +174,7 @@ function millis(value) {
 }
 
 async function resolvePublicWebhookHost(hostname, lookupImpl = dns.lookup) {
+  hostname = String(hostname || "").toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
   if (net.isIP(hostname)) {
     if (isPrivateAddress(hostname)) throw httpError("Webhook destination resolves to a private network address.", 400);
     return;
