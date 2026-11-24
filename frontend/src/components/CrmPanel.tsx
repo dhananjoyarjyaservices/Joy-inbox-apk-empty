@@ -30,6 +30,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const [stageName, setStageName] = useState("");
   const [customValues, setCustomValues] = useState<Record<string, string | number | boolean>>({});
   const [editingLeadId, setEditingLeadId] = useState("");
+  const [followUpFilter, setFollowUpFilter] = useState<"all" | "overdue" | "today">("all");
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -51,7 +52,27 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   useEffect(() => { void refresh(); }, [refresh]);
 
   const activeStages = useMemo(() => stages.filter(stage => stage.active).sort((a, b) => a.position - b.position), [stages]);
-  const grouped = useMemo(() => activeStages.map(stage => ({ stage, leads: leads.filter(lead => lead.stageId === stage.id) })), [activeStages, leads]);
+  const followUpCounts = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfTomorrow = startOfToday + 24 * 60 * 60 * 1000;
+    return {
+      overdue: leads.filter(lead => lead.nextFollowUpAt && new Date(lead.nextFollowUpAt).getTime() < now.getTime()).length,
+      today: leads.filter(lead => lead.nextFollowUpAt && new Date(lead.nextFollowUpAt).getTime() >= now.getTime() && new Date(lead.nextFollowUpAt).getTime() < startOfTomorrow && new Date(lead.nextFollowUpAt).getTime() >= startOfToday).length
+    };
+  }, [leads]);
+  const visibleLeads = useMemo(() => {
+    if (followUpFilter === "all") return leads;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfTomorrow = startOfToday + 24 * 60 * 60 * 1000;
+    return leads.filter(lead => {
+      if (!lead.nextFollowUpAt) return false;
+      const due = new Date(lead.nextFollowUpAt).getTime();
+      return followUpFilter === "overdue" ? due < now.getTime() : due >= now.getTime() && due >= startOfToday && due < startOfTomorrow;
+    });
+  }, [followUpFilter, leads]);
+  const grouped = useMemo(() => activeStages.map(stage => ({ stage, leads: visibleLeads.filter(lead => lead.stageId === stage.id) })), [activeStages, visibleLeads]);
 
   async function submitLead(event: FormEvent) {
     event.preventDefault();
@@ -146,6 +167,18 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
         <button type="button" onClick={() => void refresh()} disabled={loading || saving} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs text-[#075e54]"><RefreshCw size={14}/> Refresh</button>
       </div>
       {error && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      <div className="mb-4 grid gap-2 sm:grid-cols-3">
+        <button type="button" onClick={() => setFollowUpFilter("all")} aria-pressed={followUpFilter === "all"} className={`rounded-xl border p-3 text-left ${followUpFilter === "all" ? "border-[#075e54] bg-emerald-50" : "bg-white"}`}>
+          <span className="block text-[10px] font-medium uppercase tracking-wide text-gray-500">All leads</span><strong className="mt-1 block text-xl">{leads.length}</strong>
+        </button>
+        <button type="button" onClick={() => setFollowUpFilter("overdue")} aria-pressed={followUpFilter === "overdue"} className={`rounded-xl border p-3 text-left ${followUpFilter === "overdue" ? "border-red-400 bg-red-50" : "bg-white"}`}>
+          <span className="block text-[10px] font-medium uppercase tracking-wide text-red-600">Overdue follow-ups</span><strong className="mt-1 block text-xl text-red-700">{followUpCounts.overdue}</strong>
+        </button>
+        <button type="button" onClick={() => setFollowUpFilter("today")} aria-pressed={followUpFilter === "today"} className={`rounded-xl border p-3 text-left ${followUpFilter === "today" ? "border-amber-400 bg-amber-50" : "bg-white"}`}>
+          <span className="block text-[10px] font-medium uppercase tracking-wide text-amber-700">Due later today</span><strong className="mt-1 block text-xl text-amber-800">{followUpCounts.today}</strong>
+        </button>
+      </div>
+      {followUpFilter !== "all" && <div className="mb-3 flex items-center justify-between text-xs text-gray-500"><span>Showing {followUpFilter === "overdue" ? "overdue follow-ups" : "follow-ups due later today"}</span><button type="button" onClick={() => setFollowUpFilter("all")} className="font-semibold text-[#075e54]">Show all leads</button></div>}
       <form onSubmit={submitLead} className="mb-5 grid gap-2 rounded-xl border bg-white p-4 sm:grid-cols-4">
         <label className="text-xs text-gray-600 sm:col-span-2">Lead / deal name<input required maxLength={120} value={title} onChange={event => setTitle(event.target.value)} placeholder="Website redesign project" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
         <label className="text-xs text-gray-600">Deal value (₹)<input type="number" min="0" max="1000000000000" step="0.01" value={value} onChange={event => setValue(event.target.value)} placeholder="25000" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
