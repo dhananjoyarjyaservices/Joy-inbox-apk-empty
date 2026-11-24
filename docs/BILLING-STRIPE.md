@@ -18,14 +18,16 @@ Configure these in both staging and production backend secrets; never use a Vite
 
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_LITE`
 - `STRIPE_PRICE_STARTER`
 - `STRIPE_PRICE_GROWTH`
 - `STRIPE_PRICE_BUSINESS`
+- `STRIPE_PRICE_PRO`
 - `BILLING_SUCCESS_URL`
 - `BILLING_CANCEL_URL`
 - `BILLING_PORTAL_RETURN_URL`
 
-Create the three recurring Products/Prices in the Stripe Dashboard and supply their actual Price IDs. No prices or plan entitlements are invented in this repository. The backend exposes only plans whose Price IDs are configured.
+Create five monthly recurring Products/Prices in the Stripe Dashboard using the INR amounts and entitlements in docs/PRICING-AND-USAGE-POLICY.md, then supply their actual Price IDs. The backend exposes only plans whose Price IDs are configured. Checkout applies a seven-day trial once per workspace; the first successful trial subscription is recorded using trialUsedAt, and subsequent subscriptions for that workspace do not receive another trial. The public billing-plan response includes the monthly INR price and usage limits but never exposes Stripe Price IDs.
 
 ## Stripe webhook setup
 
@@ -43,4 +45,4 @@ Register `https://YOUR_API_DOMAIN/billing/stripe-webhook` in Stripe and subscrib
 
 ## Not yet production-ready
 
-This is an integration foundation, not a complete commercial billing rollout. It does not configure a Stripe account, create Products/Prices, deploy webhook endpoints, define plan entitlements/usage quotas, implement trial/grace-period business policy, tax/VAT handling, invoices UI, or test live payments. Billing remains disabled until Stripe secrets and real Price IDs are configured. Complete staging acceptance and legal/accounting review before production activation.
+This is an integration foundation, not a complete commercial billing rollout. It does not configure a Stripe account, create Products/Prices, deploy webhook endpoints, enforce message/media/agent quotas, implement usage alerts or retention deletion, provide a grace-period policy, tax/VAT handling, invoices UI, or test live payments. The seven-day trial is wired into Checkout, but billing must remain disabled until quotas are enforced and Stripe secrets and real Price IDs are configured. Complete staging acceptance and legal/accounting review before production activation.
