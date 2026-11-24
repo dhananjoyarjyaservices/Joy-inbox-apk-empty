@@ -20,7 +20,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [ ] Enable Firestore TTL on `publicApiRateLimits.expiresAt` in the staging/production project.
 - [x] Enforce a fixed 60-requests-per-minute rate limit per API key using server-only Firestore counters.
 - [ ] Add configurable rate-limit tiers, cursor pagination, idempotency and request-usage analytics.
-- [ ] Add public API scopes and endpoints for leads, messages, campaigns and templates.
+- [x] Add public API `leads:read` and `leads:write` scopes with workspace-derived list/create/update/delete endpoints and CRM stage/contact/owner/custom-field validation; add unit coverage. Message/campaign/template scopes remain open.
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact-upsert events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
 - [ ] Add delivery history UI, manual replay and endpoint secret rotation.
