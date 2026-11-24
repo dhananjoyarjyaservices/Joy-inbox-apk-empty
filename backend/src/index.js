@@ -865,7 +865,7 @@ async function handleTenantCrm(event, resource) {
     }
     if (resource === "leads") {
       await recordCrmActivity(db, {
-        organizationId: organization.id, leadId: resourceId, actorUid: decoded.uid,
+        organizationId: organization.id, organizationRef: organization.ref, leadId: resourceId, actorUid: decoded.uid,
         action: "deleted", before: snapshot.data(), after: null, at: new Date()
       });
     }
@@ -965,7 +965,7 @@ async function handleTenantCrm(event, resource) {
   if (method === "POST") item.createdBy = decoded.uid;
   await ref.set(item, { merge: method === "PUT" });
   await recordCrmActivity(db, {
-    organizationId: organization.id, leadId: ref.id, actorUid: decoded.uid,
+    organizationId: organization.id, organizationRef: organization.ref, leadId: ref.id, actorUid: decoded.uid,
     action: method === "POST" ? "created" : "updated",
     before: existingLeadData,
     after: item, at: now
