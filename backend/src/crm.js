@@ -49,7 +49,7 @@ function normalizeCrmFieldValues(input, definitions = []) {
     const definition = knownDefinitions.get(key);
     if (!definition) throw crmError(`Custom field "${key}" is not configured.`);
     if (value === null || value === "") {
-      if (definition.required) throw crmError(`${definition.label} is required.`);
+      if (definition.required && definition.active !== false) throw crmError(`${definition.label} is required.`);
       continue;
     }
     if (definition.type === "text") {
