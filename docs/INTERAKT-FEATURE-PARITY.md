@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-24  
 **Audited branch:** `feature/saas-foundation`  
-**Audited head before this audit:** `fa045719159cd83bbd94de195f32cd41482e47bb`  
+**Audited head:** `1c269e680f6a53b699d5ab8dd614855e4d6fdf85`  
 **Scope:** Repository code and automated-test evidence only. This is not a live-provider acceptance test.
 
 ## Executive finding
@@ -46,7 +46,7 @@ Legend:
 | Team management, roles and invitations | Implemented (code) | Owner/admin/agent permissions, hashed invitations, verified-email acceptance and seat enforcement. Email sending provider is not configured. |
 | Notification center, push and sound | Implemented (code) | Tenant notifications, push-device registration/preferences and notification sound hooks; real-device acceptance pending. |
 | Subscription plans, 7-day trial and usage enforcement | Partial / external validation pending | Monthly/annual plan logic, trial policy, quotas and Stripe Checkout/Portal/webhook code exist. Actual ten Stripe Price IDs, test checkout lifecycle and live payment activation are not configured. |
-| Public developer APIs and customer-configurable outbound webhooks | Partial | Versioned public contacts and CRM leads read/write endpoints have hashed expiring scoped API keys, per-key rate limits, cursor pagination, 24-hour idempotency for writes and daily per-key usage/rate-limit analytics exposed in the Developer panel. Signed webhook subscriptions support contact, message and CRM lead lifecycle events, delivery history, failed-delivery replay and secret rotation. Message/campaign/template APIs and configurable rate tiers remain missing. |
+| Public developer APIs and customer-configurable outbound webhooks | Partial | Versioned contacts and CRM leads read/write endpoints use hashed, expiring scoped API keys, cursor pagination, 24-hour idempotency for mutations and daily per-key usage analytics. A public `POST /public/v1/messages` endpoint supports WhatsApp text sends with `messages:write`; `GET /public/v1/templates` lists approved WhatsApp templates with `templates:read` (first Meta page only). Signed outbound webhook subscriptions cover contact, message and CRM lead lifecycle events, with delivery history, failed-delivery replay and secret rotation. Still missing: public campaign endpoints, template sending/management, media and interactive message endpoints, configurable rate-limit tiers, webhook delivery pagination/filters and full staging verification. |
 | Instagram inbox and Instagram automation | Missing | No Instagram channel integration or inbox implementation found. |
 | RCS channel and WhatsApp-to-RCS fallback | Missing | No RCS provider/channel implementation found. |
 | Click-to-WhatsApp ads launcher/conversion analytics | Missing | No CTWA ad management or Meta conversion-event pipeline found. |
