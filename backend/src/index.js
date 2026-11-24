@@ -395,7 +395,7 @@ async function handlePublicApiLeads(event) {
   }
   requireApiScope(authenticatedKey, "leads:write");
   if (method === "DELETE") {
-    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), async () => {
+    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), { method, resource: "leads", payload: body }, async () => {
       const deleted = await deletePublicLead(db, authenticatedKey.organizationId, String(body.resourceId || ""));
       await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.deleted", `public-api:${deleted.id}:${crypto.randomUUID()}`, deleted)
         .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
@@ -405,7 +405,7 @@ async function handlePublicApiLeads(event) {
     return jsonResponse(event, statusCode, response);
   }
   if (method === "POST") {
-    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), async () => {
+    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), { method, resource: "leads", payload: body }, async () => {
       const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data || body);
       await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.created", `public-api:${lead.id}:${crypto.randomUUID()}`, lead)
         .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
@@ -418,7 +418,7 @@ async function handlePublicApiLeads(event) {
     if (!body.data || typeof body.data !== "object" || Array.isArray(body.data)) {
       return jsonResponse(event, 400, { error: "A lead data object is required for updates." });
     }
-    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), async () => {
+    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), { method, resource: "leads", payload: body }, async () => {
       const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data, String(body.resourceId || ""));
       await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.updated", `public-api:${lead.id}:${crypto.randomUUID()}`, lead)
         .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
@@ -451,7 +451,7 @@ async function handlePublicApiContacts(event) {
       return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
     }
     const db = getDb();
-    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), async () => {
+    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), { method, resource: "contacts", payload: body }, async () => {
       const contact = await saveTenantResource(db, authenticatedKey.organizationId, "contacts", { ...body, source: "local" });
       await enqueueOrganizationWebhookEvent(
         db, authenticatedKey.organizationId, "contact.upserted",
