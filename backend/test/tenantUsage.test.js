@@ -53,6 +53,26 @@ const plans = [
   { key: "growth", limits: { messages: 100000 } }
 ];
 
+test("production usage gates fail closed without an active trial or subscription", async () => {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    const db = fakeDb();
+    const now = new Date("2026-11-24T00:00:00.000Z");
+    await assert.rejects(
+      () => reserveOutboundMessage(db, "org_one", "no-plan-message", now),
+      { statusCode: 402, code: "SUBSCRIPTION_REQUIRED" }
+    );
+    await assert.rejects(
+      () => reserveMediaTransfer(db, "org_one", "no-plan-media", 10, now),
+      { statusCode: 402, code: "SUBSCRIPTION_REQUIRED" }
+    );
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
+});
+
 test("service-month boundaries preserve month-end dates", () => {
   assert.equal(addUtcMonths(new Date("2026-01-31T00:00:00.000Z"), 1).toISOString(), "2026-02-28T00:00:00.000Z");
   const window = getUsageWindow({
