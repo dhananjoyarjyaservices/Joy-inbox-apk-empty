@@ -89,16 +89,92 @@ async function getTenantMessageUsage(db, organizationId, subscription, now = new
   const used = Math.max(0, Number(data.messagesUsed || 0));
   const reserved = Math.max(0, Number(data.messagesReserved || 0));
   const percent = window.limit > 0 ? Math.min(100, Math.floor((used + reserved) / window.limit * 100)) : 100;
+  const mediaBytesUsed = Math.max(0, Number(data.mediaBytesUsed || 0));
+  const mediaBytesReserved = Math.max(0, Number(data.mediaBytesReserved || 0));
+  const mediaLimitBytes = Math.ceil(window.plan.limits.mediaTransferGb * 1024 * 1024 * 1024 * (window.trial ? 0.25 : 1));
+  const mediaPercent = mediaLimitBytes > 0 ? Math.min(100, Math.floor((mediaBytesUsed + mediaBytesReserved) / mediaLimitBytes * 100)) : 100;
   return {
     messagesUsed: used,
     messagesReserved: reserved,
     messageLimit: window.limit,
     percent,
     thresholdsReached: [80, 95, 100].filter(threshold => percent >= threshold),
+    mediaBytesUsed,
+    mediaBytesReserved,
+    mediaLimitBytes,
+    mediaPercent,
+    mediaThresholdsReached: [80, 95, 100].filter(threshold => mediaPercent >= threshold),
     periodStart: window.start.toISOString(),
     periodEnd: window.end.toISOString(),
     trial: window.trial
   };
+}
+
+async function reserveMediaTransfer(db, organizationId, transferId, expectedBytes, now = new Date()) {
+  const organizationRef = db.collection("organizations").doc(organizationId);
+  const subscriptionRef = organizationRef.collection("billing").doc("subscription");
+  const reservationRef = organizationRef.collection("billingMediaReservations").doc(getReservationId(transferId));
+  return db.runTransaction(async transaction => {
+    const subscriptionSnapshot = await transaction.get(subscriptionRef);
+    if (!subscriptionSnapshot.exists) return { enforced: false, reservationRef: null };
+    const subscription = subscriptionSnapshot.data() || {};
+    const status = String(subscription.status || "");
+    if (!status && !subscription.checkoutPlan) return { enforced: false, reservationRef: null };
+    const window = getUsageWindow(subscription, now);
+    const usageRef = organizationRef.collection("billingUsage").doc(window.key);
+    const [usageSnapshot, reservationSnapshot] = await Promise.all([
+      transaction.get(usageRef), transaction.get(reservationRef)
+    ]);
+    if (reservationSnapshot.exists) {
+      const state = String(reservationSnapshot.get("state") || "");
+      if (state === "committed" || state === "reserved") return { enforced: true, duplicate: true, reservationRef, usageRef };
+    }
+    const usage = usageSnapshot.exists ? usageSnapshot.data() || {} : {};
+    const used = Math.max(0, Number(usage.mediaBytesUsed || 0));
+    const reserved = Math.max(0, Number(usage.mediaBytesReserved || 0));
+    const limit = Math.ceil(window.plan.limits.mediaTransferGb * 1024 * 1024 * 1024 * (window.trial ? 0.25 : 1));
+    const available = Math.max(0, limit - used - reserved);
+    const bytes = expectedBytes === null || expectedBytes === undefined
+      ? available : Number(expectedBytes);
+    if (!Number.isSafeInteger(bytes) || bytes <= 0 || bytes > available) {
+      throw usageError("Media transfer limit reached for this service month. Upgrade your plan to transfer more media.");
+    }
+    transaction.set(usageRef, {
+      plan: window.plan.key, periodKey: window.key, periodStart: window.start, periodEnd: window.end,
+      mediaTransferLimitBytes: limit, mediaBytesUsed: used, mediaBytesReserved: reserved + bytes,
+      trial: window.trial, updatedAt: now
+    }, { merge: true });
+    transaction.set(reservationRef, {
+      state: "reserved", organizationId, periodKey: window.key, reservedBytes: bytes,
+      createdAt: now, updatedAt: now
+    }, { merge: true });
+    return { enforced: true, duplicate: false, reservationRef, usageRef, reservedBytes: bytes };
+  });
+}
+
+async function finishMediaTransfer(db, reservation, outcome, actualBytes, now = new Date()) {
+  if (!reservation?.enforced || !reservation.reservationRef || !reservation.usageRef) return false;
+  return db.runTransaction(async transaction => {
+    const [reservationSnapshot, usageSnapshot] = await Promise.all([
+      transaction.get(reservation.reservationRef), transaction.get(reservation.usageRef)
+    ]);
+    if (!reservationSnapshot.exists || String(reservationSnapshot.get("state") || "") !== "reserved") return false;
+    const usage = usageSnapshot.exists ? usageSnapshot.data() || {} : {};
+    const reserved = Math.max(0, Number(usage.mediaBytesReserved || 0));
+    const used = Math.max(0, Number(usage.mediaBytesUsed || 0));
+    const heldBytes = Math.max(0, Number(reservationSnapshot.get("reservedBytes") || 0));
+    const actual = outcome === "sent" ? Math.max(0, Number(actualBytes ?? heldBytes)) : 0;
+    transaction.set(reservation.usageRef, {
+      mediaBytesReserved: Math.max(0, reserved - heldBytes),
+      mediaBytesUsed: used + actual,
+      updatedAt: now
+    }, { merge: true });
+    transaction.set(reservation.reservationRef, {
+      state: outcome === "sent" ? "committed" : "released",
+      actualBytes: actual, finishedAt: now, updatedAt: now
+    }, { merge: true });
+    return true;
+  });
 }
 
 async function reserveOutboundMessage(db, organizationId, clientMessageId, now = new Date()) {
@@ -217,6 +293,8 @@ module.exports = {
   addUtcMonths,
   getUsageWindow,
   getTenantMessageUsage,
+  reserveMediaTransfer,
+  finishMediaTransfer,
   reserveOutboundMessage,
   finishOutboundReservation,
   recordInboundMessageUsage
