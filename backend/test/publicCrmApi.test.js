@@ -25,7 +25,7 @@ function fakeDb(seed = {}) {
           .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
         return { docs, size: docs.length };
       },
-      orderBy() { return { limit: async limit => { const result = await collection(path).get(); return { docs: result.docs.slice(0, limit), size: Math.min(result.size, limit) }; }, get: () => collection(path).get() }; }
+      orderBy() { return { limit(limit) { return { async get() { const result = await collection(path).get(); return { docs: result.docs.slice(0, limit), size: Math.min(result.size, limit) }; } }; }, get: () => collection(path).get() }; }
     };
   }
   return {
