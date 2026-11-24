@@ -8,12 +8,40 @@ function httpError(message, statusCode) {
 
 function normalizeAutomationRule(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Automation rule details are required.", 400);
-  const allowed = ["name", "keyword", "matchType", "response", "steps", "enabled", "priority"];
+  const allowed = ["name", "keyword", "matchType", "conditions", "conditionMode", "response", "steps", "enabled", "priority"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Automation rule contains unsupported fields.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
-  const keyword = typeof input.keyword === "string" ? input.keyword.trim().slice(0, 80) : "";
-  if (input.matchType !== undefined && !["contains", "exact", "starts_with"].includes(input.matchType)) throw httpError("Match type must be contains, exact or starts_with.", 400);
-  const matchType = input.matchType || "contains";
+  const hasConditions = input.conditions !== undefined;
+  if (hasConditions && (input.keyword !== undefined || input.matchType !== undefined)) {
+    throw httpError("Use either legacy keyword matching or conditions, not both.", 400);
+  }
+  if (hasConditions && (!Array.isArray(input.conditions) || input.conditions.length < 1 || input.conditions.length > 5)) {
+    throw httpError("Provide between 1 and 5 automation conditions.", 400);
+  }
+  if (input.conditionMode !== undefined && !["all", "any"].includes(input.conditionMode)) {
+    throw httpError("Condition mode must be all or any.", 400);
+  }
+  const conditions = hasConditions ? input.conditions.map((condition) => {
+    if (!condition || typeof condition !== "object" || Array.isArray(condition) ||
+        Object.keys(condition).some((key) => !["keyword", "matchType"].includes(key))) {
+      throw httpError("Each condition may only contain keyword and matchType.", 400);
+    }
+    const value = typeof condition.keyword === "string" ? condition.keyword.trim() : "";
+    const matchType = condition.matchType === undefined ? "contains" : condition.matchType;
+    if (!value || value.length > 80 || [...value].some((character) => character.charCodeAt(0) < 32)) {
+      throw httpError("Each condition keyword is required (maximum 80 characters).", 400);
+    }
+    if (!["contains", "exact", "starts_with"].includes(matchType)) {
+      throw httpError("Condition match type must be contains, exact or starts_with.", 400);
+    }
+    return { keyword: value, matchType };
+  }) : null;
+  const keyword = hasConditions ? conditions[0].keyword :
+    (typeof input.keyword === "string" ? input.keyword.trim().slice(0, 80) : "");
+  if (!hasConditions && input.matchType !== undefined && !["contains", "exact", "starts_with"].includes(input.matchType)) {
+    throw httpError("Match type must be contains, exact or starts_with.", 400);
+  }
+  const matchType = hasConditions ? conditions[0].matchType : (input.matchType || "contains");
   if (input.priority !== undefined && (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 1000)) throw httpError("Priority must be an integer from 0 to 1,000.", 400);
   const priority = input.priority === undefined ? 100 : input.priority;
   const rawSteps = Array.isArray(input.steps) ? input.steps : [input.response];
@@ -28,9 +56,12 @@ function normalizeAutomationRule(input) {
   });
   if (steps.some((step) => !step.message || step.message.length > 1024)) throw httpError("Each reply step is required and must be 1,024 characters or fewer.", 400);
   if (!name || name.length > 80) throw httpError("Rule name is required (maximum 80 characters).", 400);
-  if (!keyword || keyword.length > 80 || [...keyword].some((character) => character.charCodeAt(0) < 32)) throw httpError("Keyword is required (maximum 80 characters).", 400);
+  if (!hasConditions && (!keyword || keyword.length > 80 || [...keyword].some((character) => character.charCodeAt(0) < 32))) throw httpError("Keyword is required (maximum 80 characters).", 400);
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw httpError("Enabled must be true or false.", 400);
-  return { name, keyword, matchType, response: steps[0].message, steps, enabled: input.enabled !== false, priority };
+  return {
+    name, keyword, matchType, ...(conditions ? { conditions, conditionMode: input.conditionMode || "all" } : {}),
+    response: steps[0].message, steps, enabled: input.enabled !== false, priority
+  };
 }
 
 function sortAutomationRules(rules) {
@@ -43,13 +74,24 @@ function sortAutomationRules(rules) {
   });
 }
 
+function matchesKeyword(message, keyword, matchType) {
+  const normalizedKeyword = String(keyword || "").trim().toLowerCase();
+  if (!message || !normalizedKeyword) return false;
+  if (matchType === "exact") return message === normalizedKeyword;
+  if (matchType === "starts_with") return message.startsWith(normalizedKeyword);
+  return message.includes(normalizedKeyword);
+}
+
 function matchesAutomationRule(rule, messageText) {
   const message = String(messageText || "").trim().toLowerCase();
-  const keyword = String(rule.keyword || "").trim().toLowerCase();
-  if (!message || !keyword) return false;
-  if (rule.matchType === "exact") return message === keyword;
-  if (rule.matchType === "starts_with") return message.startsWith(keyword);
-  return message.includes(keyword);
+  if (!message) return false;
+  if (Array.isArray(rule.conditions) && rule.conditions.length) {
+    const results = rule.conditions.map(condition =>
+      matchesKeyword(message, condition.keyword, condition.matchType)
+    );
+    return rule.conditionMode === "any" ? results.some(Boolean) : results.every(Boolean);
+  }
+  return matchesKeyword(message, rule.keyword, rule.matchType);
 }
 
 function findMatchingAutomationRule(rules, messageText) {
