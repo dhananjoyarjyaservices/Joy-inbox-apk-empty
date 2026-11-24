@@ -160,3 +160,21 @@ test("evaluates all and any automation conditions without changing legacy matchi
   assert.equal(matchesAutomationRule(anyRule, "I need help"), false);
   assert.equal(matchesAutomationRule({ keyword: "hello", matchType: "exact" }, "HELLO"), true);
 });
+
+
+test("normalizes Unicode compatibility forms and repeated whitespace for all condition modes", () => {
+  const { normalizeAutomationMatchText } = require("../src/automationRules");
+  assert.equal(normalizeAutomationMatchText("  ＰＲＩＣＥ\\t  LIST  "), "price list");
+  assert.equal(matchesAutomationRule({ keyword: "price list", matchType: "exact" }, "  PRICE\\nLIST "), true);
+  assert.equal(matchesAutomationRule({
+    conditions: [{ keyword: "monthly plan" }, { keyword: "₹ ５００" }],
+    conditionMode: "all"
+  }, "Monthly\\tplan costs ₹ 500"), true);
+});
+
+test("does not match empty text or whitespace-only condition keywords", () => {
+  assert.equal(matchesAutomationRule({ keyword: "hello", matchType: "contains" }, "   "), false);
+  assert.equal(matchesAutomationRule({
+    conditions: [{ keyword: "   " }], conditionMode: "any"
+  }, "hello"), false);
+});
