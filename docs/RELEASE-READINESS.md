@@ -26,7 +26,8 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact-upsert events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
 - [x] Add workspace-scoped webhook delivery history API/UI and manual replay for failed deliveries.
-- [ ] Add endpoint secret rotation and delivery filters/pagination.
+- [x] Add owner/admin endpoint secret rotation with one-time secret display in the Developer panel.
+- [ ] Add delivery filters/pagination and run webhook delivery/replay/rotation against the isolated staging project.
 - [ ] Enable Firestore TTL on `webhookDeliveryQueue.expiresAt`; split the delivery worker into its own schedule after staging load tests.
 - [ ] Validate external integration traffic, abuse controls and production CORS strategy before public launch.
 
