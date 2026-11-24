@@ -83,7 +83,7 @@ test("creates a scoped API key once and stores only its SHA-256 hash", async () 
   const now = Date.parse("2026-11-24T10:00:00Z");
   const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
     name: "CRM integration",
-    scopes: ["contacts:read", "contacts:write"],
+    scopes: ["contacts:read", "contacts:write", "messages:write"],
     expiryDays: 30
   }, now);
   assert.match(created.apiKey, /^joy_live_[A-Za-z0-9_-]{40,64}$/);
@@ -279,4 +279,18 @@ test("idempotency reports an in-progress duplicate and releases failed reservati
   assert.equal(db.records.size, 0);
   const result = await runIdempotentApiRequest(db, auth, "request-789", request, async () => ({ data: { ok: true }, statusCode: 201 }), 2000);
   assert.equal(result.data.ok, true);
+});
+
+
+test("API key accepts the messages:write scope and rejects unknown message scopes", async () => {
+  const db = fakeDb();
+  const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "Messaging integration", scopes: ["messages:write"]
+  });
+  assert.deepEqual(created.scopes, ["messages:write"]);
+  const auth = await authenticateOrganizationApiKey(
+    Object.assign(db, { collection: db.collection }),
+    "Bearer " + created.apiKey
+  ).catch(error => { throw error; });
+  assert.equal(auth.organizationId, "org_one");
 });
