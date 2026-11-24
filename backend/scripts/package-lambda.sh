@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_PATH="${1:-$ROOT_DIR/dist/joy-inbox-lambda.zip}"
+if [[ "$OUTPUT_PATH" != /* ]]; then OUTPUT_PATH="$(pwd)/$OUTPUT_PATH"; fi
 OUTPUT_DIR="$(dirname "$OUTPUT_PATH")"
 BUILD_DIR="$(mktemp -d)"
 
