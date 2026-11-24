@@ -29,7 +29,7 @@ Legend:
 | WhatsApp shared team inbox | Implemented (code) | Tenant Inbox, organization-scoped chats/messages, member roles and tenant APIs. |
 | Chat assignment/reassignment and open/pending/resolved | Implemented (code) | Tenant chat assignment/state APIs and UI. |
 | Pin, archive, search and paginated message history | Implemented (code) | Tenant Inbox and pagination services. |
-| Customer profile, contacts, notes and tags | Partial | Contact fields, notes, tags and bulk tag operations exist; no flexible custom-field schema/manager or full CRM profile model. |
+| Customer profile, contacts, notes and tags | Partial | Contact fields, notes, tags and bulk tag operations exist; typed custom fields are now available on CRM leads, but not yet fully integrated into contact profiles. |
 | Internal team notes | Implemented (code) | Authenticated tenant internal-notes API/UI. |
 | Quick replies, including saved images | Implemented (code) | Searchable quick replies and image upload/proxy/send paths. |
 | Rich WhatsApp text/media/templates | Implemented (code) | Tenant text/media/template paths; actual Meta delivery needs staging tests. |
@@ -49,7 +49,7 @@ Legend:
 | Instagram inbox and Instagram automation | Missing | No Instagram channel integration or inbox implementation found. |
 | RCS channel and WhatsApp-to-RCS fallback | Missing | No RCS provider/channel implementation found. |
 | Click-to-WhatsApp ads launcher/conversion analytics | Missing | No CTWA ad management or Meta conversion-event pipeline found. |
-| Sales CRM pipeline, lead stages and owner routing | Missing | Contacts and chat assignment exist, but no lead pipeline/kanban, deal stages or sales reporting module found. |
+| Sales CRM pipeline, lead stages and owner routing | Partial | Initial tenant-scoped pipeline, five default stages, custom stages, lead values/sources, contact linking and member owner assignment now exist. Bulk import, lead activity timeline, follow-up queues, forecasting and sales reporting remain missing. |
 | Shopify/WooCommerce and other commerce integrations | Missing | No production commerce integration/sync workflow found. |
 | WhatsApp Forms / lead capture forms | Missing | No form builder, form send workflow or response-management module found. |
 | AI Copilot, AI AnswerBot, AI agents and intent automation | Missing | No AI generation/runtime, knowledge base ingestion, agent tool execution or AI workflow code found. |
