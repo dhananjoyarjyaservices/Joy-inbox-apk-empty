@@ -352,7 +352,7 @@ async function handlePublicApiContacts(event) {
     const contact = await saveTenantResource(getDb(), authenticatedKey.organizationId, "contacts", { ...body, source: "local" });
     await enqueueOrganizationWebhookEvent(
       getDb(), authenticatedKey.organizationId, "contact.upserted",
-      `public-api:${contact.id}:${Date.now()}`,
+      `public-api:${contact.id}:${crypto.randomUUID()}`,
       { id: contact.id, name: contact.name, phone: contact.phone, email: contact.email, tags: contact.tags, source: "local" }
     ).catch(error => console.error("Public API contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     return jsonResponse(event, 201, { data: contact });
@@ -851,7 +851,7 @@ async function handleTenantResource(event, resource) {
   if (method === "POST") {
     const item = await saveTenantResource(getDb(), organization.id, resource, body.data);
     if (resource === "contacts") {
-      await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted", `app:${item.id}:${Date.now()}`,
+      await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted", `app:${item.id}:${crypto.randomUUID()}`,
         { id: item.id, name: item.name, phone: item.phone, email: item.email, tags: item.tags, source: item.source }
       ).catch(error => console.error("Workspace contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     }
@@ -860,7 +860,7 @@ async function handleTenantResource(event, resource) {
   if (method === "PUT") {
     const item = await saveTenantResource(getDb(), organization.id, resource, body.data, body.resourceId);
     if (resource === "contacts") {
-      await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted", `app:${item.id}:${Date.now()}`,
+      await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted", `app:${item.id}:${crypto.randomUUID()}`,
         { id: item.id, name: item.name, phone: item.phone, email: item.email, tags: item.tags, source: item.source }
       ).catch(error => console.error("Workspace contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     }
