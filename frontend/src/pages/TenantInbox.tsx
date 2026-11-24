@@ -588,11 +588,12 @@ export default function TenantInbox() {
 
   useEffect(() => {
     if (!organization) { setCrmLeads([]); setCrmLeadsError(""); return; }
+    if (view !== "inbox") return;
     let active = true;
     listCrmLeads(organization.id).then(items => { if (active) { setCrmLeads(items); setCrmLeadsError(""); } })
       .catch(error => { if (active) setCrmLeadsError(error instanceof Error ? error.message : "CRM leads could not load."); });
     return () => { active = false; };
-  }, [organization?.id]);
+  }, [organization?.id, view]);
 
   useEffect(() => {
     if (!organization) return;
