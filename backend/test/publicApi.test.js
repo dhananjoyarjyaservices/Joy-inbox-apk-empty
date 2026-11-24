@@ -283,14 +283,11 @@ test("idempotency reports an in-progress duplicate and releases failed reservati
 
 
 test("API key accepts the messages:write scope and rejects unknown message scopes", async () => {
-  const db = fakeDb();
+  const db = fakeDb({ "organizations/org_one": { status: "active" } });
   const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
     name: "Messaging integration", scopes: ["messages:write"]
   });
   assert.deepEqual(created.scopes, ["messages:write"]);
-  const auth = await authenticateOrganizationApiKey(
-    Object.assign(db, { collection: db.collection }),
-    "Bearer " + created.apiKey
-  ).catch(error => { throw error; });
+  const auth = await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey);
   assert.equal(auth.organizationId, "org_one");
 });
