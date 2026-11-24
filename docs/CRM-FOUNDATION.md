@@ -81,3 +81,8 @@ All data remains under the authenticated workspace path. Custom field keys and s
 Owners and admins can import up to 200 leads per upload from the Sales CRM screen. The importer accepts quoted CSV cells and requires a `title` header. Supported optional columns are `stage_id` (defaults to `new`), `contact_id`, `owner_uid`, `source`, `value`, `currency` (defaults to INR), `next_follow_up_at` and `notes`.
 
 Every row is validated against the workspace's active pipeline stages, contacts, active members and configured custom fields. Invalid rows are reported with their CSV row number while valid rows are committed together in a single Firestore batch. Imports emit the same signed `lead.created` webhook events as individual lead creation.
+
+
+## Sales performance reporting
+
+The Sales CRM screen includes a workspace-scoped report for total, open, won and lost leads; open pipeline value; won revenue; closed-deal win rate; pipeline stage totals; lead-owner performance; and lead sources. Owners/admins see workspace totals. Agents see only leads assigned to themselves. Reports scan the 1,000 most recently updated leads at most and display a capped-sample warning when that limit is reached. Values use the lead's stored numeric value and the workspace's INR display convention; mixed-currency conversion is not performed.
