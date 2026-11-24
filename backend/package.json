@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "test": "node -r ./test/bootstrap.js --test"
+    "test": "node -r ./test/bootstrap.js --test",
+    "package:lambda": "bash ./scripts/package-lambda.sh"
   },
   "engines": {
     "node": "22.x"
