@@ -51,6 +51,7 @@ const {
 } = require("./embeddedSignup");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { listPublicLeads, savePublicLead, deletePublicLead } = require("./publicCrmApi");
+const { importCrmLeads } = require("./crmBulkImport");
 const {
   createOrganizationApiKey,
   listOrganizationApiKeys,
@@ -751,6 +752,28 @@ async function handleTenantAutomationRules(event) {
     return jsonResponse(event, 200, { success: true });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+async function handleTenantCrmBulkImport(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "contacts:manage");
+  const rows = Array.isArray(body.rows) ? body.rows : Array.isArray(body.data?.rows) ? body.data.rows : null;
+  const result = await importCrmLeads(getDb(), organization, decoded.uid, rows);
+  await Promise.all(result.items.map(item => enqueueOrganizationWebhookEvent(
+    getDb(), organization.id, "lead.created",
+    `crm-import:${item.id}:${crypto.randomUUID()}`,
+    item
+  ).catch(error => console.error("CRM import webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"))));
+  return jsonResponse(event, 200, {
+    imported: result.imported,
+    failed: result.failed,
+    errors: result.errors
+  });
 }
 
 async function handleTenantCrm(event, resource) {
@@ -3785,6 +3808,14 @@ exports.handler = async (event) => {
       return jsonResponse(event, error.statusCode || 500, {
         error: error.statusCode ? error.message : "Campaign request could not be completed."
       });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/crm/leads/import")) {
+    try { return await handleTenantCrmBulkImport(event); }
+    catch (error) {
+      console.error("Tenant CRM bulk import failed:", error.statusCode || "CRM_BULK_IMPORT_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "CRM leads could not be imported." });
     }
   }
 
