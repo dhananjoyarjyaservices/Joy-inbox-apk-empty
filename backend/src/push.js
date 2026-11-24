@@ -145,6 +145,16 @@ async function sendTenantSlaOverdueNotification(organizationId, uid, phone, send
   }, { organizationId, uid, type: "sla" });
 }
 
+async function sendTenantCrmFollowUpNotification(organizationId, uid, leadId, leadTitle) {
+  const db = getDb();
+  const admin = getFirebaseAdmin();
+  const title = "CRM follow-up is due";
+  const body = `Follow up with ${String(leadTitle || "your lead").slice(0, 100)}.`;
+  return sendToDeviceCollection(admin, getTenantDeviceCollection(db, organizationId, uid), {
+    type: "crm_follow_up", title, body, leadId: String(leadId), organizationId
+  }, { organizationId, uid, type: "crm_follow_up" });
+}
+
 async function sendTenantIncomingTextNotification(organizationId, phone, senderName, text, messageId) {
   const db = getDb();
   const organizationRef = db.collection("organizations").doc(organizationId);
@@ -182,5 +192,6 @@ module.exports = {
   isValidInstallationId,
   sendIncomingTextNotification,
   sendTenantIncomingTextNotification,
-  sendTenantSlaOverdueNotification
+  sendTenantSlaOverdueNotification,
+  sendTenantCrmFollowUpNotification
 };
