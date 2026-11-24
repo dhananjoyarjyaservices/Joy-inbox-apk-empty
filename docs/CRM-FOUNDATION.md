@@ -55,12 +55,12 @@ The Tenant Inbox now has a Sales CRM workspace view with:
 
 ## Remaining CRM work
 
-- Automated follow-up reminders, scheduled notifications and a dedicated overdue queue.
-- Bulk contact/lead import and deduplication.
-- Saved filters, segments, lead activity timeline, custom events and conversion analytics.
-- Sales reporting, forecast totals, stage conversion and agent performance by pipeline.
-- Permission scopes for CRM-only roles beyond the current owner/admin/agent model.
-- Automated integration tests for Firestore CRM CRUD and full browser-level CRM workflows.
+The initial CRM slice now includes scheduled follow-up reminders, validated CSV lead import (up to 200 rows per upload), sales reporting, lead activity history and probability-weighted pipeline forecasts. Remaining product work is:
+
+- Contact-profile integration for typed custom fields and richer lead/contact deduplication across imports.
+- Saved filters, reusable segments, custom events and conversion attribution.
+- CRM-specific permission roles beyond the current owner/admin/agent model.
+- Full browser-level workflow tests and real-workspace validation of forecast probabilities and report accuracy.
 
 ## Security and rollout
 
