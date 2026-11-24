@@ -529,13 +529,125 @@ async function handlePublicApiMessages(event) {
 async function handlePublicApiCampaigns(event) {
   const db = getDb();
   const authenticatedKey = await authenticateOrganizationApiKey(db, getHeader(event, "authorization"));
-  requireApiScope(authenticatedKey, "campaigns:read");
-  if (getMethod(event) !== "GET") return jsonResponse(event, 405, { error: "Method not allowed." });
-  const result = await listPublicCampaigns(db, authenticatedKey.organizationId, {
-    limit: event.queryStringParameters?.limit,
-    cursor: event.queryStringParameters?.cursor
-  });
-  return jsonResponse(event, 200, result);
+  const method = getMethod(event);
+  if (method === "GET") {
+    requireApiScope(authenticatedKey, "campaigns:read");
+    const result = await listPublicCampaigns(db, authenticatedKey.organizationId, {
+      limit: event.queryStringParameters?.limit,
+      cursor: event.queryStringParameters?.cursor
+    });
+    return jsonResponse(event, 200, result);
+  }
+  if (method !== "POST") return jsonResponse(event, 405, { error: "Method not allowed." });
+  requireApiScope(authenticatedKey, "campaigns:write");
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  const idempotencyKey = getHeader(event, "idempotency-key");
+  if (!idempotencyKey) return jsonResponse(event, 400, { error: "Idempotency-Key is required when creating a campaign draft." });
+  const result = await runIdempotentApiRequest(db, authenticatedKey, idempotencyKey,
+    { method: "POST", resource: "campaign-drafts", payload: body }, async () => {
+      const definition = normalizeCampaignDefinition(body);
+      const normalizedInput = normalizeCampaignRecipients(body.recipients);
+      const suppression = await filterSuppressedCampaignRecipients(db, authenticatedKey.organizationId, normalizedInput.recipients);
+      const recipients = suppression.recipients;
+      const skipped = normalizedInput.skipped + suppression.suppressed;
+      if (!recipients.length) {
+        const error = new Error("No eligible recipients remain after WhatsApp opt-out suppressions.");
+        error.statusCode = 400;
+        throw error;
+      }
+      const connections = await listWhatsAppConnections(db, authenticatedKey.organizationId);
+      if (!connections.some(item => item.phoneNumberId === definition.phoneNumberId && item.connected)) {
+        const error = new Error("The selected WhatsApp number is not connected to this workspace.");
+        error.statusCode = 404;
+        throw error;
+      }
+      const credentials = await getWhatsAppCredentials(db, authenticatedKey.organizationId, definition.phoneNumberId);
+      const version = process.env.GRAPH_API_VERSION || "v26.0";
+      const templateUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(definition.wabaId)}/message_templates`);
+      templateUrl.searchParams.set("fields", "name,status,language,category,components");
+      templateUrl.searchParams.set("name", definition.templateName);
+      templateUrl.searchParams.set("limit", "100");
+      const templateResponse = await fetch(templateUrl.toString(), {
+        headers: { Authorization: `Bearer ${credentials.accessToken}` }
+      });
+      const templatePayload = await templateResponse.json().catch(() => ({}));
+      if (!templateResponse.ok) {
+        const error = new Error(templatePayload.error?.message || "Meta could not verify this WhatsApp template.");
+        error.statusCode = 502;
+        throw error;
+      }
+      const approved = (Array.isArray(templatePayload.data) ? templatePayload.data : []).find(item =>
+        item.name === definition.templateName && item.language === definition.language &&
+        item.status === "APPROVED" && String(item.category || "").toUpperCase() === definition.category
+      );
+      if (!approved) {
+        const error = new Error("The selected template must be approved in the selected language and category.");
+        error.statusCode = 400;
+        throw error;
+      }
+      const components = Array.isArray(approved.components) ? approved.components : [];
+      const bodyText = components.find(item => item.type === "BODY")?.text || "";
+      const headerDefinition = components.find(item => item.type === "HEADER");
+      const headerText = headerDefinition?.format === "TEXT" ? headerDefinition.text || "" : "";
+      const placeholders = [...String(bodyText).matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
+      const headerPlaceholders = [...String(headerText).matchAll(/\{\{\s*(\d+)\s*\}\}/g)];
+      const requiredVariables = placeholders.length ? Math.max(...placeholders) : 0;
+      if ((headerDefinition && headerDefinition.format !== "TEXT") || headerPlaceholders.length > 0 ||
+          components.some(item => item.type === "BUTTONS" && Array.isArray(item.buttons) &&
+            item.buttons.some(button => button.type === "URL" && String(button.url || "").includes("{{")))) {
+        const error = new Error("Campaign drafts currently support body-text variables only; media headers and dynamic URL buttons are not supported.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (recipients.some(recipient => (recipient.variables.length || definition.variables.length) !== requiredVariables)) {
+        const error = new Error(`Every recipient must have exactly ${requiredVariables} body variable(s).`);
+        error.statusCode = 400;
+        throw error;
+      }
+      const campaignRef = db.collection("organizations").doc(authenticatedKey.organizationId).collection("campaigns").doc();
+      const now = new Date();
+      await campaignRef.set({
+        ...definition, organizationId: authenticatedKey.organizationId, status: "preparing",
+        recipientCount: recipients.length, skippedRecipients: skipped, sentCount: 0, failedCount: 0,
+        uncertainCount: 0, deliveredCount: 0, readCount: 0, deliveryFailedCount: 0, skippedCount: 0,
+        createdBy: `api:${authenticatedKey.keyId}`, createdAt: now, updatedAt: now
+      });
+      try {
+        for (let offset = 0; offset < recipients.length; offset += 400) {
+          const batch = db.batch();
+          for (const recipient of recipients.slice(offset, offset + 400)) {
+            const recipientId = crypto.createHash("sha256").update(recipient.phone).digest("hex");
+            batch.set(campaignRef.collection("recipients").doc(recipientId), {
+              phone: recipient.phone, optedIn: true, consentAt: recipient.consentAt,
+              consentSource: recipient.consentSource,
+              variables: recipient.variables.length ? recipient.variables : definition.variables,
+              status: "pending", createdAt: now, updatedAt: now
+            });
+          }
+          await batch.commit();
+        }
+        await campaignRef.set({ status: "draft", updatedAt: new Date() }, { merge: true });
+      } catch (error) {
+        await campaignRef.set({
+          status: "failed",
+          preparationError: String(error?.message || "Campaign draft preparation failed.").slice(0, 300),
+          updatedAt: new Date()
+        }, { merge: true });
+        throw error;
+      }
+      return { data: {
+        id: campaignRef.id, name: definition.name, status: "draft",
+        recipientCount: recipients.length, skippedRecipients: skipped,
+        templateName: definition.templateName, language: definition.language,
+        category: definition.category, phoneNumberId: definition.phoneNumberId,
+        createdAt: now.toISOString()
+      }, statusCode: 201 };
+    });
+  const { statusCode = 201, ...response } = result;
+  return jsonResponse(event, statusCode, response);
 }
 
 async function handlePublicApiContacts(event) {
