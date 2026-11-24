@@ -430,6 +430,41 @@ async function handlePublicApiLeads(event) {
   return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
+async function handlePublicApiTemplates(event) {
+  const db = getDb();
+  const authenticatedKey = await authenticateOrganizationApiKey(db, getHeader(event, "authorization"));
+  requireApiScope(authenticatedKey, "templates:read");
+  if (getMethod(event) !== "GET") return jsonResponse(event, 405, { error: "Method not allowed." });
+  const params = event.queryStringParameters || {};
+  const phoneNumberId = String(params.phoneNumberId || "");
+  const wabaId = String(params.wabaId || "");
+  if (!/^[0-9]{5,32}$/.test(phoneNumberId) || !/^[0-9]{5,32}$/.test(wabaId)) {
+    return jsonResponse(event, 400, { error: "A valid phoneNumberId and WhatsApp Business Account ID are required." });
+  }
+  const connections = await listWhatsAppConnections(db, authenticatedKey.organizationId);
+  if (!connections.some(item => item.phoneNumberId === phoneNumberId && item.connected)) {
+    return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the API key workspace." });
+  }
+  const credentials = await getWhatsAppCredentials(db, authenticatedKey.organizationId, phoneNumberId);
+  const version = process.env.GRAPH_API_VERSION || "v26.0";
+  const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
+  url.searchParams.set("fields", "id,name,status,language,category,components");
+  url.searchParams.set("limit", "100");
+  const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) return jsonResponse(event, 502, {
+    error: payload.error?.message || "Meta could not load WhatsApp templates."
+  });
+  return jsonResponse(event, 200, {
+    templates: Array.isArray(payload.data) ? payload.data.map(item => ({
+      id: String(item.id || ""), name: String(item.name || ""), status: String(item.status || "UNKNOWN"),
+      language: String(item.language || ""), category: String(item.category || ""),
+      components: Array.isArray(item.components) ? item.components : []
+    })) : [],
+    hasNext: Boolean(payload.paging?.next)
+  });
+}
+
 async function handlePublicApiMessages(event) {
   const db = getDb();
   const authenticatedKey = await authenticateOrganizationApiKey(db, getHeader(event, "authorization"));
@@ -3753,6 +3788,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Organization API key request failed:", error.statusCode || "API_KEY_REQUEST_FAILED");
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "API key request could not be completed." });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/public/v1/templates")) {
+    try { return await handlePublicApiTemplates(event); }
+    catch (error) {
+      console.error("Public templates API request failed:", error.statusCode || "PUBLIC_API_REQUEST_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Public templates API request could not be completed." });
     }
   }
 
