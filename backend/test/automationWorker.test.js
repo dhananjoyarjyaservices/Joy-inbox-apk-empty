@@ -150,3 +150,12 @@ test("keeps definitive send rejections failed and safe retryable rate limits que
   assert.equal(getFailureDisposition(Object.assign(new Error("rate limited"), { metaStatusCode: 429 }), true, 5), "failed");
   assert.equal(getFailureDisposition(Object.assign(new Error("temporary issue"), { retryable: true }), false, 1), "queued");
 });
+
+
+test("automation queue continues only while its source rule remains enabled", () => {
+  const { automationRuleAllowsQueue } = require("../src/automationWorker");
+  assert.equal(automationRuleAllowsQueue({ exists: true, data: () => ({ enabled: true }) }), true);
+  assert.equal(automationRuleAllowsQueue({ exists: true, data: () => ({ enabled: false }) }), false);
+  assert.equal(automationRuleAllowsQueue({ exists: false, data: () => ({ enabled: true }) }), false);
+  assert.equal(automationRuleAllowsQueue(null), false);
+});
