@@ -46,7 +46,7 @@ Legend:
 | Team management, roles and invitations | Implemented (code) | Owner/admin/agent permissions, hashed invitations, verified-email acceptance and seat enforcement. Email sending provider is not configured. |
 | Notification center, push and sound | Implemented (code) | Tenant notifications, push-device registration/preferences and notification sound hooks; real-device acceptance pending. |
 | Subscription plans, 7-day trial and usage enforcement | Partial / external validation pending | Monthly/annual plan logic, trial policy, quotas and Stripe Checkout/Portal/webhook code exist. Actual ten Stripe Price IDs, test checkout lifecycle and live payment activation are not configured. |
-| Public developer APIs and customer-configurable outbound webhooks | Partial | Versioned public contacts read/write endpoints and scoped hashed API keys with expiry/revocation exist. Lead/message/campaign/template scopes, rate limits, cursor pagination, idempotency, usage analytics and customer-managed outbound webhook subscriptions/delivery remain missing. |
+| Public developer APIs and customer-configurable outbound webhooks | Partial | Versioned public contacts and CRM leads read/write endpoints now exist, with hashed expiring scoped API keys and a fixed per-key rate limit. Message/campaign/template scopes, cursor pagination, idempotency, usage analytics and delivery history/replay remain missing. |
 | Instagram inbox and Instagram automation | Missing | No Instagram channel integration or inbox implementation found. |
 | RCS channel and WhatsApp-to-RCS fallback | Missing | No RCS provider/channel implementation found. |
 | Click-to-WhatsApp ads launcher/conversion analytics | Missing | No CTWA ad management or Meta conversion-event pipeline found. |
