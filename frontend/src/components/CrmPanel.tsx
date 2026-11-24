@@ -194,6 +194,16 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     finally { setSaving(false); }
   }
 
+  async function updateStageProbability(stage: CrmStage, probability: number) {
+    if (!Number.isInteger(probability) || probability < 0 || probability > 100) return;
+    setSaving(true); setError("");
+    try {
+      await saveCrmStage(organizationId, { ...stage, probability });
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Stage probability could not be saved."); }
+    finally { setSaving(false); }
+  }
+
   async function addField(event: FormEvent) {
     event.preventDefault();
     const label = fieldLabel.trim();
@@ -281,7 +291,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
       <div className="mb-5 grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-2">
         <form onSubmit={addStage} className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-xs text-gray-600">Add pipeline stage<input value={stageName} onChange={event => setStageName(event.target.value)} maxLength={50} placeholder="Negotiation" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label><label className="w-24 text-xs text-gray-600">Win chance %<input type="number" min="0" max="100" step="1" value={stageProbability} onChange={event => setStageProbability(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm"/></label><button disabled={saving || !stageName.trim() || !Number.isInteger(Number(stageProbability)) || Number(stageProbability) < 0 || Number(stageProbability) > 100} className="rounded-lg border px-3 py-2 text-xs text-[#075e54]"><Plus size={14} className="mr-1 inline"/> Stage</button></form>
         <form onSubmit={addField} className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-xs text-gray-600">Add custom field<input value={fieldLabel} onChange={event => setFieldLabel(event.target.value)} maxLength={60} placeholder="Company size" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label><select value={fieldType} onChange={event => setFieldType(event.target.value as CrmField["type"])} className="rounded-lg border bg-white p-2 text-xs"><option value="text">Text</option><option value="number">Number</option><option value="date">Date</option><option value="boolean">Yes / No</option><option value="select">Dropdown</option></select><button disabled={saving || !fieldLabel.trim()} className="rounded-lg border px-3 py-2 text-xs text-[#075e54]"><Plus size={14} className="mr-1 inline"/> Field</button>{fieldType === "select" && <input value={fieldOptions} onChange={event => setFieldOptions(event.target.value)} placeholder="Option A, Option B" className="w-full rounded-lg border p-2 text-xs"/>}</form>
-        <div className="text-[11px] text-gray-500 md:col-span-2">Custom fields are defined and validated for CRM leads. This first pass supports up to 30 workspace fields and 20 pipeline stages. Follow-up reminders, bulk import and advanced reporting are still pending.</div>
+        <div className="md:col-span-2"><h4 className="mb-2 text-xs font-semibold text-gray-700">Stage win probabilities</h4><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{activeStages.map(stage => <label key={stage.id} className="flex items-center justify-between gap-3 rounded-lg border p-2 text-xs text-gray-600"><span className="truncate">{stage.name}</span><span className="flex shrink-0 items-center gap-1"><input type="number" min="0" max="100" step="1" value={stage.probability ?? (stage.isWon ? 100 : stage.isLost ? 0 : 50)} disabled={saving} onChange={event => { const probability = Number(event.target.value); setStages(current => current.map(item => item.id === stage.id ? { ...item, probability } : item)); }} onBlur={event => void updateStageProbability(stage, Number(event.target.value))} className="w-16 rounded-md border p-1.5 text-right tabular-nums"/><span>%</span></span></label>)}</div></div><div className="text-[11px] text-gray-500 md:col-span-2">Custom fields are defined and validated for CRM leads. This first pass supports up to 30 workspace fields and 20 pipeline stages. Follow-up reminders, bulk import and advanced reporting are still pending.</div>
       </div>
       )}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">Pipeline board</h3><span className="text-xs text-gray-500">{leads.length} leads · {fields.filter(field => field.active).length} custom fields</span></div>
