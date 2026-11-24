@@ -41,7 +41,7 @@ Required scope: `messages:write`. The request must include the connected `phoneN
 ```json
 { "phoneNumberId": "123456789012345", "to": "919876543210", "text": "Thanks for contacting us." }
 ```
-The number must belong to the API key's workspace. The API sends through the WhatsApp Cloud API and stores the text and delivery metadata in the workspace inbox; it does not store customer media. Use a unique `Idempotency-Key` for safe retries. WhatsApp policy, recipient opt-in, messaging windows and Meta account limits still apply. A successful response means Meta accepted the message, not that the recipient device received it.
+The number must belong to the API key's workspace. The API sends through the WhatsApp Cloud API and stores the text and delivery metadata in the workspace inbox; it does not store customer media. A unique `Idempotency-Key` is required for every send and makes retries safe. Sends consume the workspace outbound-message allowance and obey its hard-block plan limit. WhatsApp policy, recipient opt-in, messaging windows and Meta account limits still apply. A successful response means Meta accepted the message, not that the recipient device received it.
 
 ## Approved WhatsApp templates
 
