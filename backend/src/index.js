@@ -62,6 +62,8 @@ const {
   createOrganizationWebhook,
   listOrganizationWebhooks,
   revokeOrganizationWebhook,
+  listOrganizationWebhookDeliveries,
+  replayOrganizationWebhookDelivery,
   enqueueOrganizationWebhookEvent,
   processPendingWebhookDeliveries
 } = require("./publicWebhooks");
@@ -303,6 +305,30 @@ async function handleOrganizationWebhooks(event) {
   }
   const result = await createOrganizationWebhook(getDb(), organization.id, decoded.uid, body);
   return jsonResponse(event, 201, result);
+}
+
+async function handleOrganizationWebhookDeliveries(event) {
+  const decoded = await authenticateUser(event);
+  const method = getMethod(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); } catch {
+      return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+    }
+  }
+  const organizationId = method === "GET"
+    ? event.queryStringParameters?.organizationId
+    : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "api:manage");
+  if (method === "GET") {
+    const rawLimit = Number(event.queryStringParameters?.limit || 50);
+    const limit = Number.isInteger(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 50;
+    const deliveries = await listOrganizationWebhookDeliveries(getDb(), organization.id, limit);
+    return jsonResponse(event, 200, { deliveries });
+  }
+  const result = await replayOrganizationWebhookDelivery(getDb(), organization.id, String(body.deliveryId || ""));
+  return jsonResponse(event, 200, result);
 }
 
 async function handleOrganizationApiKeys(event) {
@@ -3543,6 +3569,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Organization webhook request failed:", error.statusCode || "WEBHOOK_REQUEST_FAILED");
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Webhook request could not be completed." });
+    }
+  }
+
+  if (["GET", "POST"].includes(method) && path.endsWith("/organizations/developer/webhook-deliveries")) {
+    try { return await handleOrganizationWebhookDeliveries(event); }
+    catch (error) {
+      console.error("Organization webhook delivery history request failed:", error.statusCode || "WEBHOOK_DELIVERY_HISTORY_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Webhook delivery history could not be loaded." });
     }
   }
 
