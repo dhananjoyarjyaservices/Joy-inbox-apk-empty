@@ -41,6 +41,14 @@ const { listTenantResource, saveTenantResource, deleteTenantResource } = require
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
 const { updateTenantChatAssignment } = require("./tenantChatAssignment");
 const { requireOrganization, requirePermission, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
+const {
+  getEmbeddedSignupConfig,
+  createSignupSession,
+  claimSignupSession,
+  finishSignupSession,
+  completeEmbeddedSignup,
+  generateRegistrationPin
+} = require("./embeddedSignup");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { isValidBase64, isAllowedTemplateMedia } = require("./templateValidation");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
@@ -253,6 +261,72 @@ async function handleWhatsAppConnectionHealth(event) {
     }
   }));
   return jsonResponse(event, 200, { results, checkedAt });
+}
+
+async function handleWhatsAppEmbeddedSignupConfig(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "whatsapp:manage");
+  const config = getEmbeddedSignupConfig();
+  return jsonResponse(event, 200, {
+    enabled: Boolean(config),
+    ...(config ? {
+      appId: config.appId,
+      configId: config.configId,
+      graphApiVersion: config.graphApiVersion,
+      ...(config.solutionId ? { solutionId: config.solutionId } : {})
+    } : {})
+  });
+}
+
+async function handleWhatsAppEmbeddedSignupSession(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "whatsapp:manage");
+  if (!getEmbeddedSignupConfig()) {
+    return jsonResponse(event, 503, { error: "WhatsApp self-service onboarding is not configured yet." });
+  }
+  const session = await createSignupSession(getDb(), organization.id, decoded.uid);
+  return jsonResponse(event, 201, session);
+}
+
+async function handleWhatsAppEmbeddedSignupComplete(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "whatsapp:manage");
+  const claimed = await claimSignupSession(getDb(), organization.id, decoded.uid, body.sessionId);
+  try {
+    const registrationPin = generateRegistrationPin();
+    const result = await completeEmbeddedSignup({
+      code: body.code,
+      wabaId: body.wabaId,
+      phoneNumberId: body.phoneNumberId,
+      registrationPin
+    });
+    const connection = await saveWhatsAppConnection(getDb(), organization, {
+      phoneNumberId: result.phoneNumberId,
+      wabaId: result.wabaId,
+      accessToken: result.accessToken,
+      registrationPin: result.registrationPin,
+      displayPhoneNumber: result.displayPhoneNumber,
+      verifiedName: result.verifiedName
+    });
+    await finishSignupSession(claimed.ref, "completed");
+    return jsonResponse(event, 200, { connection, onboarding: "connected" });
+  } catch (error) {
+    await finishSignupSession(claimed.ref, "failed", error.metaCode || error.statusCode || "ONBOARDING_FAILED")
+      .catch(() => {});
+    throw error;
+  }
 }
 
 async function handleWhatsAppConnect(event) {
@@ -3269,6 +3343,30 @@ exports.handler = async (event) => {
     return jsonResponse(event, 410, {
       error: "This legacy endpoint is disabled. Use the organization-scoped Joy Inbox API."
     });
+  }
+
+  if (method === "GET" && path.endsWith("/whatsapp/embedded-signup/config")) {
+    try { return await handleWhatsAppEmbeddedSignupConfig(event); }
+    catch (error) {
+      console.error("WhatsApp Embedded Signup config could not load:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "WhatsApp onboarding configuration could not be loaded." });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/whatsapp/embedded-signup/session")) {
+    try { return await handleWhatsAppEmbeddedSignupSession(event); }
+    catch (error) {
+      console.error("WhatsApp Embedded Signup session could not start:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "WhatsApp onboarding could not be started." });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/whatsapp/embedded-signup/complete")) {
+    try { return await handleWhatsAppEmbeddedSignupComplete(event); }
+    catch (error) {
+      console.error("WhatsApp Embedded Signup could not complete:", error.metaCode || error.statusCode || "ONBOARDING_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "WhatsApp connection could not be completed." });
+    }
   }
 
   if (method === "GET" && path.endsWith("/whatsapp/connections")) {
