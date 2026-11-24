@@ -284,6 +284,7 @@ export default function Setup() {
         </button>
         {!embeddedConfigLoading && !embeddedConfig.enabled && <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Self-service WhatsApp connection is being configured by Joy Inbox. Please try again later.</div>}
         <p className="mt-3 text-xs text-gray-500">Meta will ask you to sign in, select your business, verify ownership of your phone number and approve the requested permissions. Joy Inbox never asks you to share your password or access token.</p>
+        <p className="mt-2 text-xs text-gray-500">{embeddedConfig.partnerMode === "solution_partner" ? "WhatsApp usage will be billed through Joy Inbox's approved Meta partner credit line." : "Meta bills WhatsApp usage directly to your business. Meta may ask you to add a payment method in WhatsApp Manager."}</p>
       </section>
       {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-xl bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
