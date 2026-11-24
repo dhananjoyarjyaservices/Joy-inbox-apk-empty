@@ -149,10 +149,9 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   const body = inboundMessage.text.body.trim().slice(0, 4096);
   if (!body) return;
   const rulesSnapshot = await organization.ref.collection("automationRules").limit(100).get();
-  const rules = rulesSnapshot.docs
+  const rules = sortAutomationRules(rulesSnapshot.docs
     .map((document) => ({ id: document.id, ...document.data() }))
-    .filter((rule) => rule.enabled === true && typeof rule.keyword === "string" && (typeof rule.response === "string" || (Array.isArray(rule.steps) && rule.steps.length > 0)))
-    
+    .filter((rule) => rule.enabled === true && typeof rule.keyword === "string" && (typeof rule.response === "string" || (Array.isArray(rule.steps) && rule.steps.length > 0))));
   const rule = rules.find((item) => matchesAutomationRule(item, body));
   if (!rule) return;
 
