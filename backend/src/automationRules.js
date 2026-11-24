@@ -12,13 +12,16 @@ function normalizeAutomationRule(input) {
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Automation rule contains unsupported fields.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const keyword = typeof input.keyword === "string" ? input.keyword.trim().slice(0, 80) : "";
-  const matchType = ["contains", "exact", "starts_with"].includes(input.matchType) ? input.matchType : "contains";
-  const priority = Number.isInteger(input.priority) ? Math.max(0, Math.min(1000, input.priority)) : 100;
+  if (input.matchType !== undefined && !["contains", "exact", "starts_with"].includes(input.matchType)) throw httpError("Match type must be contains, exact or starts_with.", 400);
+  const matchType = input.matchType || "contains";
+  if (input.priority !== undefined && (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 1000)) throw httpError("Priority must be an integer from 0 to 1,000.", 400);
+  const priority = input.priority === undefined ? 100 : input.priority;
   const rawSteps = Array.isArray(input.steps) ? input.steps : [input.response];
   if (rawSteps.length < 1 || rawSteps.length > 5) throw httpError("An automation flow must contain between 1 and 5 reply steps.", 400);
   const steps = rawSteps.map((step) => {
     if (typeof step === "string") return { message: step.trim(), delaySeconds: 0 };
     if (!step || typeof step !== "object" || Array.isArray(step)) return { message: "", delaySeconds: 0 };
+    if (Object.keys(step).some((key) => !["message", "delaySeconds"].includes(key))) throw httpError("Workflow steps may only contain message and delaySeconds.", 400);
     const delaySeconds = step.delaySeconds === undefined ? 0 : step.delaySeconds;
     if (!Number.isInteger(delaySeconds) || delaySeconds < 0 || delaySeconds > 86400) throw httpError("Each step delay must be between 0 and 86,400 seconds.", 400);
     return { message: typeof step.message === "string" ? step.message.trim() : "", delaySeconds };
