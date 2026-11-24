@@ -9,7 +9,7 @@ function aggregateCrmSalesReport(leads, stages, members, limited = false, genera
   const byOwner = new Map();
   const bySource = new Map();
   const byCurrency = new Map();
-  let won = 0, lost = 0, open = 0, wonValue = 0, openValue = 0, lostValue = 0;
+  let won = 0, lost = 0, open = 0, wonValue = 0, openValue = 0, lostValue = 0, weightedOpenValue = 0;
 
   for (const lead of leads) {
     const stage = stageMap.get(lead.stageId) || {};
@@ -17,11 +17,11 @@ function aggregateCrmSalesReport(leads, stages, members, limited = false, genera
     const currency = /^[A-Z]{3}$/.test(String(lead.currency || "INR").toUpperCase()) ? String(lead.currency || "INR").toUpperCase() : "INR";
     const isWon = stage.isWon === true;
     const isLost = stage.isLost === true;
-    const currencyRow = byCurrency.get(currency) || { currency, total: 0, won: 0, lost: 0, open: 0, wonValue: 0, lostValue: 0, openValue: 0 };
+    const currencyRow = byCurrency.get(currency) || { currency, total: 0, won: 0, lost: 0, open: 0, wonValue: 0, lostValue: 0, openValue: 0, weightedOpenValue: 0 };
     currencyRow.total += 1;
     if (isWon) { won += 1; currencyRow.won += 1; currencyRow.wonValue += value; if (currency === "INR") wonValue += value; }
     else if (isLost) { lost += 1; currencyRow.lost += 1; currencyRow.lostValue += value; if (currency === "INR") lostValue += value; }
-    else { open += 1; currencyRow.open += 1; currencyRow.openValue += value; if (currency === "INR") openValue += value; }
+    else { const probability = Number.isInteger(stage.probability) && stage.probability >= 0 && stage.probability <= 100 ? stage.probability : 50; const weighted = value * probability / 100; open += 1; currencyRow.open += 1; currencyRow.openValue += value; currencyRow.weightedOpenValue += weighted; if (currency === "INR") { openValue += value; weightedOpenValue += weighted; } }
     byCurrency.set(currency, currencyRow);
 
     const stageId = String(lead.stageId || "unknown");
@@ -57,7 +57,7 @@ function aggregateCrmSalesReport(leads, stages, members, limited = false, genera
     limited,
     total: leads.length,
     won, lost, open,
-    wonValue, openValue, lostValue,
+    wonValue, openValue, lostValue, weightedOpenValue: Math.round(weightedOpenValue * 100) / 100,
     conversionRate: closed ? Math.round((won / closed) * 1000) / 10 : 0,
     byStage: [...byStage.values()].sort((a, b) => a.name.localeCompare(b.name)),
     byOwner: [...byOwner.values()].sort((a, b) => b.wonValue - a.wonValue || b.total - a.total).slice(0, 20),
