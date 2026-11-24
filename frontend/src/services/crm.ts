@@ -77,6 +77,7 @@ export interface CrmSalesReport {
   byStage: Array<{ id: string; name: string; total: number; value: number; won: number; lost: number; open: number }>;
   byOwner: Array<{ uid: string; name: string; total: number; value: number; won: number; lost: number; open: number; wonValue: number }>;
   bySource: Array<{ source: string; total: number; value: number; won: number }>;
+  byCurrency: Array<{ currency: string; total: number; won: number; lost: number; open: number; wonValue: number; lostValue: number; openValue: number }>;
 }
 export async function getCrmSalesReport(organizationId: string): Promise<CrmSalesReport> {
   const user = auth.currentUser;
