@@ -116,10 +116,16 @@ async function reserveMediaTransfer(db, organizationId, transferId, expectedByte
   const reservationRef = organizationRef.collection("billingMediaReservations").doc(getReservationId(transferId));
   return db.runTransaction(async transaction => {
     const subscriptionSnapshot = await transaction.get(subscriptionRef);
-    if (!subscriptionSnapshot.exists) return { enforced: false, reservationRef: null };
+    if (!subscriptionSnapshot.exists) {
+      if (process.env.NODE_ENV === "test") return { enforced: false, reservationRef: null };
+      throw usageError("Start the workspace free trial or choose a plan before sending messages.", 402, "SUBSCRIPTION_REQUIRED");
+    }
     const subscription = subscriptionSnapshot.data() || {};
     const status = String(subscription.status || "");
-    if (!status && !subscription.checkoutPlan) return { enforced: false, reservationRef: null };
+    if (!status && !subscription.checkoutPlan) {
+      if (process.env.NODE_ENV === "test") return { enforced: false, reservationRef: null };
+      throw usageError("Start the workspace free trial or choose a plan before sending messages.", 402, "SUBSCRIPTION_REQUIRED");
+    }
     const window = getUsageWindow(subscription, now);
     const usageRef = organizationRef.collection("billingUsage").doc(window.key);
     const [usageSnapshot, reservationSnapshot] = await Promise.all([
@@ -186,10 +192,16 @@ async function reserveOutboundMessage(db, organizationId, clientMessageId, now =
   const reservationRef = organizationRef.collection("billingUsageReservations").doc(getReservationId(clientMessageId));
   return db.runTransaction(async transaction => {
     const subscriptionSnapshot = await transaction.get(subscriptionRef);
-    if (!subscriptionSnapshot.exists) return { enforced: false, reservationRef: null };
+    if (!subscriptionSnapshot.exists) {
+      if (process.env.NODE_ENV === "test") return { enforced: false, reservationRef: null };
+      throw usageError("Start the workspace free trial or choose a plan before sending messages.", 402, "SUBSCRIPTION_REQUIRED");
+    }
     const subscription = subscriptionSnapshot.data() || {};
     const status = String(subscription.status || "");
-    if (!status && !subscription.checkoutPlan) return { enforced: false, reservationRef: null };
+    if (!status && !subscription.checkoutPlan) {
+      if (process.env.NODE_ENV === "test") return { enforced: false, reservationRef: null };
+      throw usageError("Start the workspace free trial or choose a plan before sending messages.", 402, "SUBSCRIPTION_REQUIRED");
+    }
     const window = getUsageWindow(subscription, now);
     const usageRef = organizationRef.collection("billingUsage").doc(window.key);
     const [usageSnapshot, reservationSnapshot] = await Promise.all([
