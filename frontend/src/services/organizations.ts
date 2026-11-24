@@ -301,6 +301,11 @@ export interface OrganizationBillingState {
       messageLimit: number;
       percent: number;
       thresholdsReached: number[];
+      mediaBytesUsed: number;
+      mediaBytesReserved: number;
+      mediaLimitBytes: number;
+      mediaPercent: number;
+      mediaThresholdsReached: number[];
       periodStart: string;
       periodEnd: string;
       trial: boolean;
