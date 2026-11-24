@@ -146,6 +146,33 @@ export async function getWhatsAppRegistrationPin(organizationId: string, phoneNu
   return result.registrationPin;
 }
 
+export interface OrganizationApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  status: "active" | "revoked";
+  createdAt?: unknown;
+  expiresAt?: unknown;
+  lastUsedAt?: unknown;
+  revokedAt?: unknown;
+}
+export async function listOrganizationApiKeys(organizationId: string): Promise<OrganizationApiKey[]> {
+  const result = await request(`/organizations/developer/api-keys?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.apiKeys) ? result.apiKeys : [];
+}
+export async function createOrganizationApiKey(input: {
+  organizationId: string;
+  name: string;
+  scopes: string[];
+  expiryDays: number;
+}): Promise<{ apiKey: OrganizationApiKey & { apiKey: string } }> {
+  return request("/organizations/developer/api-keys", "POST", input);
+}
+export async function revokeOrganizationApiKey(organizationId: string, keyId: string): Promise<void> {
+  await request("/organizations/developer/api-keys", "DELETE", { organizationId, keyId });
+}
+
 export interface OrganizationSlaSettings { enabled: boolean; targetMinutes: number; }
 export async function getOrganizationSlaSettings(organizationId: string): Promise<OrganizationSlaSettings> {
   const result = await request(`/organizations/sla/settings?organizationId=${encodeURIComponent(organizationId)}`);
