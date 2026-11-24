@@ -102,5 +102,6 @@ The latest frontend code-bearing commit is `fd16ab16b499800a06278fd8615405b3899a
 - Backend tests with Firestore emulator (run 45349969947, backend commit e72f67e): all 284 tests passed, including Firestore rules coverage; the production-only Lambda package was built and ZIP integrity verified.
 - Frontend build (run 45350442005, frontend commit fd16ab1): all 8 frontend tests, TypeScript check and Vite production build passed.
 - Joy Inbox CI (run 45350441991, combined branch source): backend unit tests passed (283 passed, one emulator-only test skipped in this non-emulator workflow); frontend tests and production build passed.
+- Cloudflare Pages preview for frontend commit `fd16ab1` deployed successfully: https://17aad7de.joy-inbox-apk-empty.pages.dev (build/hosting verification only; Firebase/API runtime acceptance remains pending).
 
 The generated Lambda ZIP is a validation artifact only; no AWS Lambda was deployed. These checks do not prove that a live Firebase project, Meta account, Stripe account, email provider or customer device is correctly configured. Documentation-only commits may follow these code-bearing commits; rerun checks for any later source-code changes before treating them as verified.
