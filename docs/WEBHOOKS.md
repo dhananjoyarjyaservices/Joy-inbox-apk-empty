@@ -24,15 +24,15 @@ Example Node.js verification:
 ```js
 const crypto = require("crypto");
 
-function verifyJoyWebhook(rawBody, signatureHeader, secret) {
-  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+function verifyJoyWebhook(rawBody, timestampHeader, signatureHeader, secret) {
+  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(`${timestampHeader}.${rawBody}`).digest("hex");
   const received = Buffer.from(String(signatureHeader || ""));
   const expectedBytes = Buffer.from(expected);
   return received.length === expectedBytes.length && crypto.timingSafeEqual(received, expectedBytes);
 }
 ```
 
-Verify the signature against the exact raw request body before parsing JSON. Do not verify against re-serialized JSON.
+Verify the signature against the exact raw request body and the received timestamp before parsing JSON. Do not verify against re-serialized JSON. Use the delivery ID to reject duplicate deliveries.
 
 ## Retries and idempotency
 
