@@ -67,10 +67,26 @@ test("Embedded Signup config is public-only and unavailable until app/config IDs
     appId: env.META_APP_ID,
     configId: env.META_EMBEDDED_SIGNUP_CONFIG_ID,
     graphApiVersion: "v26.0",
+    partnerMode: "tech_provider",
     solutionId: null
   });
   assert.equal(getEmbeddedSignupConfig({ META_APP_ID: env.META_APP_ID }), null);
   assert.equal(getEmbeddedSignupConfig({ ...env, META_APP_ID: "not-an-id" }), null);
+});
+
+
+
+test("Solution Partner mode requires its system user and credit-line configuration", () => {
+  const partnerEnv = {
+    ...env,
+    META_PARTNER_MODE: "solution_partner",
+    META_SYSTEM_USER_ID: "777777777777777",
+    META_SYSTEM_USER_ACCESS_TOKEN: "EAA" + "s".repeat(40),
+    META_EXTENDED_CREDIT_LINE_ID: "888888888888888",
+    META_CREDIT_LINE_CURRENCY: "INR"
+  };
+  assert.equal(getEmbeddedSignupConfig(partnerEnv).partnerMode, "solution_partner");
+  assert.equal(getEmbeddedSignupConfig({ ...partnerEnv, META_SYSTEM_USER_ACCESS_TOKEN: "" }), null);
 });
 
 test("signup session is bound to a workspace and user, expires and can only be claimed once", async () => {
