@@ -16,6 +16,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Tenant-scoped text messaging and webhook routing by Meta Phone Number ID.
 - [x] Tenant chat, contact and Quick Reply data foundations.
 - [x] Tenant inbox customer phone links validate international digits and open the contact in WhatsApp; unit tests cover valid and invalid numbers.
+- [x] Legacy connection-status credential lookup falls back to a still-connected per-number credential when the most recently configured primary number is disconnected; a regression test covers this multi-number edge case.
 - [x] Contact phone-number changes use a Firestore transaction, preserve creation timestamps and reject destination-number collisions; regression tests cover missing source and collision cases.
 - [x] Inbox assignment and agent-performance views page through the complete organization member list instead of silently stopping at the first 100 members.
 - [x] Assignment/state management, SLA checks and team notifications.
@@ -97,12 +98,17 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-Latest validated application source revision:
-- `1009c710514a6618341a7eadb52f050917af201b` (release-readiness documentation update; no runtime source files changed).
-- All three GitHub Actions workflows for this revision completed successfully:
-  - Backend tests (run 45354680346): 284 tests passed, zero failures or skips; Firestore emulator suite completed; production-only Lambda ZIP was created and integrity-checked.
-  - Frontend build (run 45354680278): 8 frontend tests passed; TypeScript and Vite production build passed. Largest generated chunk is 400.22 KB (Firestore SDK), and the build emitted no oversized-chunk warning.
-  - Joy Inbox CI (run 45354680285): backend unit tests and frontend TypeScript/tests/build both passed.
-- Cloudflare Pages preview for this revision deployed successfully: `https://658edcf8.joy-inbox-apk-empty.pages.dev`. Branch preview: `https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev`. A successful build/preview does not prove Firebase/API runtime connectivity.
+Latest branch head verified:
+- Pull request #1 head: `e27794bd3d82172abef43b8d7e6a038ba3db75fe`.
+- Backend tests (run 45355850518): **285 passed, 0 failed, 0 skipped**. Firestore emulator suite completed, and the production-only Lambda ZIP was created and integrity-checked.
+- Frontend build (run 45355850664): **8 tests passed, 0 failed, 0 skipped**; TypeScript and Vite production build passed.
+- Joy Inbox CI (run 45355850659): backend unit tests and frontend TypeScript/tests/build both passed.
+- Cloudflare Pages preview deployed successfully for this exact head: `https://75cd8b0a.joy-inbox-apk-empty.pages.dev`. Branch preview: `https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev`.
 
-The Lambda ZIP is a validation artifact only; no AWS Lambda was deployed. These checks do not prove that a live Firebase project, Meta account, Stripe account, email provider or customer device is correctly configured. Keep the PR draft until all external staging, security, backup/restore, accessibility and operational launch gates pass.
+## Static security review completed in repository
+
+Reviewed the current implementation paths for Firebase ID-token verification, active workspace membership and role permissions, legacy single-owner route kill-switch coverage, Firestore tenant read/write boundaries, Meta raw-body HMAC verification, Stripe timestamped HMAC verification, tenant Phone Number ID webhook routing, encrypted per-number credentials, outbound idempotency/uncertain delivery handling, subscription/usage fail-closed behavior and media metadata-only inbound persistence. The review found and fixed a multi-number connection-status fallback edge case; the regression is included in the passing 285-test backend suite.
+
+This is a repository-level static review, not an independent penetration test or live-service security certification. Staging verification, provider account configuration, external email delivery, AWS deployment/IAM review, load/concurrency testing against real Firestore, backup/restore rehearsal, legal/privacy review and mobile/accessibility acceptance remain open.
+
+The Lambda ZIP is a validation artifact only; no AWS Lambda was deployed. CI and preview success do not prove that a live Firebase project, Meta account, Stripe account, email provider or customer device is correctly configured. Keep PR #1 in draft until all external staging and launch gates pass.
