@@ -184,6 +184,19 @@ export interface OrganizationWebhook {
   createdAt?: unknown;
   lastDeliveryAt?: unknown;
 }
+export interface OrganizationWebhookDelivery {
+  id: string;
+  event: string;
+  eventId: string;
+  subscriptionId: string;
+  status: "pending" | "processing" | "delivered" | "failed" | "cancelled";
+  attempts: number;
+  responseStatus: number | null;
+  lastError: string | null;
+  createdAt?: string | null;
+  deliveredAt?: string | null;
+  nextAttemptAt?: string | null;
+}
 export async function listOrganizationWebhooks(organizationId: string): Promise<OrganizationWebhook[]> {
   const result = await request(`/organizations/developer/webhooks?organizationId=${encodeURIComponent(organizationId)}`);
   return Array.isArray(result.webhooks) ? result.webhooks : [];
@@ -198,6 +211,14 @@ export async function createOrganizationWebhook(input: {
 }
 export async function revokeOrganizationWebhook(organizationId: string, webhookId: string): Promise<void> {
   await request("/organizations/developer/webhooks", "DELETE", { organizationId, webhookId });
+}
+export async function listOrganizationWebhookDeliveries(organizationId: string, limit = 50): Promise<OrganizationWebhookDelivery[]> {
+  const query = new URLSearchParams({ organizationId, limit: String(limit) });
+  const result = await request(`/organizations/developer/webhook-deliveries?${query.toString()}`);
+  return Array.isArray(result.deliveries) ? result.deliveries : [];
+}
+export async function replayOrganizationWebhookDelivery(organizationId: string, deliveryId: string): Promise<void> {
+  await request("/organizations/developer/webhook-deliveries", "POST", { organizationId, deliveryId });
 }
 
 export interface OrganizationSlaSettings { enabled: boolean; targetMinutes: number; }
