@@ -119,7 +119,7 @@ test("every unscoped HTTP route is either explicitly public/system or covered by
   );
   const explicitSystemRoutes = new Set(["/webhook", "/billing/stripe-webhook"]);
   // Public developer API routes authenticate with scoped, hashed Joy Inbox API keys.
-  const explicitApiKeyRoutes = new Set(["/public/v1/contacts", "/public/v1/leads", "/public/v1/messages", "/public/v1/templates"]);
+  const explicitApiKeyRoutes = new Set(["/public/v1/contacts", "/public/v1/leads", "/public/v1/messages", "/public/v1/templates", "/public/v1/campaigns"]);
   // These short suffixes are only used by the organization-scoped CRM router:
   // /organizations/crm/fields and /organizations/crm/stages.
   const explicitTenantRouteSuffixes = new Set(["/fields", "/stages"]);
