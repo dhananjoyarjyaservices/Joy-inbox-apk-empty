@@ -206,6 +206,55 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
   };
 }
 
+async function runIdempotentApiRequest(db, authenticatedKey, idempotencyKey, operation, now = Date.now()) {
+  if (idempotencyKey === undefined || idempotencyKey === null || idempotencyKey === "") {
+    return { ...(await operation()), replayed: false };
+  }
+  if (typeof idempotencyKey !== "string" || idempotencyKey.length > 128 ||
+      !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+    throw httpError("Idempotency-Key must be 8–128 letters, numbers, dots, underscores, colons or hyphens.", 400);
+  }
+  if (!authenticatedKey?.keyId || !/^[a-f0-9]{64}$/.test(authenticatedKey.keyId)) {
+    throw httpError("A valid authenticated API key is required.", 401);
+  }
+  const id = crypto.createHash("sha256").update(authenticatedKey.keyId + ":" + idempotencyKey).digest("hex");
+  const ref = db.collection("publicApiIdempotency").doc(id);
+  const expiresAt = new Date(now + 24 * 60 * 60 * 1000);
+  const reservation = await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists) {
+      const existing = snapshot.data() || {};
+      const existingExpiry = existing.expiresAt?.toDate ? existing.expiresAt.toDate().getTime() : new Date(existing.expiresAt).getTime();
+      if (Number.isFinite(existingExpiry) && existingExpiry > now) {
+        if (existing.keyId !== authenticatedKey.keyId) throw httpError("Idempotency key conflict.", 409);
+        if (existing.status === "completed") return { replayed: true, result: existing.result, statusCode: existing.statusCode };
+        throw httpError("A request with this Idempotency-Key is still processing. Retry shortly.", 409);
+      }
+    }
+    transaction.set(ref, {
+      keyId: authenticatedKey.keyId,
+      organizationId: authenticatedKey.organizationId,
+      status: "processing",
+      createdAt: new Date(now),
+      expiresAt
+    });
+    return { replayed: false };
+  });
+  if (reservation.replayed) return { ...reservation.result, statusCode: reservation.statusCode, replayed: true };
+  try {
+    const result = await operation();
+    const statusCode = Number.isInteger(result?.statusCode) ? result.statusCode : 200;
+    const response = result && Object.prototype.hasOwnProperty.call(result, "data")
+      ? { data: result.data }
+      : result;
+    await ref.set({ status: "completed", result: response, statusCode, completedAt: new Date(now) }, { merge: true });
+    return { ...response, statusCode, replayed: false };
+  } catch (error) {
+    await ref.delete().catch(() => {});
+    throw error;
+  }
+}
+
 function requireApiScope(authenticatedKey, scope) {
   if (!authenticatedKey?.scopes?.includes(scope)) throw httpError("This API key does not have the required permission.", 403);
 }
@@ -214,6 +263,7 @@ module.exports = {
   ALLOWED_SCOPES,
   MAX_REQUESTS_PER_MINUTE,
   listOrganizationApiUsage,
+  runIdempotentApiRequest,
   normalizeApiKeyInput,
   createOrganizationApiKey,
   listOrganizationApiKeys,
