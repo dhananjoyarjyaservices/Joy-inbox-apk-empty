@@ -430,6 +430,56 @@ async function handlePublicApiLeads(event) {
   return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
+async function handlePublicApiMessages(event) {
+  const db = getDb();
+  const authenticatedKey = await authenticateOrganizationApiKey(db, getHeader(event, "authorization"));
+  if (getMethod(event) !== "POST") return jsonResponse(event, 405, { error: "Method not allowed." });
+  requireApiScope(authenticatedKey, "messages:write");
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  const to = normalizePhoneNumber(body.to);
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  const phoneNumberId = typeof body.phoneNumberId === "string" ? body.phoneNumberId.trim() : "";
+  if (!/^[1-9][0-9]{7,14}$/.test(to)) return jsonResponse(event, 400, { error: "Recipient must be an international phone number in E.164 digits format." });
+  if (!text || text.length > 4096) return jsonResponse(event, 400, { error: "Text must contain 1–4096 characters." });
+  if (!/^[0-9]{5,32}$/.test(phoneNumberId)) return jsonResponse(event, 400, { error: "A connected phoneNumberId is required." });
+  const connections = await listWhatsAppConnections(db, authenticatedKey.organizationId);
+  const connection = connections.find(item => item.phoneNumberId === phoneNumberId && item.connected);
+  if (!connection) return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the API key workspace." });
+  const idempotent = await runIdempotentApiRequest(
+    db, authenticatedKey, getHeader(event, "idempotency-key"),
+    { method: "POST", resource: "messages", payload: { to, text, phoneNumberId } },
+    async () => {
+      const credentials = await getWhatsAppCredentials(db, authenticatedKey.organizationId, phoneNumberId);
+      const result = await sendWhatsAppText(to, text, undefined, credentials);
+      const timestamp = new Date();
+      const chatRef = getTenantChatRef(db, authenticatedKey.organizationId, to);
+      const messageRef = getTenantMessageRef(db, authenticatedKey.organizationId, to, result.messageId);
+      const batch = db.batch();
+      batch.set(messageRef, {
+        messageId: result.messageId, chatId: to, organizationId: authenticatedKey.organizationId,
+        phoneNumberId, direction: "outgoing", type: "text", text, timestamp,
+        status: "sent", source: "public_api", sender: "api"
+      });
+      batch.set(chatRef, {
+        customerPhone: to, phoneNumberId, lastMessage: text, lastMessageAt: timestamp,
+        lastMessageDirection: "outgoing", updatedAt: timestamp
+      }, { merge: true });
+      await batch.commit();
+      await enqueueOrganizationWebhookEvent(
+        db, authenticatedKey.organizationId, "message.sent",
+        `public-api:${result.messageId}`,
+        { messageId: result.messageId, chatId: to, phoneNumberId, type: "text", text, timestamp: timestamp.toISOString() }
+      ).catch(error => console.error("Public API message webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+      return { data: { messageId: result.messageId, to, phoneNumberId, status: "sent", timestamp: timestamp.toISOString() }, statusCode: 201 };
+    }
+  );
+  const { statusCode = 201, ...response } = idempotent;
+  return jsonResponse(event, statusCode, response);
+}
+
 async function handlePublicApiContacts(event) {
   const authorization = getHeader(event, "authorization");
   const authenticatedKey = await authenticateOrganizationApiKey(getDb(), authorization);
@@ -3703,6 +3753,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Organization API key request failed:", error.statusCode || "API_KEY_REQUEST_FAILED");
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "API key request could not be completed." });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/public/v1/messages")) {
+    try { return await handlePublicApiMessages(event); }
+    catch (error) {
+      console.error("Public messages API request failed:", error.statusCode || "PUBLIC_API_REQUEST_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Public message API request could not be completed." });
     }
   }
 
