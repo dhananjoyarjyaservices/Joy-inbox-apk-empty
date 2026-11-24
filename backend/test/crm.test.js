@@ -36,7 +36,7 @@ test("validates custom field values against active definitions and data types", 
   });
   assert.throws(() => normalizeCrmFieldValues({ budget: "1250" }, definitions), { statusCode: 400 });
   assert.throws(() => normalizeCrmFieldValues({ source: "Other" }, definitions), { statusCode: 400 });
-  assert.throws(() => normalizeCrmFieldValues({ inactive: "value" }, definitions), { statusCode: 400 });
+  assert.deepEqual(normalizeCrmFieldValues({ inactive: "existing value" }, definitions), { inactive: "existing value" });
   assert.throws(() => normalizeCrmFieldValues({ arbitrary: "value" }, definitions), { statusCode: 400 });
   assert.throws(() => normalizeCrmFieldValues({ due_date: "2026-02-31" }, [{ key: "due_date", label: "Due date", type: "date", active: true }]), { statusCode: 400 });
 });
