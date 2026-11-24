@@ -14,8 +14,8 @@ import { enablePushNotifications, syncPushToken, listenForForegroundPush, playNo
 import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, listTenantInternalNotes, addTenantInternalNote, sendTenantInteractiveMessage, type TenantInteractiveMessageInput, type TenantContact, type TenantQuickReply, type TenantInternalNote } from "../services/tenantResources";
 
 function getWhatsAppContactUrl(value: string): string | null {
-  const digits = String(value || "").replace(/\\D/g, "");
-  return /^\\d{6,20}$/.test(digits) ? `https://wa.me/${digits}` : null;
+  const digits = String(value || "").replace(/\D/g, "");
+  return /^\d{6,20}$/.test(digits) ? `https://wa.me/${digits}` : null;
 }
 
 type TenantChat = {
