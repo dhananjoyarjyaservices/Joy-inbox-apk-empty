@@ -7,6 +7,7 @@ const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./te
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
 const { matchesAutomationRule } = require("./automationRules");
+const { recordInboundMessageUsage } = require("./tenantUsage");
 
 function getVerifyToken() {
   return (
@@ -448,6 +449,8 @@ async function processWebhookPayload(payload) {
         const name = contact?.profile?.name || message.from;
         const created = await saveTenantIncomingMessage(db, organization, message, name, String(phoneNumberId));
         const phone = normalizePhoneNumber(message.from);
+        // Run on every webhook delivery; the provider-message marker makes retries idempotent.
+        await recordInboundMessageUsage(db, organization.id, String(message.id || ""));
         const inboundText = message.type === "text" ? String(message.text?.body || "")
           : message.type === "interactive" ? String(message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "")
             : message.type === "button" ? String(message.button?.text || "") : "";
