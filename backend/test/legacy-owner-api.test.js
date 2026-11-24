@@ -118,6 +118,8 @@ test("every unscoped HTTP route is either explicitly public/system or covered by
     [...legacyBlock[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1])
   );
   const explicitSystemRoutes = new Set(["/webhook", "/billing/stripe-webhook"]);
+  // Public developer API routes authenticate with scoped, hashed Joy Inbox API keys.
+  const explicitApiKeyRoutes = new Set(["/public/v1/contacts"]);
   // These short suffixes are only used by the organization-scoped CRM router:
   // /organizations/crm/fields and /organizations/crm/stages.
   const explicitTenantRouteSuffixes = new Set(["/fields", "/stages"]);
@@ -126,6 +128,7 @@ test("every unscoped HTTP route is either explicitly public/system or covered by
     !suffix.startsWith("/whatsapp/") &&
     suffix !== "/organizations" &&
     !explicitSystemRoutes.has(suffix) &&
+    !explicitApiKeyRoutes.has(suffix) &&
     !explicitTenantRouteSuffixes.has(suffix) &&
     !protectedSuffixes.has(suffix)
   );
