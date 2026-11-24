@@ -15,7 +15,7 @@ Example header:
 Authorization: Bearer joy_live_REPLACE_WITH_YOUR_KEY
 ```
 
-The raw key is generated from cryptographic random bytes. Joy Inbox stores only its SHA-256 hash. Keys are workspace-scoped, expire within 1–365 days, can be revoked immediately and update a throttled last-used timestamp. The workspace ID is derived from the key and is never accepted from the API request.
+The raw key is generated from cryptographic random bytes. Joy Inbox stores only its SHA-256 hash. Keys are workspace-scoped, expire within 1–365 days, can be revoked immediately, update a throttled last-used timestamp and are limited to 60 requests per key per minute. Rate-limit counters expire automatically after the window. The workspace ID is derived from the key and is never accepted from the API request.
 
 ## Endpoints
 
@@ -67,7 +67,7 @@ Contacts are keyed by normalized international phone number. A repeated POST for
 
 - Public API endpoints for leads, messages, campaigns and templates.
 - Customer-managed outbound webhook subscriptions, signed delivery, retries and replay.
-- Per-key configurable rate limits and usage analytics.
+- Configurable per-key rate limits and usage analytics (a fixed 60 requests/minute limit is active).
 - Cursor pagination and idempotency keys for write requests.
 - Browser CORS allowlists for third-party frontend apps.
 
