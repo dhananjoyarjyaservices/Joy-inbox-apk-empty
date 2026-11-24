@@ -37,7 +37,7 @@ const {
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
-const { listTenantResource, saveTenantResource, deleteTenantResource } = require("./tenantResources");
+const { listTenantResource, listPublicContacts, saveTenantResource, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
 const { updateTenantChatAssignment } = require("./tenantChatAssignment");
 const { requireOrganization, requirePermission, encryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
@@ -410,13 +410,13 @@ async function handlePublicApiContacts(event) {
   const method = getMethod(event);
   if (method === "GET") {
     requireApiScope(authenticatedKey, "contacts:read");
-    const rawLimit = Number(event.queryStringParameters?.limit || 50);
-    const limit = Number.isInteger(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 50;
-    const contacts = await listTenantResource(getDb(), authenticatedKey.organizationId, "contacts");
-    return jsonResponse(event, 200, {
-      data: contacts.slice(0, limit),
-      pagination: { limit, returned: Math.min(contacts.length, limit), hasMore: contacts.length > limit }
-    });
+    const result = await listPublicContacts(
+      getDb(),
+      authenticatedKey.organizationId,
+      event.queryStringParameters?.limit,
+      event.queryStringParameters?.cursor
+    );
+    return jsonResponse(event, 200, result);
   }
   if (method === "POST") {
     requireApiScope(authenticatedKey, "contacts:write");
