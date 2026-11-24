@@ -542,6 +542,7 @@ async function handleTenantCrm(event, resource) {
     if (method === "PUT" && (!body.resourceId || body.resourceId !== definition.key || !existing.exists)) {
       return jsonResponse(event, 404, { error: "Custom field was not found or its key cannot be changed." });
     }
+    if (method === "POST" && existing.exists) return jsonResponse(event, 409, { error: "A custom field with this key already exists. Update it instead." });
     if (method === "POST" && !existing.exists) {
       const count = await collection.get();
       if (count.size >= 30) return jsonResponse(event, 409, { error: "This workspace supports up to 30 custom CRM fields." });
@@ -557,6 +558,7 @@ async function handleTenantCrm(event, resource) {
     if (method === "PUT" && (!body.resourceId || body.resourceId !== stage.id || !existing.exists)) {
       return jsonResponse(event, 404, { error: "Pipeline stage was not found or its ID cannot be changed." });
     }
+    if (method === "POST" && existing.exists) return jsonResponse(event, 409, { error: "A pipeline stage with this ID already exists. Update it instead." });
     const allStages = await collection.get();
     if (method === "POST" && !existing.exists && allStages.size >= 20) {
       return jsonResponse(event, 409, { error: "A workspace can have up to 20 pipeline stages." });
