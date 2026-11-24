@@ -348,13 +348,13 @@ async function handlePublicApiLeads(event) {
   requireApiScope(authenticatedKey, "leads:write");
   if (method === "DELETE") {
     const result = await deletePublicLead(db, authenticatedKey.organizationId, String(body.resourceId || ""));
-    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.deleted", ` + "`public-api:${result.id}:${crypto.randomUUID()}`" + `, result)
+    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.deleted", `public-api:${result.id}:${crypto.randomUUID()}`, result)
       .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     return jsonResponse(event, 200, result);
   }
   if (method === "POST") {
     const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data || body);
-    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.created", ` + "`public-api:${lead.id}:${crypto.randomUUID()}`" + `, lead)
+    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.created", `public-api:${lead.id}:${crypto.randomUUID()}`, lead)
       .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     return jsonResponse(event, 201, { data: lead });
   }
@@ -363,7 +363,7 @@ async function handlePublicApiLeads(event) {
       return jsonResponse(event, 400, { error: "A lead data object is required for updates." });
     }
     const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data, String(body.resourceId || ""));
-    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.updated", ` + "`public-api:${lead.id}:${crypto.randomUUID()}`" + `, lead)
+    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.updated", `public-api:${lead.id}:${crypto.randomUUID()}`, lead)
       .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     return jsonResponse(event, 200, { data: lead });
   }
