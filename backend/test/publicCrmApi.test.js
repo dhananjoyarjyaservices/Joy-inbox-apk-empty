@@ -82,3 +82,12 @@ test("lead listing reports hasMore only when an additional record exists", async
   assert.equal(completePage.data.length, 2);
   assert.equal(completePage.pagination.hasMore, false);
 });
+
+
+test("creates missing default pipeline stages before validating a public lead", async () => {
+  const db = fakeDb();
+  const lead = await savePublicLead(db, "org_a", { title: "First lead" });
+  assert.equal(lead.stageId, "new");
+  assert.ok(db.records.has("organizations/org_a/crmStages/new"));
+  assert.ok(db.records.has("organizations/org_a/crmStages/won"));
+});
