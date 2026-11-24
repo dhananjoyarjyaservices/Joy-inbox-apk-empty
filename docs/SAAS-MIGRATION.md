@@ -1,5 +1,8 @@
 # Joy Inbox SaaS migration
 
+> **Status note (2026-11-24):** This document also preserves chronological implementation notes from earlier migration stages. Some older paragraphs below describe work as pending that has since been implemented. For current code status and authoritative outstanding gates, use [RELEASE-READINESS.md](RELEASE-READINESS.md), [PRICING-AND-USAGE-POLICY.md](PRICING-AND-USAGE-POLICY.md), and [BILLING-STRIPE.md](BILLING-STRIPE.md). The current branch includes tenant messaging/webhook/media paths, organization-scoped inbox features, transactional usage enforcement, workspace invitations, and Stripe monthly/annual checkout foundations; real external-service staging validation and production acceptance remain outstanding.
+
+
 ## Status
 
 The original React/Vite + Firebase + AWS Lambda application has been migrated into this repository. SaaS foundation work is being introduced incrementally on `feature/saas-foundation`. This branch is not production-ready and must not be deployed until the remaining API, frontend, rules, webhook and migration work is complete and tested.
