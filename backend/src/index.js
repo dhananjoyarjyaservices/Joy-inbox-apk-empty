@@ -62,6 +62,7 @@ const {
   createOrganizationWebhook,
   listOrganizationWebhooks,
   revokeOrganizationWebhook,
+  rotateOrganizationWebhookSecret,
   listOrganizationWebhookDeliveries,
   replayOrganizationWebhookDelivery,
   enqueueOrganizationWebhookEvent,
@@ -298,6 +299,10 @@ async function handleOrganizationWebhooks(event) {
   if (method === "GET") {
     const webhooks = await listOrganizationWebhooks(getDb(), organization.id);
     return jsonResponse(event, 200, { webhooks });
+  }
+  if (method === "PUT") {
+    const result = await rotateOrganizationWebhookSecret(getDb(), organization.id, String(body.webhookId || ""));
+    return jsonResponse(event, 200, result);
   }
   if (method === "DELETE") {
     const result = await revokeOrganizationWebhook(getDb(), organization.id, String(body.webhookId || ""));
@@ -3564,7 +3569,7 @@ exports.handler = async (event) => {
     });
   }
 
-  if (["GET", "POST", "DELETE"].includes(method) && path.endsWith("/organizations/developer/webhooks")) {
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/developer/webhooks")) {
     try { return await handleOrganizationWebhooks(event); }
     catch (error) {
       console.error("Organization webhook request failed:", error.statusCode || "WEBHOOK_REQUEST_FAILED");
