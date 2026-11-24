@@ -288,7 +288,7 @@ export default function Setup() {
       </section>
       {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-xl bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
-      <p className="mt-5 text-center text-xs text-gray-500">Workspace setup is available. The tenant chat dashboard is still under development.</p>
+      <p className="mt-5 text-center text-xs text-gray-500">Your business workspace is ready. Continue to your Joy Inbox dashboard.</p>
     </div>
   </main>;
 }
