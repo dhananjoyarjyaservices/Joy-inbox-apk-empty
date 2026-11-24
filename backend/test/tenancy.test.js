@@ -451,6 +451,7 @@ test("Embedded Signup stores the WABA ID and encrypts the generated two-step reg
     wabaId: "666666666666666",
     accessToken: "EAA_embedded_signup_business_token",
     registrationPin: "042731",
+    billingModel: "joy_inbox_partner_credit_line",
     displayPhoneNumber: "+91 98765 43210",
     verifiedName: "Embedded Signup Business"
   });
@@ -462,5 +463,6 @@ test("Embedded Signup stores the WABA ID and encrypts the generated two-step reg
   assert.equal(credentials.registrationPin, "042731");
   const connections = await listWhatsAppConnections(db, "org_embedded");
   assert.equal(connections[0].wabaId, "666666666666666");
+  assert.equal(connections[0].billingModel, "joy_inbox_partner_credit_line");
   delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
