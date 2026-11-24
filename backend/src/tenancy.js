@@ -291,9 +291,18 @@ async function getWhatsAppCredentials(db, organizationId, phoneNumberId) {
   if (!validId(organizationId)) throw httpError("A valid organization ID is required.", 400);
   if (phoneNumberId !== undefined && !validPhoneNumberId(phoneNumberId)) throw httpError("A valid WhatsApp Phone Number ID is required.", 400);
   const settingsRef = db.collection("organizations").doc(organizationId).collection("settings").doc("whatsapp");
-  const snapshot = phoneNumberId
-    ? await settingsRef.collection("numbers").doc(phoneNumberId).get()
-    : await settingsRef.get();
+  let snapshot;
+  if (phoneNumberId) {
+    snapshot = await settingsRef.collection("numbers").doc(phoneNumberId).get();
+  } else {
+    snapshot = await settingsRef.get();
+    // Preserve legacy single-number behavior, but fall back to a connected
+    // per-number record when the legacy primary has been disconnected.
+    if (!snapshot.exists || snapshot.data().connected !== true) {
+      const numbers = await settingsRef.collection("numbers").get();
+      snapshot = (numbers.docs || []).find(item => item.data()?.connected === true) || snapshot;
+    }
+  }
   if (!snapshot.exists || snapshot.data().connected !== true) {
     throw httpError("WhatsApp is not connected for this organization.", 404);
   }
