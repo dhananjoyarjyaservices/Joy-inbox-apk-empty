@@ -25,7 +25,8 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add public API `leads:read` and `leads:write` scopes with workspace-derived list/create/update/delete endpoints and CRM stage/contact/owner/custom-field validation; add unit coverage and explicitly classify the API-key route in the HTTP route-security inventory. Message/campaign/template scopes remain open.
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact-upsert events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
-- [ ] Add delivery history UI, manual replay and endpoint secret rotation.
+- [x] Add workspace-scoped webhook delivery history API/UI and manual replay for failed deliveries.
+- [ ] Add endpoint secret rotation and delivery filters/pagination.
 - [ ] Enable Firestore TTL on `webhookDeliveryQueue.expiresAt`; split the delivery worker into its own schedule after staging load tests.
 - [ ] Validate external integration traffic, abuse controls and production CORS strategy before public launch.
 
