@@ -19,7 +19,7 @@ function getConfiguredBillingPlans(env = process.env) {
     { key: "growth", name: "Growth", monthlyPriceInr: 999, annualPriceInr: 9990, priceId: env.STRIPE_PRICE_GROWTH || "", annualPriceId: env.STRIPE_PRICE_GROWTH_ANNUAL || "", limits: { messages: 100000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
     { key: "business", name: "Business", monthlyPriceInr: 1499, annualPriceInr: 14990, priceId: env.STRIPE_PRICE_BUSINESS || "", annualPriceId: env.STRIPE_PRICE_BUSINESS_ANNUAL || "", limits: { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
     { key: "pro", name: "Pro", monthlyPriceInr: 1999, annualPriceInr: 19990, priceId: env.STRIPE_PRICE_PRO || "", annualPriceId: env.STRIPE_PRICE_PRO_ANNUAL || "", limits: { messages: 300000, agents: 10, mediaTransferGb: 15, historyMonths: 12 } }
-  ].map(plan => ({ ...plan, priceId: /^price_[A-Za-z0-9]+$/.test(plan.priceId) ? plan.priceId : "", annualPriceId: /^price_[A-Za-z0-9]+$/.test(plan.annualPriceId) ? plan.annualPriceId : "" }))
+  ].map(plan => ({ ...plan, priceId: /^price_[A-Za-z0-9_]+$/.test(plan.priceId) ? plan.priceId : "", annualPriceId: /^price_[A-Za-z0-9_]+$/.test(plan.annualPriceId) ? plan.annualPriceId : "" }))
     .filter(plan => plan.priceId || plan.annualPriceId);
 }
 
