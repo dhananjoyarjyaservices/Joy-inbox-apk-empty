@@ -2,6 +2,7 @@ const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
   assignment: true,
   status: true,
   sla: true,
+  crm: true,
   soundEnabled: true,
   desktopEnabled: true
 });
@@ -11,6 +12,7 @@ function normalizeNotificationPreferences(value = {}) {
     assignment: value.assignment !== false,
     status: value.status !== false,
     sla: value.sla !== false,
+    crm: value.crm !== false,
     soundEnabled: value.soundEnabled !== false,
     desktopEnabled: value.desktopEnabled !== false
   };
