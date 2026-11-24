@@ -79,7 +79,7 @@ function normalizeAutomationMatchText(value) {
   return String(value || "")
     .normalize("NFKC")
     .trim()
-    .replace(/\\s+/gu, " ")
+    .replace(/\s+/gu, " ")
     .toLocaleLowerCase("und");
 }
 
