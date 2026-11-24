@@ -110,7 +110,8 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
   const token = authorization.slice(7).trim();
   if (!API_KEY_PATTERN.test(token)) throw httpError("A valid Joy Inbox API key is required.", 401);
   const keyHash = crypto.createHash("sha256").update(token).digest("hex");
-  const snapshot = await db.collection("publicApiKeys").doc(keyHash).get();
+  const keyRef = db.collection("publicApiKeys").doc(keyHash);
+  const snapshot = await keyRef.get();
   if (!snapshot.exists) throw httpError("API key is invalid or revoked.", 401);
   const data = snapshot.data() || {};
   if (data.status !== "active") throw httpError("API key is invalid or revoked.", 401);
@@ -121,6 +122,12 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(data.organizationId || "")) throw httpError("API key workspace is invalid.", 403);
   const organization = await db.collection("organizations").doc(data.organizationId).get();
   if (!organization.exists || organization.data()?.status !== "active") throw httpError("API key workspace is inactive.", 403);
+  const lastUsedAt = typeof data.lastUsedAt?.toDate === "function"
+    ? data.lastUsedAt.toDate().getTime()
+    : data.lastUsedAt instanceof Date ? data.lastUsedAt.getTime() : 0;
+  if (!lastUsedAt || now - lastUsedAt >= 5 * 60 * 1000) {
+    await keyRef.set({ lastUsedAt: new Date(now) }, { merge: true });
+  }
   return {
     keyId: keyHash,
     organizationId: data.organizationId,
