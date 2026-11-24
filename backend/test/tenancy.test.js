@@ -55,7 +55,7 @@ function fakeTenantDb() {
         const prefix = path + "/";
         const docsList = [...docs.entries()]
           .filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/"))
-          .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
+          .map(([key, value]) => ({ id: key.slice(prefix.length), exists: true, data: () => value }));
         return { docs: docsList };
       }
     };
