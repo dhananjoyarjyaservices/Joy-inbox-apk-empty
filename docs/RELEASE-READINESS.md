@@ -16,7 +16,8 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add API-key authentication that derives the workspace from the key, checks active workspace state and enforces contacts read/write scopes.
 - [x] Add versioned `GET /public/v1/contacts` and `POST /public/v1/contacts` endpoints.
 - [x] Add a workspace Developer panel to create/revoke keys and view API examples.
-- [x] Deny client-side Firestore access to API key records.
+- [x] Deny client-side Firestore access to API key and rate-limit records.
+- [ ] Enable Firestore TTL on `publicApiRateLimits.expiresAt` in the staging/production project.
 - [x] Enforce a fixed 60-requests-per-minute rate limit per API key using server-only Firestore counters.
 - [ ] Add configurable rate-limit tiers, cursor pagination, idempotency and request-usage analytics.
 - [ ] Add public API scopes and endpoints for leads, messages, campaigns and templates.
