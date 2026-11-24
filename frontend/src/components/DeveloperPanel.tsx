@@ -46,6 +46,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
   const [readTemplates, setReadTemplates] = useState(false);
   const [readCampaigns, setReadCampaigns] = useState(false);
   const [writeCampaigns, setWriteCampaigns] = useState(false);
+  const [controlCampaigns, setControlCampaigns] = useState(false);
   const [expiryDays, setExpiryDays] = useState(90);
   const [newKey, setNewKey] = useState("");
   const [copied, setCopied] = useState(false);
@@ -81,7 +82,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
       const result = await createOrganizationApiKey({
         organizationId,
         name,
-        scopes: [ ...(readContacts ? ["contacts:read"] : []), ...(writeContacts ? ["contacts:write"] : []), ...(readLeads ? ["leads:read"] : []), ...(writeLeads ? ["leads:write"] : []), ...(writeMessages ? ["messages:write"] : []), ...(readTemplates ? ["templates:read"] : []), ...(readCampaigns ? ["campaigns:read"] : []), ...(writeCampaigns ? ["campaigns:write"] : []) ],
+        scopes: [ ...(readContacts ? ["contacts:read"] : []), ...(writeContacts ? ["contacts:write"] : []), ...(readLeads ? ["leads:read"] : []), ...(writeLeads ? ["leads:write"] : []), ...(writeMessages ? ["messages:write"] : []), ...(readTemplates ? ["templates:read"] : []), ...(readCampaigns ? ["campaigns:read"] : []), ...(writeCampaigns ? ["campaigns:write"] : []), ...(controlCampaigns ? ["campaigns:control"] : []) ],
         expiryDays
       });
       setNewKey(result.apiKey.apiKey);
