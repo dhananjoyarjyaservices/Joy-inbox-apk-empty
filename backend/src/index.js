@@ -52,6 +52,7 @@ const {
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { listPublicLeads, savePublicLead, deletePublicLead } = require("./publicCrmApi");
 const { listPublicCampaigns } = require("./publicCampaignApi");
+const { CAMPAIGN_ID_PATTERN, buildPublicCampaignTransition } = require("./publicCampaignControl");
 const { importCrmLeads } = require("./crmBulkImport");
 const { buildCrmSalesReport } = require("./crmSalesReport");
 const { recordCrmActivity, listCrmActivity } = require("./crmActivity");
@@ -545,7 +546,33 @@ async function handlePublicApiCampaigns(event) {
     return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
   }
   const idempotencyKey = getHeader(event, "idempotency-key");
-  if (!idempotencyKey) return jsonResponse(event, 400, { error: "Idempotency-Key is required when creating a campaign draft." });
+  if (!idempotencyKey) return jsonResponse(event, 400, { error: "Idempotency-Key is required for campaign mutations." });
+  if (typeof body.action === "string") {
+    requireApiScope(authenticatedKey, "campaigns:control");
+    const campaignId = String(body.campaignId || "").trim();
+    if (!CAMPAIGN_ID_PATTERN.test(campaignId)) return jsonResponse(event, 400, { error: "A valid campaign ID is required." });
+    const controlResult = await runIdempotentApiRequest(db, authenticatedKey, idempotencyKey,
+      { method: "POST", resource: "campaign-control", payload: body }, async () => {
+        const campaignRef = db.collection("organizations").doc(authenticatedKey.organizationId)
+          .collection("campaigns").doc(campaignId);
+        const outcome = await db.runTransaction(async transaction => {
+          const snapshot = await transaction.get(campaignRef);
+          if (!snapshot.exists) return { status: "not_found" };
+          const patch = buildPublicCampaignTransition(body.action, snapshot.data() || {}, body.scheduledAt, new Date());
+          transaction.update(campaignRef, patch);
+          return { status: "updated", campaignStatus: patch.status };
+        });
+        if (outcome.status === "not_found") {
+          const error = new Error("Campaign was not found in this workspace.");
+          error.statusCode = 404;
+          throw error;
+        }
+        return { data: { campaignId, status: outcome.campaignStatus }, statusCode: 200 };
+      });
+    const { statusCode = 200, ...response } = controlResult;
+    return jsonResponse(event, statusCode, response);
+  }
+  requireApiScope(authenticatedKey, "campaigns:write");
   const result = await runIdempotentApiRequest(db, authenticatedKey, idempotencyKey,
     { method: "POST", resource: "campaign-drafts", payload: body }, async () => {
       const definition = normalizeCampaignDefinition(body);
