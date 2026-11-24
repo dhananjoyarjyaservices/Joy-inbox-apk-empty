@@ -230,7 +230,7 @@ async function saveWhatsAppConnection(db, organization, input) {
   const verifiedName = String(input?.verifiedName || "").trim().slice(0, 100);
   const wabaId = input?.wabaId === undefined ? "" : String(input.wabaId).trim();
   const registrationPin = input?.registrationPin === undefined ? "" : String(input.registrationPin);
-  if (!validPhoneNumberId(phoneNumberId) || !/^[A-Za-z0-9._|=-]{20,4096}$/.test(accessToken) ||
+  if (!validPhoneNumberId(phoneNumberId) || !/^[A-Za-z0-9._|=-]{8,4096}$/.test(accessToken) ||
       (wabaId && !/^[0-9]{5,32}$/.test(wabaId)) ||
       (registrationPin && !/^\d{6}$/.test(registrationPin))) {
     throw httpError("A valid WhatsApp Phone Number ID and access token are required.", 400);
