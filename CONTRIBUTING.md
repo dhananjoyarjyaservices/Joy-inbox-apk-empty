@@ -29,6 +29,12 @@ npm test --prefix frontend
 npm run build --prefix frontend
 ```
 
+Production Lambda package smoke test (creates `backend/dist/joy-inbox-lambda.zip`; does not deploy):
+
+```sh
+npm run package:lambda --prefix backend
+```
+
 ## Required engineering rules
 
 1. Authenticate every tenant request using a Firebase Admin-verified ID token.
