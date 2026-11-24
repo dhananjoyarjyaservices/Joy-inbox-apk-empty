@@ -62,6 +62,16 @@ test("service-month boundaries preserve month-end dates", () => {
   assert.equal(window.limit, 100000);
 });
 
+test("annual service months stay anchored to the original cycle day after February", () => {
+  const window = getUsageWindow({
+    status: "active", plan: "growth",
+    currentPeriodStart: new Date("2026-01-31T00:00:00.000Z"),
+    currentPeriodEnd: new Date("2027-01-31T00:00:00.000Z")
+  }, new Date("2026-03-20T00:00:00.000Z"), plans);
+  assert.equal(window.start.toISOString(), "2026-02-28T00:00:00.000Z");
+  assert.equal(window.end.toISOString(), "2026-03-31T00:00:00.000Z");
+});
+
 test("trial message allowance is 25 percent rounded up", () => {
   const window = getUsageWindow({
     status: "trialing", plan: "lite",
