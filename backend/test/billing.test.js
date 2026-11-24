@@ -6,6 +6,7 @@ const { handler } = require("../src/index");
 const crypto = require("node:crypto");
 const {
   EVENT_LEASE_MS,
+  TRIAL_PERIOD_DAYS,
   getConfiguredBillingPlans,
   validReturnUrl,
   verifyStripeSignature,
@@ -18,12 +19,17 @@ const {
 
 test("billing plan discovery returns only Stripe price IDs configured by the backend", () => {
   const plans = getConfiguredBillingPlans({
+    STRIPE_PRICE_LITE: "price_lite",
     STRIPE_PRICE_STARTER: "price_starter",
     STRIPE_PRICE_GROWTH: "",
-    STRIPE_PRICE_BUSINESS: "price_business"
+    STRIPE_PRICE_BUSINESS: "price_business",
+    STRIPE_PRICE_PRO: "price_pro"
   });
-  assert.deepEqual(plans.map(plan => plan.key), ["starter", "business"]);
-  assert.equal(plans[0].priceId, "price_starter");
+  assert.deepEqual(plans.map(plan => plan.key), ["lite", "starter", "business", "pro"]);
+  assert.equal(plans[0].priceId, "price_lite");
+  assert.equal(plans[1].monthlyPriceInr, 599);
+  assert.deepEqual(plans[2].limits, { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 });
+  assert.equal(TRIAL_PERIOD_DAYS, 7);
 });
 
 test("billing return URLs must be HTTPS except local development URLs", () => {
@@ -141,8 +147,39 @@ test("checkout session creation uses server price IDs and a Stripe idempotency k
   const form = new URLSearchParams(request.options.body);
   assert.equal(form.get("line_items[0][price]"), "price_starter");
   assert.equal(form.get("metadata[organizationId]"), "org_123");
+  assert.equal(form.get("subscription_data[trial_period_days]"), "7");
+  assert.equal(session.trialDays, 7);
   assert.equal(form.get("customer_email"), "owner@example.com");
   assert.equal(writes.length, 1);
+});
+
+
+test("checkout does not repeat a free trial for a workspace that already used it", async t => {
+  const oldKey = process.env.STRIPE_SECRET_KEY;
+  const oldFetch = global.fetch;
+  t.after(() => {
+    if (oldKey === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = oldKey;
+    global.fetch = oldFetch;
+  });
+  process.env.STRIPE_SECRET_KEY = "sk_test_123";
+  let request;
+  global.fetch = async (_url, options) => {
+    request = options;
+    return { ok: true, async json() { return { id: "cs_test_no_trial", url: "https://checkout.stripe.com/c/pay/cs_test_no_trial" }; } };
+  };
+  const organization = {
+    id: "org_trial_used",
+    ref: { collection() { return { doc() { return {
+      async get() { return { exists: true, get: key => key === "trialUsedAt" ? new Date("2026-11-01T00:00:00Z") : "" }; },
+      async set() {}
+    }; } }; } }
+  };
+  const session = await createCheckoutSession({
+    organization, decoded: { email: "owner@example.com" }, planKey: "lite",
+    env: { STRIPE_PRICE_LITE: "price_lite", BILLING_SUCCESS_URL: "https://app.example.com/success", BILLING_CANCEL_URL: "https://app.example.com/cancel" }
+  });
+  assert.equal(new URLSearchParams(request.body).has("subscription_data[trial_period_days]"), false);
+  assert.equal(session.trialDays, 0);
 });
 
 test("Stripe webhook processor ignores an already processed event", async () => {
