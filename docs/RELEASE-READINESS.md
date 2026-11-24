@@ -44,6 +44,9 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] GitHub Actions checkout/setup-node/setup-java use Node 24-compatible major versions while project builds remain on Node.js 22.
 - [x] CI concurrency no longer cancels the validation run on every subsequent push.
 - [x] Dependabot weekly update groups target `feature/saas-foundation`; repository security and contribution policies are documented in `SECURITY.md` and `CONTRIBUTING.md`.
+- [x] Add a regression test proving concurrent outbound reservations cannot consume more than the final available message quota.
+- [x] Add Lambda entry-point export tests for HTTP, SLA, history retention, campaign and automation workers.
+- [x] Add a reproducible production-only Lambda ZIP packaging script; CI installs locked production dependencies in an isolated directory and verifies the ZIP archive.
 
 ## History retention worker
 
@@ -92,10 +95,10 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-The latest code-bearing commit verified by all three GitHub Actions workflows is `f0feca5ce4fef23aca99a0a2867d6da85a664d54` on `feature/saas-foundation`:
+The latest code-bearing commit verified by the repository workflows is `e72f67e691799439dac5e63a41ac98409637d2df` on `feature/saas-foundation`:
 
-- Frontend build (run 45349483444): dependency installation, 6 frontend tests, TypeScript check and Vite production build passed. Largest generated chunk was about 400 KB; no oversized-chunk warning was emitted.
-- Backend tests (run 45349483428): Node.js 22 setup, locked dependency installation and all 282 backend tests with the Firestore emulator passed.
-- Joy Inbox CI (run 45349483369): backend unit tests and frontend TypeScript/tests/production build passed.
+- Backend tests with Firestore emulator (run 45349969947): all 284 tests passed, including Firestore rules coverage; the production-only Lambda package was built and ZIP integrity verified.
+- Frontend build (run 45349969915): all 6 frontend tests, TypeScript check and Vite production build passed.
+- Joy Inbox CI (run 45349970180): backend unit tests and frontend tests/build passed.
 
-These checks validate the code at the stated commit. They do not prove that a live Firebase project, Meta account, Stripe account, email provider, deployed AWS worker or customer device is correctly configured. Documentation-only and configuration-only commits may follow this code-bearing commit; rerun checks for any later source-code changes before treating them as verified.
+The generated Lambda ZIP is a validation artifact only; no AWS Lambda was deployed. These checks do not prove that a live Firebase project, Meta account, Stripe account, email provider or customer device is correctly configured. Documentation-only commits may follow this code-bearing commit; rerun checks for any later source-code changes before treating them as verified.
