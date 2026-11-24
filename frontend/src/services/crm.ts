@@ -62,7 +62,7 @@ export async function listCrmLeadActivity(organizationId: string, leadId: string
   if (!user) throw new Error("Please sign in again.");
   const token = await user.getIdToken();
   const query = new URLSearchParams({ organizationId, leadId, limit: String(limit) });
-  const response = await fetch(`${API_URL.replace(/\\/$/, "")}/organizations/crm/activity?${query.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await fetch(`${(API_URL.endsWith("/") ? API_URL.slice(0, -1) : API_URL)}/organizations/crm/activity?${query.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || "CRM activity could not be loaded.");
   return result.activities as CrmLeadActivity[];
