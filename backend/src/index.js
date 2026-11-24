@@ -1469,6 +1469,7 @@ async function sendTenantInteractiveMessage(event) {
   }
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
 
+  const quotaReservation = await reserveTenantMessageQuota(db, organization.id, clientMessageId, claim.ref);
   let result;
   try {
     const version = process.env.GRAPH_API_VERSION || "v26.0";
@@ -1486,7 +1487,9 @@ async function sendTenantInteractiveMessage(event) {
       throw error;
     }
     result = { messageId: responseBody.messages[0].id };
+    await settleTenantMessageQuota(db, quotaReservation);
   } catch (error) {
+    await settleTenantMessageQuota(db, quotaReservation, error);
     await markTenantSendRequestFailed(claim.ref, error);
     throw error;
   }
