@@ -61,6 +61,24 @@ Authorization: Bearer YOUR_JOY_API_KEY
 ```
 Required scope: `campaigns:read` for reports and `campaigns:write` for draft creation only. The endpoint returns campaign summary fields and delivery counters for campaigns in the API key workspace only. It never returns recipient phone numbers or consent records. Results are ordered by creation time (newest first), with a page size from 1–100. Pass `pagination.nextCursor` as `cursor` to retrieve the next page.
 
+### Control a campaign
+
+Use the separate `campaigns:control` scope for campaign state changes. The draft-creation permission `campaigns:write` does not grant campaign control.
+
+```http
+POST /public/v1/campaigns
+Authorization: Bearer YOUR_JOY_API_KEY
+Idempotency-Key: campaign-control-123
+Content-Type: application/json
+```
+
+Send `campaignId` and one supported `action`: `start`, `schedule`, `pause`, `resume` or `cancel`. For `schedule`, also send `scheduledAt` as a future ISO-8601 timestamp:
+```json
+{ "campaignId": "campaign-document-id", "action": "schedule", "scheduledAt": "2026-12-01T10:00:00.000Z" }
+```
+
+Every mutation requires a unique `Idempotency-Key`. State transitions are checked transactionally in the API key's workspace. Start, schedule and resume require at least one eligible recipient. The existing campaign worker rechecks current template approval, recipient consent, opt-out suppression and workspace message quota before sending. A successful `start` or `schedule` response queues or schedules the campaign; it does not guarantee Meta acceptance or device delivery.
+
 ## Approved WhatsApp templates
 
 ### List templates
