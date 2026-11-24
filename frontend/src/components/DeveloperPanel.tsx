@@ -208,7 +208,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
           </article>)}</div> : <p className="text-sm text-gray-500">{loading ? "Loading API keys..." : "No API keys created for this workspace."}</p>}
         </div>
         <div className="rounded-xl border bg-white p-4 space-y-3">
-          <div><h3 className="font-semibold">Outbound webhooks</h3><p className="mt-1 text-xs text-gray-500">Send signed contact events to your HTTPS endpoint. Delivery is queued and retried automatically.</p></div>
+          <div><h3 className="font-semibold">Outbound webhooks</h3><p className="mt-1 text-xs text-gray-500">Send signed contact, message and CRM lead events to your HTTPS endpoint. Delivery is queued, retried and can be replayed after terminal failure.</p></div>
           {webhookSecret && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-900">Copy the signing secret now</p><p className="mt-1 text-xs text-amber-800">Store this secret securely. Joy Inbox will not show it again.</p><div className="mt-2 flex flex-wrap gap-2"><input readOnly value={webhookSecret} className="min-w-0 flex-1 rounded-lg border border-amber-300 bg-white p-2 font-mono text-xs"/><button type="button" onClick={() => void copyWebhookSecret()} className="rounded-lg bg-amber-900 px-3 py-2 text-xs font-semibold text-white">{webhookCopied ? "Copied" : "Copy secret"}</button></div></div>}
           <form onSubmit={createWebhook} className="grid gap-2 sm:grid-cols-2">
             <input required minLength={2} maxLength={80} value={webhookName} onChange={event => setWebhookName(event.target.value)} placeholder="Webhook name" className="rounded-lg border p-2 text-sm"/>
