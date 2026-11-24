@@ -112,6 +112,7 @@ test("API key authentication derives workspace and scopes from the hashed key re
   assert.equal(auth.organizationId, "org_one");
   assert.deepEqual(auth.scopes, ["contacts:read"]);
   assert.equal(auth.keyId, created.id);
+  assert.ok(db.records.get("publicApiKeys/" + created.id).lastUsedAt instanceof Date);
   requireApiScope(auth, "contacts:read");
   assert.throws(() => requireApiScope(auth, "contacts:write"), { statusCode: 403 });
 });
