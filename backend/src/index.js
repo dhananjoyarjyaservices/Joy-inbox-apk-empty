@@ -348,10 +348,14 @@ async function handlePublicApiLeads(event) {
   requireApiScope(authenticatedKey, "leads:write");
   if (method === "DELETE") {
     const result = await deletePublicLead(db, authenticatedKey.organizationId, String(body.resourceId || ""));
+    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.deleted", ` + "`public-api:${result.id}:${crypto.randomUUID()}`" + `, result)
+      .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     return jsonResponse(event, 200, result);
   }
   if (method === "POST") {
     const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data || body);
+    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.created", ` + "`public-api:${lead.id}:${crypto.randomUUID()}`" + `, lead)
+      .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     return jsonResponse(event, 201, { data: lead });
   }
   if (method === "PUT") {
@@ -359,6 +363,8 @@ async function handlePublicApiLeads(event) {
       return jsonResponse(event, 400, { error: "A lead data object is required for updates." });
     }
     const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data, String(body.resourceId || ""));
+    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.updated", ` + "`public-api:${lead.id}:${crypto.randomUUID()}`" + `, lead)
+      .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     return jsonResponse(event, 200, { data: lead });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
@@ -776,6 +782,10 @@ async function handleTenantCrm(event, resource) {
       if (!linked.empty) return jsonResponse(event, 409, { error: "Move or close leads in this stage before deleting it." });
     }
     await ref.delete();
+    if (resource === "leads") {
+      await enqueueOrganizationWebhookEvent(db, organization.id, "lead.deleted", `app:${resourceId}:${crypto.randomUUID()}`, { id: resourceId, organizationId: organization.id })
+        .catch(error => console.error("CRM lead delete webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+    }
     return jsonResponse(event, 200, { success: true });
   }
 
@@ -864,6 +874,11 @@ async function handleTenantCrm(event, resource) {
   };
   if (method === "POST") item.createdBy = decoded.uid;
   await ref.set(item, { merge: method === "PUT" });
+  await enqueueOrganizationWebhookEvent(
+    db, organization.id, method === "POST" ? "lead.created" : "lead.updated",
+    `app:${ref.id}:${now.getTime()}:${crypto.randomUUID()}`,
+    { id: ref.id, ...item }
+  ).catch(error => console.error("CRM lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
   return jsonResponse(event, method === "POST" ? 201 : 200, { item: { id: ref.id, ...item } });
 }
 
