@@ -16,6 +16,13 @@ function fakeDb() {
       const writes = [];
       const transaction = {
         async get(reference) {
+          if (reference?.isQuery) {
+            const prefix = reference.path + "/";
+            const docs = [...records.entries()]
+              .filter(([key, value]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/") && value?.[reference.field] === reference.value)
+              .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
+            return { docs, size: docs.length };
+          }
           const data = records.get(reference.path);
           return { exists: Boolean(data), id: reference.path.split("/").at(-1), data: () => data };
         },
@@ -45,6 +52,10 @@ function fakeDb() {
   function collection(path) {
     return {
       doc(id) { return ref(path + "/" + (id || "generated")); },
+      where(field, operator, value) {
+        assert.equal(operator, "==");
+        return { path, isQuery: true, field, value };
+      },
       async get() {
         const prefix = path + "/";
         const docs = [...records.entries()]
@@ -103,6 +114,20 @@ test("owner can add existing Firebase users as agents and list members", async (
   assert.equal(records.get("organizations/org_a/members/agent_uid").status, "active");
   assert.equal(records.get("users/agent_uid/organizations/org_a").role, "agent");
   assert.equal((await listOrganizationMembers(db, organization)).members.length, 1);
+});
+
+test("active plan agent seat limit blocks adding members beyond the plan", async () => {
+  const { db, records } = fakeDb();
+  const organizationRef = db.collection("organizations").doc("org_a");
+  const organization = { id: "org_a", ref: organizationRef, createdBy: "owner_uid" };
+  await organizationRef.collection("members").doc("owner_uid").set({ uid: "owner_uid", role: "owner", status: "active" });
+  await organizationRef.collection("billing").doc("subscription").set({ status: "active", plan: "lite" });
+  const auth = { async getUserByEmail(email) { return { uid: "new_agent", email }; } };
+  await assert.rejects(
+    () => addOrganizationMember(db, auth, organization, { uid: "owner_uid", role: "owner" }, { email: "new@example.com", role: "agent" }),
+    { statusCode: 409 }
+  );
+  assert.equal(records.has("organizations/org_a/members/new_agent"), false);
 });
 
 test("admins cannot add or promote other admins", async () => {
