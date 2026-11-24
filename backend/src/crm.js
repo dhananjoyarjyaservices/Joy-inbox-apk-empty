@@ -97,6 +97,10 @@ function normalizePipelineStage(input) {
   return { id, name, position, isWon, isLost, isDefault: input.isDefault === true, active: input.active !== false };
 }
 
+function canAccessCrmLead(role, actorUid, lead) {
+  return role !== "agent" || Boolean(actorUid && lead?.ownerUid === actorUid);
+}
+
 function normalizeCrmLead(input, fieldDefinitions = []) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw crmError("Lead details are required.");
   const allowed = ["title", "contactId", "stageId", "ownerUid", "source", "value", "currency", "nextFollowUpAt", "notes", "customFields"];
@@ -137,5 +141,6 @@ module.exports = {
   normalizeCrmFieldDefinition,
   normalizeCrmFieldValues,
   normalizePipelineStage,
+  canAccessCrmLead,
   normalizeCrmLead
 };
