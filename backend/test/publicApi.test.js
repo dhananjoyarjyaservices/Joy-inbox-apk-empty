@@ -163,3 +163,21 @@ test("rejects unknown scopes and invalid expiry values", async () => {
     { statusCode: 400 }
   );
 });
+
+
+test("enforces a per-key 60-request-per-minute limit", async () => {
+  const db = fakeDb({ "organizations/org_one": { status: "active" } });
+  const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "Rate limited", scopes: ["contacts:read"]
+  });
+  const now = Date.parse("2026-11-24T12:00:00Z");
+  for (let index = 0; index < 60; index += 1) {
+    await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + index);
+  }
+  await assert.rejects(
+    () => authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + 1000),
+    { statusCode: 429 }
+  );
+  const nextMinute = await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + 60000);
+  assert.equal(nextMinute.organizationId, "org_one");
+});
