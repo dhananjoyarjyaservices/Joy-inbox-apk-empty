@@ -23,6 +23,10 @@ function getFailureDisposition(error, sendAttempted, attempts) {
   return "failed";
 }
 
+function automationRuleAllowsQueue(ruleSnapshot) {
+  return Boolean(ruleSnapshot && ruleSnapshot.exists === true && ruleSnapshot.data()?.enabled === true);
+}
+
 function timestampMillis(value) {
   if (!value) return 0;
   if (typeof value.toMillis === "function") return value.toMillis();
@@ -61,6 +65,13 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     const runSnapshot = await runRef.get();
     if (!runSnapshot.exists) throw Object.assign(new Error("Automation run was not found."), { definitive: true });
     const run = runSnapshot.data();
+    const ruleRef = organizationRef.collection("automationRules").doc(String(job.ruleId || ""));
+    const ruleSnapshot = await ruleRef.get();
+    if (!automationRuleAllowsQueue(ruleSnapshot)) {
+      await jobRef.update({ status: "skipped", reason: "automation_rule_disabled_or_deleted", leaseUntil: null, updatedAt: now });
+      await runRef.set({ status: "skipped", reason: "automation_rule_disabled_or_deleted", updatedAt: now }, { merge: true });
+      return "skipped";
+    }
     const completedSteps = Number(run.completedSteps || 0);
     if (completedSteps < Number(job.stepIndex || 0)) {
       await jobRef.update({ status: "queued", dueAt: new Date(now.getTime() + 10000), leaseUntil: null, updatedAt: now });
@@ -227,6 +238,7 @@ module.exports = {
   MAX_ATTEMPTS,
   retryDelayMs,
   timestampMillis,
+  automationRuleAllowsQueue,
   getFailureDisposition,
   claimQueueJob,
   markExpiredQueueJobUncertain,
