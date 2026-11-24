@@ -14,7 +14,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 
-import { db } from "../firebase/config";
+import { db } from "../firebase/firestore";
 import type { Chat, ChatMessage } from "../types";
 
 const CHAT_PAGE_SIZE = 50;
