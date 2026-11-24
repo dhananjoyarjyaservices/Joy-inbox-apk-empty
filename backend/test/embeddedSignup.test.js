@@ -82,6 +82,7 @@ test("Solution Partner mode requires its system user and credit-line configurati
     ...env,
     META_PARTNER_MODE: "solution_partner",
     META_EMBEDDED_SIGNUP_SOLUTION_ID: "999999999999999",
+    META_USAGE_BILLING_ENABLED: "true",
     META_SYSTEM_USER_ID: "777777777777777",
     META_SYSTEM_USER_ACCESS_TOKEN: "EAA" + "s".repeat(40),
     META_EXTENDED_CREDIT_LINE_ID: "888888888888888",
@@ -89,6 +90,7 @@ test("Solution Partner mode requires its system user and credit-line configurati
   };
   assert.equal(getEmbeddedSignupConfig(partnerEnv).partnerMode, "solution_partner");
   assert.equal(getEmbeddedSignupConfig({ ...partnerEnv, META_SYSTEM_USER_ACCESS_TOKEN: "" }), null);
+  assert.equal(getEmbeddedSignupConfig({ ...partnerEnv, META_USAGE_BILLING_ENABLED: "false" }), null);
 });
 
 test("signup session is bound to a workspace and user, expires and can only be claimed once", async () => {
@@ -179,6 +181,7 @@ test("Solution Partner onboarding assigns its system user and shares its credit 
     ...env,
     META_PARTNER_MODE: "solution_partner",
     META_EMBEDDED_SIGNUP_SOLUTION_ID: "999999999999999",
+    META_USAGE_BILLING_ENABLED: "true",
     META_SYSTEM_USER_ID: "777777777777777",
     META_SYSTEM_USER_ACCESS_TOKEN: "EAA" + "s".repeat(40),
     META_EXTENDED_CREDIT_LINE_ID: "888888888888888",
