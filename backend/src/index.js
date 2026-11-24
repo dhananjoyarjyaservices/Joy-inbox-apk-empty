@@ -2697,7 +2697,8 @@ async function handleTenantBilling(event) {
     const session = await createCheckoutSession({
       organization,
       decoded,
-      planKey: String(body.plan || ""),\n      interval: String(body.interval || "month")
+      planKey: String(body.plan || ""),
+      interval: String(body.interval || "month")
     });
     return jsonResponse(event, 200, { success: true, checkout: session });
   }
