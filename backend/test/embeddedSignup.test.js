@@ -172,6 +172,54 @@ test("Embedded Signup exchanges code, validates selected WABA/phone, registers p
   assert.equal(calls[4].options.headers.Authorization, "Bearer " + "EAA" + "x".repeat(40));
 });
 
+test("Solution Partner onboarding assigns its system user and shares its credit line before registration", async () => {
+  const partnerEnv = {
+    ...env,
+    META_PARTNER_MODE: "solution_partner",
+    META_SYSTEM_USER_ID: "777777777777777",
+    META_SYSTEM_USER_ACCESS_TOKEN: "EAA" + "s".repeat(40),
+    META_EXTENDED_CREDIT_LINE_ID: "888888888888888",
+    META_CREDIT_LINE_CURRENCY: "INR"
+  };
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push({ parsed, options });
+    if (parsed.pathname.endsWith("/oauth/access_token")) return { ok: true, async json() { return { access_token: "EAA" + "x".repeat(40) }; } };
+    if (parsed.pathname.endsWith("/123456789012345")) return { ok: true, async json() { return { id: "123456789012345" }; } };
+    if (parsed.pathname.endsWith("/111111111111111/phone_numbers")) return { ok: true, async json() { return { data: [{ id: "123456789012345" }] }; } };
+    if (parsed.pathname.endsWith("/111111111111111/assigned_users")) {
+      assert.equal(parsed.searchParams.get("user"), partnerEnv.META_SYSTEM_USER_ID);
+      assert.deepEqual(JSON.parse(parsed.searchParams.get("tasks")), ["MANAGE", "DEVELOP"]);
+      assert.equal(options.headers.Authorization, "Bearer " + partnerEnv.META_SYSTEM_USER_ACCESS_TOKEN);
+      return { ok: true, async json() { return { success: true }; } };
+    }
+    if (parsed.pathname.endsWith("/888888888888888/whatsapp_credit_sharing_and_attach")) {
+      assert.equal(parsed.searchParams.get("waba_id"), "111111111111111");
+      assert.equal(parsed.searchParams.get("waba_currency"), "INR");
+      assert.equal(options.headers.Authorization, "Bearer " + partnerEnv.META_SYSTEM_USER_ACCESS_TOKEN);
+      return { ok: true, async json() { return { success: true }; } };
+    }
+    if (parsed.pathname.endsWith("/111111111111111/subscribed_apps")) return { ok: true, async json() { return { success: true }; } };
+    if (parsed.pathname.endsWith("/123456789012345/register")) return { ok: true, async json() { return { success: true }; } };
+    throw new Error("Unexpected Meta endpoint: " + parsed.pathname);
+  };
+  const result = await completeEmbeddedSignup({
+    code: "valid-authorization-code",
+    wabaId: "111111111111111",
+    phoneNumberId: "123456789012345",
+    registrationPin: "123456",
+    env: partnerEnv,
+    fetchImpl
+  });
+  assert.equal(result.billingModel, "joy_inbox_partner_credit_line");
+  assert.equal(calls.length, 7);
+  assert.ok(calls[3].parsed.pathname.endsWith("/assigned_users"));
+  assert.ok(calls[4].parsed.pathname.endsWith("/whatsapp_credit_sharing_and_attach"));
+  assert.ok(calls[5].parsed.pathname.endsWith("/subscribed_apps"));
+  assert.ok(calls[6].parsed.pathname.endsWith("/register"));
+});
+
 test("Embedded Signup refuses a phone number that is not part of the selected WABA", async () => {
   const fetchImpl = async (url) => {
     const parsed = new URL(url);
