@@ -102,3 +102,35 @@ test("CTA URL messages reject insecure URLs and invalid button labels", () => {
     type: "cta_url", body: "Pay", displayText: "x".repeat(21), url: "https://payments.example.com"
   }), /Link button text/);
 });
+
+test("builds media carousel messages with two to ten HTTPS image cards and URL actions", () => {
+  const message = {
+    type: "carousel",
+    body: "Explore our latest offers",
+    cards: [
+      { imageUrl: "https://cdn.example.com/one.jpg", body: "First offer", displayText: "View offer", url: "https://shop.example.com/one" },
+      { imageUrl: "https://cdn.example.com/two.jpg", body: "Second offer", displayText: "Shop now", url: "https://shop.example.com/two" }
+    ]
+  };
+  const normalized = normalizeInteractiveMessage(message);
+  const payload = buildWhatsAppInteractivePayload("919876543210", normalized);
+  assert.equal(payload.interactive.type, "carousel");
+  assert.equal(payload.interactive.action.cards.length, 2);
+  assert.deepEqual(payload.interactive.action.cards[0], {
+    card_index: 0,
+    type: "cta_url",
+    header: { type: "image", image: { link: "https://cdn.example.com/one.jpg" } },
+    body: { text: "First offer" },
+    action: { name: "cta_url", parameters: { display_text: "View offer", url: "https://shop.example.com/one" } }
+  });
+  assert.match(getInteractivePreview(normalized), /2 option/);
+});
+
+test("rejects carousel counts, unsupported headers and unsafe card URLs", () => {
+  const card = { imageUrl: "https://cdn.example.com/one.jpg", body: "Offer", displayText: "View", url: "https://shop.example.com" };
+  assert.throws(() => normalizeInteractiveMessage({ type: "carousel", body: "Offers", cards: [card] }), /two to ten/);
+  assert.throws(() => normalizeInteractiveMessage({ type: "carousel", body: "Offers", header: "Header", cards: [card, card] }), /do not support/);
+  assert.throws(() => normalizeInteractiveMessage({ type: "carousel", body: "Offers", cards: [{ ...card, imageUrl: "http://cdn.example.com/one.jpg" }, card] }), /image URL must use HTTPS/);
+  assert.throws(() => normalizeInteractiveMessage({ type: "carousel", body: "Offers", cards: [{ ...card, url: "javascript:alert(1)" }, card] }), /button URL must use HTTPS/);
+  assert.throws(() => normalizeInteractiveMessage({ type: "carousel", body: "Offers", cards: [{ ...card, body: "x".repeat(161) }, card] }), /160 characters/);
+});
