@@ -3503,6 +3503,14 @@ exports.handler = async (event) => {
     }
   }
 
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/public/v1/leads")) {
+    try { return await handlePublicApiLeads(event); }
+    catch (error) {
+      console.error("Public leads API request failed:", error.statusCode || "PUBLIC_API_REQUEST_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Public leads API request could not be completed." });
+    }
+  }
+
   if (["GET", "POST"].includes(method) && path.endsWith("/public/v1/contacts")) {
     try { return await handlePublicApiContacts(event); }
     catch (error) {
