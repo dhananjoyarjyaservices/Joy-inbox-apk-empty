@@ -30,6 +30,8 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
   const [name, setName] = useState("");
   const [readContacts, setReadContacts] = useState(true);
   const [writeContacts, setWriteContacts] = useState(false);
+  const [readLeads, setReadLeads] = useState(false);
+  const [writeLeads, setWriteLeads] = useState(false);
   const [expiryDays, setExpiryDays] = useState(90);
   const [newKey, setNewKey] = useState("");
   const [copied, setCopied] = useState(false);
@@ -61,7 +63,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
       const result = await createOrganizationApiKey({
         organizationId,
         name,
-        scopes: [ ...(readContacts ? ["contacts:read"] : []), ...(writeContacts ? ["contacts:write"] : []) ],
+        scopes: [ ...(readContacts ? ["contacts:read"] : []), ...(writeContacts ? ["contacts:write"] : []), ...(readLeads ? ["leads:read"] : []), ...(writeLeads ? ["leads:write"] : []) ],
         expiryDays
       });
       setNewKey(result.apiKey.apiKey);
@@ -154,13 +156,15 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <p className="text-sm font-medium text-gray-600">Permissions</p>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readContacts} onChange={event => setReadContacts(event.target.checked)}/> Read contacts</label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={writeContacts} onChange={event => setWriteContacts(event.target.checked)}/> Create/update contacts</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readLeads} onChange={event => setReadLeads(event.target.checked)}/> Read CRM leads</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={writeLeads} onChange={event => setWriteLeads(event.target.checked)}/> Create/update/delete CRM leads</label>
           </div>
           <label className="block text-sm text-gray-600">Key expires after
             <select value={expiryDays} onChange={event => setExpiryDays(Number(event.target.value))} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">
               <option value={30}>30 days</option><option value={90}>90 days</option><option value={180}>180 days</option><option value={365}>365 days</option>
             </select>
           </label>
-          <button disabled={saving || !organizationId || (!readContacts && !writeContacts)} className="rounded-lg bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Creating..." : "Create API key"}</button>
+          <button disabled={saving || !organizationId || (!readContacts && !writeContacts && !readLeads && !writeLeads)} className="rounded-lg bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Creating..." : "Create API key"}</button>
         </form>
         <div className="rounded-xl border bg-white p-4">
           <div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">API keys</h3><button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-lg border px-3 py-1.5 text-xs text-[#075e54]">{loading ? "Refreshing..." : "Refresh"}</button></div>
@@ -189,9 +193,12 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
           <div className="mt-3 space-y-3 text-sm">
             <div><p className="font-mono text-xs font-semibold text-green-700">GET /public/v1/contacts</p><p className="text-xs text-gray-500">Requires <code>contacts:read</code>. Optional query: <code>limit</code> (1–100).</p></div>
             <div><p className="font-mono text-xs font-semibold text-blue-700">POST /public/v1/contacts</p><p className="text-xs text-gray-500">Requires <code>contacts:write</code>. JSON body: name, phone, email, notes, source and tags.</p></div>
+            <div><p className="font-mono text-xs font-semibold text-green-700">GET /public/v1/leads</p><p className="text-xs text-gray-500">Requires <code>leads:read</code>. Optional query: <code>limit</code> (1–100).</p></div>
+            <div><p className="font-mono text-xs font-semibold text-blue-700">POST /public/v1/leads</p><p className="text-xs text-gray-500">Requires <code>leads:write</code>. Creates a lead after validating its stage, contact, owner and custom fields.</p></div>
+            <div><p className="font-mono text-xs font-semibold text-amber-700">PUT /public/v1/leads · DELETE /public/v1/leads</p><p className="text-xs text-gray-500">Requires <code>leads:write</code>. Supply <code>resourceId</code>; PUT also requires a complete <code>data</code> object.</p></div>
           </div>
           <pre className="mt-3 overflow-x-auto rounded-lg bg-gray-950 p-3 text-xs text-gray-100"><code>{`curl -H "Authorization: Bearer YOUR_JOY_API_KEY" \\\n  YOUR_API_BASE_URL/public/v1/contacts?limit=50`}</code></pre>
-          <p className="mt-2 text-[11px] text-gray-500">Workspace ID is derived from the API key, never accepted from the request. Keys cannot access another workspace. Each key is limited to 60 requests per minute; additional CRM/message scopes and cursor pagination are still being added.</p>
+          <p className="mt-2 text-[11px] text-gray-500">Workspace ID is derived from the API key, never accepted from the request. Keys cannot access another workspace. Each key is limited to 60 requests per minute; message/campaign scopes, cursor pagination, idempotency and usage analytics are still being added.</p>
         </div>
       </div>
     </section>
