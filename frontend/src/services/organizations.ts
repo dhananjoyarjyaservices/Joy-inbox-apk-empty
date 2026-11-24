@@ -495,3 +495,13 @@ export async function revokeOrganizationInvitation(organizationId: string, email
 export async function acceptOrganizationInvitation(organizationId: string, token: string) {
   return request("/organizations/invitations/accept", "POST", { organizationId, token });
 }
+
+
+export interface OrganizationApiUsage {
+  periodDays: number;
+  totals: { requests: number; rateLimited: number };
+  daily: { keyId: string; date: string; requests: number; rateLimited: number }[];
+}
+export async function getOrganizationApiUsage(organizationId: string, days = 30): Promise<OrganizationApiUsage> {
+  return request(`/organizations/developer/api-usage?organizationId=${encodeURIComponent(organizationId)}&days=${encodeURIComponent(String(days))}`);
+}
