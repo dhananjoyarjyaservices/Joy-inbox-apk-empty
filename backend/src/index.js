@@ -53,6 +53,7 @@ const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetrya
 const { listPublicLeads, savePublicLead, deletePublicLead } = require("./publicCrmApi");
 const { importCrmLeads } = require("./crmBulkImport");
 const { buildCrmSalesReport } = require("./crmSalesReport");
+const { recordCrmActivity, listCrmActivity } = require("./crmActivity");
 const {
   createOrganizationApiKey,
   listOrganizationApiKeys,
@@ -786,6 +787,23 @@ async function handleTenantCrmBulkImport(event) {
   });
 }
 
+async function handleTenantCrmActivity(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const leadId = event.queryStringParameters?.leadId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "contacts:manage");
+  const leadSnapshot = await organization.ref.collection("crmLeads").doc(String(leadId || "")).get();
+  if (!leadSnapshot.exists) return jsonResponse(event, 404, { error: "Lead was not found." });
+  if (!canAccessCrmLead(organization.role, decoded.uid, leadSnapshot.data())) {
+    return jsonResponse(event, 403, { error: "Agents can only view activity for leads assigned to them." });
+  }
+  const rawLimit = Number(event.queryStringParameters?.limit || 50);
+  const limit = Number.isInteger(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 50;
+  const activities = await listCrmActivity(organization, String(leadId), limit);
+  return jsonResponse(event, 200, { activities });
+}
+
 async function handleTenantCrm(event, resource) {
   const method = getMethod(event);
   const decoded = await authenticateUser(event);
@@ -844,6 +862,12 @@ async function handleTenantCrm(event, resource) {
       if (snapshot.data()?.isDefault) return jsonResponse(event, 409, { error: "The default pipeline stage cannot be deleted." });
       const linked = await organization.ref.collection("crmLeads").where("stageId", "==", resourceId).limit(1).get();
       if (!linked.empty) return jsonResponse(event, 409, { error: "Move or close leads in this stage before deleting it." });
+    }
+    if (resource === "leads") {
+      await recordCrmActivity(db, {
+        organizationId: organization.id, leadId: resourceId, actorUid: decoded.uid,
+        action: "deleted", before: snapshot.data(), after: null, at: new Date()
+      });
     }
     await ref.delete();
     if (resource === "leads") {
@@ -913,6 +937,7 @@ async function handleTenantCrm(event, resource) {
     }
   }
   let ref;
+  let existingLeadData = null;
   let createdAt = now;
   if (method === "PUT") {
     const resourceId = String(body.resourceId || "");
@@ -923,7 +948,8 @@ async function handleTenantCrm(event, resource) {
     if (!canAccessCrmLead(organization.role, decoded.uid, existing.data())) {
       return jsonResponse(event, 403, { error: "Agents can only update leads assigned to them." });
     }
-    createdAt = existing.data()?.createdAt || now;
+    existingLeadData = existing.data();
+    createdAt = existingLeadData?.createdAt || now;
   } else {
     ref = collection.doc();
   }
@@ -938,6 +964,12 @@ async function handleTenantCrm(event, resource) {
   };
   if (method === "POST") item.createdBy = decoded.uid;
   await ref.set(item, { merge: method === "PUT" });
+  await recordCrmActivity(db, {
+    organizationId: organization.id, leadId: ref.id, actorUid: decoded.uid,
+    action: method === "POST" ? "created" : "updated",
+    before: existingLeadData,
+    after: item, at: now
+  });
   await enqueueOrganizationWebhookEvent(
     db, organization.id, method === "POST" ? "lead.created" : "lead.updated",
     `app:${ref.id}:${now.getTime()}:${crypto.randomUUID()}`,
@@ -3822,6 +3854,14 @@ exports.handler = async (event) => {
       return jsonResponse(event, error.statusCode || 500, {
         error: error.statusCode ? error.message : "Campaign request could not be completed."
       });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/crm/activity")) {
+    try { return await handleTenantCrmActivity(event); }
+    catch (error) {
+      console.error("Tenant CRM activity request failed:", error.statusCode || "CRM_ACTIVITY_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "CRM activity could not be loaded." });
     }
   }
 
