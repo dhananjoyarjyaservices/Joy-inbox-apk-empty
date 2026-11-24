@@ -27,6 +27,7 @@ Legend:
 | Interakt capability | Joy Inbox status | Repository evidence / gap |
 |---|---|---|
 | WhatsApp shared team inbox | Implemented (code) | Tenant Inbox, organization-scoped chats/messages, member roles and tenant APIs. |
+| WhatsApp self-service onboarding | Implemented (code) / external validation pending | Meta Embedded Signup v4-compatible UI and backend authorization-code exchange, WABA/phone ownership validation, server-generated two-step PIN, phone registration, WABA webhook subscription and encrypted tenant credential storage. Requires Meta app/config IDs, server app secret, Tech Provider/Solution Partner eligibility, App Review and real staging validation. |
 | Chat assignment/reassignment and open/pending/resolved | Implemented (code) | Tenant chat assignment/state APIs and UI. |
 | Pin, archive, search and paginated message history | Implemented (code) | Tenant Inbox and pagination services. |
 | Customer profile, contacts, notes and tags | Partial | Contact fields, notes, tags and bulk tag operations exist; typed custom fields are now available on CRM leads, but not yet fully integrated into contact profiles. |
