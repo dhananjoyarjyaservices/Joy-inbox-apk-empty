@@ -82,20 +82,22 @@ function normalizeCrmFieldValues(input, definitions = []) {
 
 function normalizePipelineStage(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw crmError("Pipeline stage details are required.");
-  const allowed = ["id", "name", "position", "isWon", "isLost", "isDefault", "active"];
+  const allowed = ["id", "name", "position", "isWon", "isLost", "isDefault", "active", "probability"];
   if (Object.keys(input).some(key => !allowed.includes(key))) throw crmError("Pipeline stage contains unsupported properties.");
   const id = typeof input.id === "string" ? input.id.trim().toLowerCase().replace(/[ -]+/g, "_") : "";
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const position = input.position === undefined ? 100 : input.position;
   const isWon = input.isWon === true;
   const isLost = input.isLost === true;
+  const probability = input.probability === undefined ? (isWon ? 100 : isLost ? 0 : 50) : input.probability;
   if (!ID_PATTERN.test(id)) throw crmError("Stage ID must start with a letter and contain 2–40 lowercase letters, numbers or underscores.");
   if (!name || name.length > 50) throw crmError("Stage name is required (maximum 50 characters).");
   if (!Number.isInteger(position) || position < 0 || position > 10000) throw crmError("Stage position must be an integer from 0 to 10,000.");
   if (isWon && isLost) throw crmError("A stage cannot be both won and lost.");
+  if (!Number.isInteger(probability) || probability < 0 || probability > 100) throw crmError("Stage probability must be an integer from 0 to 100.");
   if (input.isDefault !== undefined && typeof input.isDefault !== "boolean") throw crmError("Default must be true or false.");
   if (input.active !== undefined && typeof input.active !== "boolean") throw crmError("Active must be true or false.");
-  return { id, name, position, isWon, isLost, isDefault: input.isDefault === true, active: input.active !== false };
+  return { id, name, position, isWon, isLost, probability, isDefault: input.isDefault === true, active: input.active !== false };
 }
 
 function canAccessCrmLead(role, actorUid, lead) {
