@@ -34,3 +34,22 @@ test("CRM API endpoints require Firebase authentication before workspace data ac
     assert.equal(response.statusCode, 401, `${method} ${path} must reject anonymous requests`);
   }
 });
+
+
+test("webhook delivery history and replay routes require workspace authentication", async () => {
+  const { handler } = require("../src/index");
+  const getResponse = await handler({
+    httpMethod: "GET",
+    path: "/organizations/developer/webhook-deliveries",
+    headers: {},
+    queryStringParameters: { organizationId: "org_a" }
+  });
+  const postResponse = await handler({
+    httpMethod: "POST",
+    path: "/organizations/developer/webhook-deliveries",
+    headers: {},
+    body: JSON.stringify({ organizationId: "org_a", deliveryId: "a".repeat(64) })
+  });
+  assert.equal(getResponse.statusCode, 401);
+  assert.equal(postResponse.statusCode, 401);
+});
