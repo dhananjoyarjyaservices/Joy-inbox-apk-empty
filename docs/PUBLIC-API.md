@@ -28,6 +28,21 @@ Content-Type: application/json
 ```
 Required scope: `contacts:write`. Contacts are keyed by normalized international phone number; repeated POST requests update the same workspace contact. Send a unique `Idempotency-Key` header (8–128 safe characters) to make retries safe; a completed retry returns the original response without creating another webhook event.
 
+## Send WhatsApp text messages
+
+### Send a text message
+```http
+POST /public/v1/messages
+Authorization: Bearer YOUR_JOY_API_KEY
+Idempotency-Key: order-123-message-1
+Content-Type: application/json
+```
+Required scope: `messages:write`. The request must include the connected `phoneNumberId`, recipient phone number in international format (digits only), and text (1–4096 characters):
+```json
+{ "phoneNumberId": "123456789012345", "to": "919876543210", "text": "Thanks for contacting us." }
+```
+The number must belong to the API key's workspace. The API sends through the WhatsApp Cloud API and stores the text and delivery metadata in the workspace inbox; it does not store customer media. Use a unique `Idempotency-Key` for safe retries. WhatsApp policy, recipient opt-in, messaging windows and Meta account limits still apply. A successful response means Meta accepted the message, not that the recipient device received it.
+
 ## Sales CRM leads
 
 ### List leads
