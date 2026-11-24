@@ -8,6 +8,7 @@ const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, re
 const { sendTenantIncomingTextNotification } = require("./push");
 const { matchesAutomationRule } = require("./automationRules");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
+const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 
 function getVerifyToken() {
   return (
@@ -483,6 +484,15 @@ async function processWebhookPayload(payload) {
           continue;
         }
         if (created) {
+          await enqueueOrganizationWebhookEvent(db, organization.id, "message.received", String(message.id || ""), {
+            messageId: String(message.id || ""),
+            phone,
+            customerName: String(name || "").slice(0, 100),
+            phoneNumberId: String(phoneNumberId),
+            type: String(message.type || "unknown").slice(0, 40),
+            text: String(inboundText || "").slice(0, 4096),
+            timestamp: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString()
+          }).catch(error => console.error("Inbound message webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
           await maybeSendTenantGreeting(db, organization, credentials, phone, message);
           try {
             await maybeRunTenantKeywordAutomation(db, organization, credentials, phone, message);
@@ -508,6 +518,27 @@ async function processWebhookPayload(payload) {
       for (const status of statuses) {
         if (!status || typeof status !== "object" || Array.isArray(status)) continue;
         await updateTenantMessageStatus(organization, status);
+        const statusEvent = ({
+          sent: "message.sent",
+          delivered: "message.delivered",
+          read: "message.read",
+          failed: "message.failed"
+        })[String(status.status || "").toLowerCase()];
+        if (statusEvent) {
+          const messageId = String(status.id || "");
+          await enqueueOrganizationWebhookEvent(db, organization.id, statusEvent,
+            `${messageId}:${String(status.status)}:${String(status.timestamp || "")}`,
+            {
+              messageId,
+              recipient: normalizePhoneNumber(status.recipient_id || ""),
+              phoneNumberId: String(phoneNumberId),
+              status: String(status.status),
+              timestamp: status.timestamp ? new Date(Number(status.timestamp) * 1000).toISOString() : new Date().toISOString(),
+              errorCode: status.errors?.[0]?.code ? String(status.errors[0].code) : undefined,
+              errorTitle: status.errors?.[0]?.title ? String(status.errors[0].title).slice(0, 200) : undefined
+            }
+          ).catch(error => console.error("Message status webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+        }
       }
     }
   }
