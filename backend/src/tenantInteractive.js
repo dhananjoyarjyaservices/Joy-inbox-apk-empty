@@ -148,7 +148,8 @@ function buildWhatsAppInteractivePayload(to, input) {
 }
 
 function getInteractivePreview(message) {
-  const count = message.type === "carousel" ? message.cards.length : message.type === "cta_url" ? 1 : message.type === "button"
+  if (message.type === "carousel") return `Interactive carousel message · ${message.cards.length} card(s): ${message.body}`.slice(0, 1024);
+  const count = message.type === "cta_url" ? 1 : message.type === "button"
     ? message.buttons.length
     : message.sections.reduce((total, section) => total + section.rows.length, 0);
   return `Interactive ${message.type} message · ${count} option(s): ${message.body}`.slice(0, 1024);
