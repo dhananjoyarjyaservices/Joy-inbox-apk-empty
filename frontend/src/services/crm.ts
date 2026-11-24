@@ -7,7 +7,7 @@ export type CrmField = {
   options: string[]; required: boolean; active: boolean;
 };
 export type CrmStage = {
-  id: string; name: string; position: number; isWon: boolean; isLost: boolean; isDefault: boolean; active: boolean;
+  id: string; name: string; position: number; isWon: boolean; isLost: boolean; probability?: number; isDefault: boolean; active: boolean;
 };
 export type CrmLead = {
   id: string; title: string; contactId: string; stageId: string; stageName: string; ownerUid: string;
@@ -87,6 +87,7 @@ export interface CrmSalesReport {
   wonValue: number;
   openValue: number;
   lostValue: number;
+  weightedOpenValue: number;
   conversionRate: number;
   byStage: Array<{ id: string; name: string; total: number; value: number; won: number; lost: number; open: number }>;
   byOwner: Array<{ uid: string; name: string; total: number; value: number; won: number; lost: number; open: number; wonValue: number }>;
