@@ -471,6 +471,17 @@ async function processWebhookPayload(payload) {
         const inboundText = message.type === "text" ? String(message.text?.body || "")
           : message.type === "interactive" ? String(message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "")
             : message.type === "button" ? String(message.button?.text || "") : "";
+        if (created) {
+          await enqueueOrganizationWebhookEvent(db, organization.id, "message.received", String(message.id || ""), {
+            messageId: String(message.id || ""),
+            phone,
+            customerName: String(name || "").slice(0, 100),
+            phoneNumberId: String(phoneNumberId),
+            type: String(message.type || "unknown").slice(0, 40),
+            text: String(inboundText || "").slice(0, 4096),
+            timestamp: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString()
+          }).catch(error => console.error("Inbound message webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+        }
         if (isWhatsAppOptOutMessage(inboundText)) {
           // Re-apply suppression on webhook retries even when the inbound
           // message was already persisted before a previous suppression write failed.
@@ -484,15 +495,6 @@ async function processWebhookPayload(payload) {
           continue;
         }
         if (created) {
-          await enqueueOrganizationWebhookEvent(db, organization.id, "message.received", String(message.id || ""), {
-            messageId: String(message.id || ""),
-            phone,
-            customerName: String(name || "").slice(0, 100),
-            phoneNumberId: String(phoneNumberId),
-            type: String(message.type || "unknown").slice(0, 40),
-            text: String(inboundText || "").slice(0, 4096),
-            timestamp: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString()
-          }).catch(error => console.error("Inbound message webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
           await maybeSendTenantGreeting(db, organization, credentials, phone, message);
           try {
             await maybeRunTenantKeywordAutomation(db, organization, credentials, phone, message);
