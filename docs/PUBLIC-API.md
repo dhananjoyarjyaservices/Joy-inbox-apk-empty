@@ -124,7 +124,7 @@ Required scope: `leads:write`. Send `{ "resourceId": "lead-document-id" }`.
 ## Key management and limits
 
 - Workspace owners/admins manage API keys; the full key is shown only once.
-- Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`, `messages:write`, `templates:read`, `campaigns:read`.
+- Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`, `messages:write`, `templates:read`, `campaigns:read`, `campaigns:write` (draft creation only).
 - API rate limit is 60 requests per key per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` and `publicApiUsageDaily.expiresAt` before production.
 - Idempotency records are retained for 24 hours. Enable Firestore TTL on `publicApiIdempotency.expiresAt`; use a new key for a distinct logical mutation.
 - Daily usage analytics count accepted requests and rate-limited attempts by API key and UTC date.
