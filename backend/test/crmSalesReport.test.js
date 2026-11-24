@@ -39,3 +39,19 @@ test("reports an empty pipeline safely and flags capped samples", () => {
   assert.equal(report.limited, true);
   assert.deepEqual(report.byStage, []);
 });
+
+
+test("calculates weighted open pipeline forecast from stage probabilities", () => {
+  const report = aggregateCrmSalesReport([
+    { title: "High confidence", stageId: "qualified", value: 10000 },
+    { title: "Early lead", stageId: "new", value: 20000 },
+    { title: "Closed", stageId: "won", value: 5000 }
+  ], [
+    { id: "qualified", name: "Qualified", probability: 75 },
+    { id: "new", name: "New", probability: 20 },
+    { id: "won", name: "Won", isWon: true, probability: 100 }
+  ], []);
+  assert.equal(report.openValue, 30000);
+  assert.equal(report.weightedOpenValue, 11500);
+  assert.equal(report.byCurrency[0].weightedOpenValue, 11500);
+});
