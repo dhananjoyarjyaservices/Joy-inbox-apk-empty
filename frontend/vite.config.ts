@@ -17,16 +17,23 @@ export default defineConfig(() => ({
       output: {
         manualChunks(id) {
           if (!id.includes("/node_modules/")) return;
-          if (id.includes("/node_modules/@firebase/") || id.includes("/node_modules/firebase/")) {
-            return "firebase-vendor";
-          }
+          if (
+            id.includes("/node_modules/@firebase/auth/") ||
+            id.includes("/node_modules/firebase/auth/")
+          ) return "firebase-auth";
+          if (
+            id.includes("/node_modules/@firebase/firestore/") ||
+            id.includes("/node_modules/firebase/firestore/")
+          ) return "firebase-firestore";
+          if (
+            id.includes("/node_modules/@firebase/") ||
+            id.includes("/node_modules/firebase/")
+          ) return "firebase-core";
           if (
             id.includes("/node_modules/react/") ||
             id.includes("/node_modules/react-dom/") ||
             id.includes("/node_modules/react-router/")
-          ) {
-            return "react-vendor";
-          }
+          ) return "react-vendor";
           if (id.includes("/node_modules/framer-motion/")) return "motion-vendor";
         }
       }
