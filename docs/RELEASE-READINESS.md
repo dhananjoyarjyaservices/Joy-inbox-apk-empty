@@ -10,7 +10,7 @@ This checklist separates code already present from work that requires real servi
 
 Complete all repository-only implementation, code review, documentation, local/emulator testing, CI checks, static security review, frontend build/preview preparation, Lambda packaging review and infrastructure-template review before requesting any Firebase connection. Firebase connection is intentionally reserved for the final external integration phase. Once the repository-only phase is complete, connect an isolated Firebase staging project and then run integrated Firebase/Meta/Stripe/AWS acceptance tests. Do not ask the owner to configure Firebase while code-only work remains. This sequencing does not waive any staging or production gate below.
 
-## Code foundations present
+## Product parity audit\n\n- [x] Compare the implemented Joy Inbox code paths against Interakt's current public product categories and document implemented, partial, missing and externally gated capabilities in [docs/INTERAKT-FEATURE-PARITY.md](INTERAKT-FEATURE-PARITY.md).\n- [ ] Implement the missing product capabilities listed in that audit before claiming Interakt feature parity. Instagram, RCS, AI/voice, commerce, forms, sales pipeline and public API/webhook modules are not complete in this branch.\n\n## Code foundations present
 
 - [x] Tenant authentication, organization membership and role checks.
 - [x] Tenant-scoped text messaging and webhook routing by Meta Phone Number ID.
