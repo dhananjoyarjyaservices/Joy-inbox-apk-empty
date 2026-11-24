@@ -219,6 +219,54 @@ function sendPinnedWebhookRequest(endpoint, resolvedAddress, options) {
   });
 }
 
+async function listOrganizationWebhookDeliveries(db, organizationId, limit = 50) {
+  const safeLimit = Number.isInteger(limit) ? Math.min(100, Math.max(1, limit)) : 50;
+  const snapshot = await db.collection("webhookDeliveryQueue")
+    .where("organizationId", "==", organizationId)
+    .limit(100)
+    .get();
+  return snapshot.docs.map(document => {
+    const data = document.data() || {};
+    return {
+      id: document.id,
+      event: data.event,
+      eventId: data.eventId,
+      subscriptionId: data.subscriptionId,
+      status: data.status,
+      attempts: Number(data.attempts || 0),
+      responseStatus: data.responseStatus || null,
+      lastError: data.lastError || null,
+      createdAt: toIso(data.createdAt),
+      deliveredAt: toIso(data.deliveredAt),
+      nextAttemptAt: toIso(data.nextAttemptAt)
+    };
+  }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, safeLimit);
+}
+
+async function replayOrganizationWebhookDelivery(db, organizationId, deliveryId, now = Date.now()) {
+  if (!/^[a-f0-9]{64}$/.test(deliveryId || "")) throw httpError("A valid webhook delivery ID is required.", 400);
+  const ref = db.collection("webhookDeliveryQueue").doc(deliveryId);
+  await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.data() || {};
+    if (!snapshot.exists || data.organizationId !== organizationId) {
+      throw httpError("Webhook delivery was not found in this workspace.", 404);
+    }
+    if (data.status !== "failed") throw httpError("Only failed webhook deliveries can be replayed.", 409);
+    transaction.set(ref, {
+      status: "pending",
+      attempts: 0,
+      nextAttemptAt: new Date(now),
+      lockUntil: null,
+      lastError: null,
+      responseStatus: null,
+      deliveredAt: null,
+      updatedAt: new Date(now)
+    }, { merge: true });
+  });
+  return { id: deliveryId, status: "pending" };
+}
+
 async function processPendingWebhookDeliveries(db, {
   fetchImpl = fetch,
   lookupImpl = dns.lookup,
@@ -319,6 +367,8 @@ module.exports = {
   listOrganizationWebhooks,
   revokeOrganizationWebhook,
   enqueueOrganizationWebhookEvent,
+  listOrganizationWebhookDeliveries,
+  replayOrganizationWebhookDelivery,
   resolvePublicWebhookHost,
   sendPinnedWebhookRequest,
   processPendingWebhookDeliveries
