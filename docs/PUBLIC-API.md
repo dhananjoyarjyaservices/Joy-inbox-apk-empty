@@ -43,14 +43,23 @@ Required scope: `messages:write`. The request must include the connected `phoneN
 ```
 The number must belong to the API key's workspace. The API sends through the WhatsApp Cloud API and stores the text and delivery metadata in the workspace inbox; it does not store customer media. A unique `Idempotency-Key` is required for every send and makes retries safe. Sends consume the workspace outbound-message allowance and obey its hard-block plan limit. WhatsApp policy, recipient opt-in, messaging windows and Meta account limits still apply. A successful response means Meta accepted the message, not that the recipient device received it.
 
-## Campaign reporting
+## Campaigns
+
+### Create a campaign draft
+```http
+POST /public/v1/campaigns
+Authorization: Bearer YOUR_JOY_API_KEY
+Idempotency-Key: campaign-draft-2026-001
+Content-Type: application/json
+```
+Required scope: `campaigns:write`. This endpoint creates a draft only; it never schedules, queues or sends messages. A unique `Idempotency-Key` is required. The request uses the same campaign fields as the workspace campaign builder: `name`, `templateName`, `language`, `category`, `phoneNumberId`, `wabaId`, optional campaign-level `variables`, and a `recipients` array. Each recipient must include `phone`, `optedIn: true`, a past `consentAt` timestamp and a non-empty `consentSource`; optional per-recipient `variables` may override campaign defaults. The API derives the workspace from the API key and verifies that the WhatsApp number is connected, the template is approved in the requested language/category, variables match the template body, and opted-out recipients are suppressed. Invalid/ineligible recipients are skipped or rejected according to the campaign consent validator. Recipient phone numbers and consent evidence are stored only inside that workspace's campaign recipient subcollection and are not returned by the campaign summary API.
 
 ### List campaign summaries
 ```http
 GET /public/v1/campaigns?limit=50
 Authorization: Bearer YOUR_JOY_API_KEY
 ```
-Required scope: `campaigns:read`. The endpoint returns campaign summary fields and delivery counters for campaigns in the API key workspace only. It never returns recipient phone numbers or consent records. Results are ordered by creation time (newest first), with a page size from 1–100. Pass `pagination.nextCursor` as `cursor` to retrieve the next page.
+Required scope: `campaigns:read` for reports and `campaigns:write` for draft creation only. The endpoint returns campaign summary fields and delivery counters for campaigns in the API key workspace only. It never returns recipient phone numbers or consent records. Results are ordered by creation time (newest first), with a page size from 1–100. Pass `pagination.nextCursor` as `cursor` to retrieve the next page.
 
 ## Approved WhatsApp templates
 
