@@ -12,6 +12,37 @@
 - Linked the audit from README and release-readiness documentation.
 - Kept Firebase, live payment activation, production deployment and PR merge untouched.
 
+## Priority 0 — Interakt-style self-service WhatsApp onboarding
+
+This is a launch-critical onboarding requirement and must be implemented before CRM expansion.
+
+Customer experience:
+- Customer creates a Joy Inbox account and workspace.
+- Customer clicks **Connect WhatsApp** and completes Meta's official Facebook Login for Business / Embedded Signup in a secure Meta-hosted flow.
+- Customer selects or creates their Business Portfolio and WhatsApp Business Account, chooses an eligible phone-number path, completes the required OTP/QR verification and approves permissions.
+- Joy Inbox receives the authorized account/phone identifiers, completes server-side token exchange and phone registration where required, subscribes the WABA to the app webhook, encrypts credentials at rest and automatically syncs number/profile/template status.
+- Customer returns to Joy Inbox and sees a clear connected/needs-attention state. No manual Phone Number ID, WABA ID, access-token or webhook URL entry.
+
+Required supported onboarding paths:
+- New number registration.
+- Existing eligible WhatsApp Business App number through Coexistence, where Meta and the account qualify.
+- Existing WhatsApp Business Platform number migration where supported and authorized.
+- Clear recovery/help states for OTP failure, display-name review, business verification, permissions, unsupported number and Meta rejection.
+
+Implementation prerequisites and constraints:
+- Register/configure Joy Inbox's Meta app and Embedded Signup configuration; complete required app/business verification, permissions and App Review/Tech Provider onboarding.
+- Confirm the applicable Meta partner/Tech Provider/BSP model and commercial rules before promising reseller billing or message-fee markup. Embedded Signup availability alone does not confer every BSP capability.
+- Implement OAuth state/CSRF protection, one-time authorization-code exchange, server-only app secret, encrypted tenant credential storage, webhook signature validation, duplicate-safe callbacks, audit logs and disconnect/revoke handling.
+- Never ask customers to paste access tokens or expose app secrets in browser code.
+- Customer still must complete Meta-controlled identity/business choices, number ownership verification (OTP/QR) and requested permissions; Joy Inbox cannot bypass Meta review, eligibility, policy or approval decisions.
+
+Acceptance:
+- A first-time customer can connect an eligible number without manually entering API IDs, tokens or webhook URLs.
+- Successful onboarding creates the tenant connection and webhook subscription exactly once, even if callback delivery is repeated.
+- Tenant A cannot read, connect, disconnect or use Tenant B's WhatsApp assets.
+- Failed/abandoned signup can safely resume without duplicate WABAs/numbers or leaked tokens.
+- Test new-number, coexistence (when enabled), existing-WABA, denial, OTP failure, retry and disconnect paths in Meta test/staging before launch.
+
 ## Recommended build sequence
 
 ### Phase 1 — CRM foundation (first product module)
