@@ -3403,6 +3403,15 @@ exports.handler = async (event) => {
     }
   }
 
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && ["/organizations/crm/fields", "/organizations/crm/stages", "/organizations/crm/leads"].some(suffix => path.endsWith(suffix))) {
+    const resource = path.endsWith("/fields") ? "fields" : path.endsWith("/stages") ? "stages" : "leads";
+    try { return await handleTenantCrm(event, resource); }
+    catch (error) {
+      console.error("Tenant CRM request failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "CRM request could not be completed." });
+    }
+  }
+
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/contacts")) {
     try { return await handleTenantResource(event, "contacts"); }
     catch (error) { console.error("Tenant contacts request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Contacts request could not be completed." }); }
