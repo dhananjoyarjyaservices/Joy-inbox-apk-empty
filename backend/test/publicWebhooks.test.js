@@ -228,6 +228,7 @@ test("accepts CRM lead lifecycle events as webhook subscription types", () => {
 
 
 test("rotates an active workspace webhook secret and refuses revoked or foreign subscriptions", async () => {
+  process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 17).toString("base64");
   const { createOrganizationWebhook, rotateOrganizationWebhookSecret } = require("../src/publicWebhooks");
   const db = fakeDb();
   const created = await createOrganizationWebhook(db, "org_a", "owner_a", {
@@ -239,4 +240,5 @@ test("rotates an active workspace webhook secret and refuses revoked or foreign 
   assert.notEqual(rotated.secret, created.secret);
   assert.equal(rotated.rotatedAt, new Date(2000).toISOString());
   await assert.rejects(() => rotateOrganizationWebhookSecret(db, "org_b", created.webhook.id), { statusCode: 404 });
+  delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
 });
