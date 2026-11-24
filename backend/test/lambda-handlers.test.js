@@ -44,6 +44,12 @@ test("webhook delivery history and replay routes require workspace authenticatio
     headers: {},
     queryStringParameters: { organizationId: "org_a" }
   });
+  const rotateResponse = await handler({
+    httpMethod: "PUT",
+    path: "/organizations/developer/webhooks",
+    headers: {},
+    body: JSON.stringify({ organizationId: "org_a", webhookId: "webhook_a" })
+  });
   const postResponse = await handler({
     httpMethod: "POST",
     path: "/organizations/developer/webhook-deliveries",
@@ -51,5 +57,6 @@ test("webhook delivery history and replay routes require workspace authenticatio
     body: JSON.stringify({ organizationId: "org_a", deliveryId: "a".repeat(64) })
   });
   assert.equal(getResponse.statusCode, 401);
+  assert.equal(rotateResponse.statusCode, 401);
   assert.equal(postResponse.statusCode, 401);
 });
