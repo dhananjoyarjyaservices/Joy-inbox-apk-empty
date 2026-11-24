@@ -1903,14 +1903,19 @@ async function sendTenantMediaMessage(event) {
   }
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   const quotaReservation = await reserveTenantMessageQuota(db, organization.id, clientMessageId, claim.ref);
+  const mediaQuotaReservation = await reserveTenantMediaQuota(db, organization.id, `outgoing_${clientMessageId}`, buffer.length, claim.ref, quotaReservation);
   let uploaded, result, sendStarted = false;
   try {
     uploaded = await uploadWhatsAppMedia(buffer, mimeType, filename, credentials);
+    await settleTenantMediaQuota(db, mediaQuotaReservation, "sent", buffer.length);
     sendStarted = true;
     result = await sendWhatsAppMedia(to, type, uploaded.mediaId, caption, filename, replyContext?.contextMessageId, credentials);
     await settleTenantMessageQuota(db, quotaReservation);
   } catch (error) {
-    if (!sendStarted) { error.definitive = true; error.retryable = false; }
+    if (!sendStarted) {
+      await settleTenantMediaQuota(db, mediaQuotaReservation, error?.definitive === true ? "failed" : "sent", error?.definitive === true ? 0 : buffer.length);
+      error.definitive = true; error.retryable = false;
+    }
     await settleTenantMessageQuota(db, quotaReservation, error);
     await markTenantSendRequestFailed(claim.ref, error);
     throw error;
