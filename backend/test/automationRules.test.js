@@ -111,3 +111,52 @@ test("selects the first enabled matching automation by priority and stable tie-b
   assert.equal(findMatchingAutomationRule(rules, "What's the price?").id, "same-a");
   assert.equal(findMatchingAutomationRule(rules, "hello"), null);
 });
+
+
+test("normalizes bounded all/any multi-condition rules", () => {
+  const all = normalizeAutomationRule({
+    name: "Qualified pricing", conditions: [
+      { keyword: "price", matchType: "contains" },
+      { keyword: "monthly", matchType: "contains" }
+    ], conditionMode: "all", response: "Here are the plans."
+  });
+  assert.equal(all.conditionMode, "all");
+  assert.equal(all.conditions.length, 2);
+  assert.equal(all.keyword, "price");
+  const any = normalizeAutomationRule({
+    name: "Support intent", conditions: [
+      { keyword: "help" }, { keyword: "support", matchType: "starts_with" }
+    ], conditionMode: "any", response: "How can we help?"
+  });
+  assert.equal(any.conditionMode, "any");
+  assert.throws(() => normalizeAutomationRule({
+    name: "Too many conditions", conditions: ["a", "b", "c", "d", "e", "f"].map(keyword => ({ keyword })), response: "Reply"
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Unknown condition field", conditions: [{ keyword: "price", regex: ".*" }], response: "Reply"
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Mixed formats", keyword: "price", conditions: [{ keyword: "monthly" }], response: "Reply"
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Bad condition mode", conditions: [{ keyword: "price" }], conditionMode: "not", response: "Reply"
+  }), { statusCode: 400 });
+});
+
+test("evaluates all and any automation conditions without changing legacy matching", () => {
+  const { matchesAutomationRule } = require("../src/automationRules");
+  const allRule = {
+    conditions: [{ keyword: "price", matchType: "contains" }, { keyword: "monthly", matchType: "contains" }],
+    conditionMode: "all"
+  };
+  assert.equal(matchesAutomationRule(allRule, "What is the monthly price?"), true);
+  assert.equal(matchesAutomationRule(allRule, "What is the price?"), false);
+  const anyRule = {
+    conditions: [{ keyword: "refund", matchType: "contains" }, { keyword: "cancel", matchType: "starts_with" }],
+    conditionMode: "any"
+  };
+  assert.equal(matchesAutomationRule(anyRule, "Please refund me"), true);
+  assert.equal(matchesAutomationRule(anyRule, "cancel my order"), true);
+  assert.equal(matchesAutomationRule(anyRule, "I need help"), false);
+  assert.equal(matchesAutomationRule({ keyword: "hello", matchType: "exact" }, "HELLO"), true);
+});
