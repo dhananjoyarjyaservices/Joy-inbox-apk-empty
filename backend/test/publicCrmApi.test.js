@@ -25,7 +25,29 @@ function fakeDb(seed = {}) {
           .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
         return { docs, size: docs.length };
       },
-      orderBy() { return { limit(limit) { return { async get() { const result = await collection(path).get(); return { docs: result.docs.slice(0, limit), size: Math.min(result.size, limit) }; } }; }, get: () => collection(path).get() }; }
+      orderBy() {
+        const state = { cursor: null, max: Infinity };
+        const query = {
+          orderBy() { return query; },
+          startAfter(updatedAt, id) { state.cursor = { updatedAt: new Date(updatedAt).getTime(), id }; return query; },
+          limit(value) { state.max = value; return query; },
+          async get() {
+            const result = await collection(path).get();
+            const sorted = result.docs.sort((a, b) => {
+              const aTime = new Date(a.data()?.updatedAt || 0).getTime();
+              const bTime = new Date(b.data()?.updatedAt || 0).getTime();
+              return bTime - aTime || b.id.localeCompare(a.id);
+            });
+            const after = state.cursor ? sorted.filter(doc => {
+              const time = new Date(doc.data()?.updatedAt || 0).getTime();
+              return time < state.cursor.updatedAt || (time === state.cursor.updatedAt && doc.id.localeCompare(state.cursor.id) < 0);
+            }) : sorted;
+            const docs = after.slice(0, state.max);
+            return { docs, size: docs.length };
+          }
+        };
+        return query;
+      }
     };
   }
   return {
@@ -78,6 +100,12 @@ test("lead listing reports hasMore only when an additional record exists", async
   const firstPage = await listPublicLeads(db, "org_a", 1);
   assert.equal(firstPage.data.length, 1);
   assert.equal(firstPage.pagination.hasMore, true);
+  assert.ok(firstPage.pagination.nextCursor);
+  const secondPage = await listPublicLeads(db, "org_a", 1, firstPage.pagination.nextCursor);
+  assert.equal(secondPage.data.length, 1);
+  assert.equal(secondPage.pagination.hasMore, false);
+  assert.equal(secondPage.pagination.nextCursor, null);
+  assert.notEqual(firstPage.data[0].id, secondPage.data[0].id);
   const completePage = await listPublicLeads(db, "org_a", 2);
   assert.equal(completePage.data.length, 2);
   assert.equal(completePage.pagination.hasMore, false);
@@ -90,4 +118,12 @@ test("creates missing default pipeline stages before validating a public lead", 
   assert.equal(lead.stageId, "new");
   assert.ok(db.records.has("organizations/org_a/crmStages/new"));
   assert.ok(db.records.has("organizations/org_a/crmStages/won"));
+});
+
+
+test("rejects malformed cursors and out-of-range page sizes", async () => {
+  const db = fakeDb();
+  await assert.rejects(() => listPublicLeads(db, "org_a", 0), { statusCode: 400 });
+  await assert.rejects(() => listPublicLeads(db, "org_a", 101), { statusCode: 400 });
+  await assert.rejects(() => listPublicLeads(db, "org_a", 20, "not-a-valid-cursor"), { statusCode: 400 });
 });
