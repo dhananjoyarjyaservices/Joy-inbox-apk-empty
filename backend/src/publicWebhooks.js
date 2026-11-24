@@ -28,13 +28,15 @@ function isPrivateAddress(address) {
     const octets = address.split(".").map(Number);
     const [a, b] = octets;
     return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127) || (a === 198 && (b === 18 || b === 19)) ||
-      a >= 224;
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && (b === 0 || b === 2 || b === 168)) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0) ||
+      (a === 100 && b >= 64 && b <= 127) || a >= 224;
   }
   if (family === 6) {
     const normalized = address.toLowerCase();
     return normalized === "::" || normalized === "::1" ||
+      normalized.startsWith("2001:db8:") ||
       normalized.startsWith("fc") || normalized.startsWith("fd") ||
       normalized.startsWith("fe8") || normalized.startsWith("fe9") ||
       normalized.startsWith("fea") || normalized.startsWith("feb") ||
@@ -48,7 +50,7 @@ function normalizeWebhookUrl(value) {
   if (typeof value !== "string" || value.length > 2048) throw httpError("Webhook URL is required and must be 2048 characters or fewer.", 400);
   let url;
   try { url = new URL(value.trim()); } catch { throw httpError("Enter a valid HTTPS webhook URL.", 400); }
-  const hostname = url.hostname.toLowerCase();
+  const hostname = url.hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
   if (url.protocol !== "https:" || url.username || url.password ||
       (url.port && url.port !== "443") || !hostname ||
       hostname === "localhost" || hostname.endsWith(".localhost") ||
