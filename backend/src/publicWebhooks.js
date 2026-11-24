@@ -88,6 +88,10 @@ async function createOrganizationWebhook(db, organizationId, actorUid, input, no
     throw httpError("A valid workspace and signed-in user are required.", 400);
   }
   const definition = normalizeWebhookInput(input);
+  const existing = await listOrganizationWebhooks(db, organizationId);
+  if (existing.filter(item => item.status === "active").length >= 20) {
+    throw httpError("A workspace can have up to 20 active webhook subscriptions.", 409);
+  }
   const id = crypto.randomUUID();
   const secret = "joywhsec_" + crypto.randomBytes(32).toString("base64url");
   await db.collection("organizations").doc(organizationId).collection("webhookSubscriptions").doc(id).create({
