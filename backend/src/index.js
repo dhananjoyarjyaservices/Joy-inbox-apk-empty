@@ -1317,10 +1317,15 @@ async function removeTenantFcmToken(event) {
 }
 
 async function sendTenantMessage(event) {
+  const requestStartedAt = Date.now();
   const body = parseBody(event);
+  const authStartedAt = Date.now();
   const decoded = await authenticateUser(event);
+  logLatency("send_auth_ms", authStartedAt);
+  const organizationStartedAt = Date.now();
   const organization = await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "messages:send");
+  logLatency("send_organization_access_ms", organizationStartedAt);
 
   const to = normalizePhoneNumber(body.to);
   const chatId = normalizePhoneNumber(body.chatId || to);
@@ -1333,8 +1338,14 @@ async function sendTenantMessage(event) {
   }
 
   const db = getDb();
-  const credentials = await getWhatsAppCredentials(db, organization.id, body.phoneNumberId);
-  const replyContext = await resolveTenantReplyContext(db, organization.id, chatId, body);
+  const contextLookupStartedAt = Date.now();
+  // These reads are independent. Run them concurrently to remove one serial
+  // Firestore round-trip from the interactive send path.
+  const [credentials, replyContext] = await Promise.all([
+    getWhatsAppCredentials(db, organization.id, body.phoneNumberId),
+    resolveTenantReplyContext(db, organization.id, chatId, body)
+  ]);
+  logLatency("send_context_lookup_ms", contextLookupStartedAt);
   const clientMessageId = getClientMessageId(body.clientMessageId);
   const source = body.source === "quick_reply" ? "quick_reply" : "manual";
   const payloadHash = hashSendPayload({
@@ -1345,7 +1356,9 @@ async function sendTenantMessage(event) {
     source,
     contextMessageId: replyContext?.contextMessageId || null
   });
+  const claimStartedAt = Date.now();
   const claim = await claimTenantSendRequest(db, organization.id, chatId, clientMessageId, payloadHash);
+  logLatency("send_idempotency_claim_ms", claimStartedAt);
   if (claim.state === "completed") {
     return jsonResponse(event, 200, { success: true, messageId: claim.messageId, clientMessageId });
   }
@@ -1396,8 +1409,13 @@ async function sendTenantMessage(event) {
     messageId: result.messageId,
     updatedAt: timestamp
   }, { merge: true });
+  const persistenceStartedAt = Date.now();
   await batch.commit();
+  logLatency("send_firestore_persistence_ms", persistenceStartedAt);
+  const responseMetricStartedAt = Date.now();
   await recordTenantFirstResponse(db, organization.id, chatId, decoded.uid, decoded.email, timestamp);
+  logLatency("send_first_response_metric_ms", responseMetricStartedAt);
+  logLatency("send_request_total_ms", requestStartedAt);
 
   return jsonResponse(event, 200, { success: true, messageId: result.messageId, clientMessageId });
 }
