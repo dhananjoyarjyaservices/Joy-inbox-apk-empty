@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import { getWhatsAppContactUrl } from "../utils/whatsapp";
 import { LogOut, MessageCircle, Send, Settings, RefreshCw, Paperclip, FileText, Bell, Reply } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
@@ -12,11 +13,6 @@ import { listenToTenantChats, listenToTenantMessages, loadOlderTenantMessages } 
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
 import { enablePushNotifications, syncPushToken, listenForForegroundPush, playNotificationSound, listRegisteredPushDevices, revokePushDevice, listNotificationDeliveries, listTeamNotificationDeliveryAnalytics, getMemberNotificationDeliveryReport, type TeamNotificationDeliveryAnalytics, type MemberNotificationDeliveryReport, type NotificationDelivery, type RegisteredPushDevice } from "../services/pushNotifications";
 import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, listTenantInternalNotes, addTenantInternalNote, sendTenantInteractiveMessage, type TenantInteractiveMessageInput, type TenantContact, type TenantQuickReply, type TenantInternalNote } from "../services/tenantResources";
-
-function getWhatsAppContactUrl(value: string): string | null {
-  const digits = String(value || "").replace(/\D/g, "");
-  return /^\d{6,20}$/.test(digits) ? `https://wa.me/${digits}` : null;
-}
 
 type TenantChat = {
   id: string;
