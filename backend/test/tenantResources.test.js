@@ -57,12 +57,13 @@ function tenantResourceDb(seed = {}) {
     return {
       doc(id) { return reference(path + "/" + (id || "generated_" + (++generatedId))); },
       orderBy() {
-        return { limit() { return { async get() {
+        const read = async () => {
           const prefix = path + "/";
           const docs = [...records.entries()].filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/"))
             .map(([key, value]) => ({ id: key.slice(prefix.length), data: () => value }));
           return { docs };
-        } }; } };
+        };
+        return { get: read, limit() { return { get: read }; } };
       }
     };
   }
@@ -98,6 +99,17 @@ test("tenant Quick Reply updates and deletes cannot affect another organization 
   await deleteTenantResource(db, "org_a", "quickReplies", replyId);
   assert.equal(db.records.has(`organizations/org_a/quickReplies/${replyId}`), false);
   assert.equal(db.records.get(`organizations/org_b/quickReplies/${replyId}`).message, "B");
+});
+
+test("tenant Quick Reply listing has no artificial 500-item ceiling", async () => {
+  const { listTenantResource } = require("../src/tenantResources");
+  const seed = {};
+  for (let index = 0; index < 501; index += 1) {
+    seed[`organizations/org_a/quickReplies/reply_${index}`] = { title: `Reply ${index}`, message: "Hello" };
+  }
+  const db = tenantResourceDb(seed);
+  const replies = await listTenantResource(db, "org_a", "quickReplies");
+  assert.equal(replies.length, 501);
 });
 
 test("tenant resource collection rejects malformed organization IDs and unknown resource names", () => {
