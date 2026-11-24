@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Building2, LogOut, MessageCircle, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
-import { disconnectWhatsApp, checkWhatsAppConnectionHealth, createOrganization, listOrganizations, listWhatsAppConnections, acceptOrganizationInvitation, getWhatsAppEmbeddedSignupConfig, startWhatsAppEmbeddedSignup, completeWhatsAppEmbeddedSignup, type Organization, type WhatsAppConnection, type WhatsAppEmbeddedSignupConfig } from "../services/organizations";
+import { disconnectWhatsApp, checkWhatsAppConnectionHealth, createOrganization, listOrganizations, listWhatsAppConnections, acceptOrganizationInvitation, getWhatsAppEmbeddedSignupConfig, startWhatsAppEmbeddedSignup, completeWhatsAppEmbeddedSignup, getWhatsAppRegistrationPin, type Organization, type WhatsAppConnection, type WhatsAppEmbeddedSignupConfig } from "../services/organizations";
 import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
 
 declare global {
@@ -120,6 +120,7 @@ export default function Setup() {
   const [embeddedConfigLoading, setEmbeddedConfigLoading] = useState(false);
   const [embeddedSignupBusy, setEmbeddedSignupBusy] = useState(false);
   const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
+  const [registrationPins, setRegistrationPins] = useState<Record<string, string>>({});
   const [connectionsLoading, setConnectionsLoading] = useState(false);
   const [healthChecking, setHealthChecking] = useState(false);
   const [healthResults, setHealthResults] = useState<Record<string, { status: "healthy" | "attention"; checkedAt: string; error?: string }>>({});
@@ -224,6 +225,20 @@ export default function Setup() {
     finally { setBusy(false); }
   }
 
+  async function handleShowRegistrationPin(connection: WhatsAppConnection) {
+    if (!organizationId) return;
+    if (registrationPins[connection.phoneNumberId]) {
+      setRegistrationPins(current => { const next = { ...current }; delete next[connection.phoneNumberId]; return next; });
+      return;
+    }
+    try {
+      const pin = await getWhatsAppRegistrationPin(organizationId, connection.phoneNumberId);
+      setRegistrationPins(current => ({ ...current, [connection.phoneNumberId]: pin }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "WhatsApp security PIN could not be loaded.");
+    }
+  }
+
   async function handleEmbeddedSignup() {
     if (!organizationId || embeddedSignupBusy || !embeddedConfig.enabled) return;
     setEmbeddedSignupBusy(true); setError(""); setNotice("");
@@ -258,7 +273,7 @@ export default function Setup() {
       </section>
       <section className="mb-5 rounded-2xl bg-white p-6 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Connected WhatsApp numbers</h2><div className="flex items-center gap-2"><span className="rounded-full bg-[#effaf3] px-3 py-1 text-xs font-medium text-[#075e54]">{connections.filter(connection => connection.connected).length} connected</span><button type="button" disabled={!connections.some(connection => connection.connected) || healthChecking || busy} onClick={() => void handleHealthCheck()} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-[#075e54] disabled:opacity-50">{healthChecking ? "Checking..." : "Check status"}</button></div></div>
-        {connectionsLoading ? <p className="text-sm text-gray-500">Loading connected numbers...</p> : connections.length ? <div className="space-y-2">{connections.map(connection => <div key={connection.phoneNumberId} className="rounded-xl border border-gray-200 p-3"><div className="flex items-center justify-between gap-3"><p className="font-medium">{connection.displayPhoneNumber || "WhatsApp number"}</p><div className="flex items-center gap-2"><span className={`text-xs ${connection.connected ? "text-green-700" : "text-gray-500"}`}>{connection.connected ? "Connected" : "Disconnected"}</span>{connection.connected && <button type="button" disabled={busy} onClick={() => void handleDisconnect(connection)} className="text-xs font-medium text-red-600 disabled:opacity-50">Disconnect</button>}</div></div><p className="mt-1 text-sm text-gray-600">{connection.verifiedName || "Business name not provided"}</p><p className="mt-1 break-all text-xs text-gray-400">Phone Number ID: {connection.phoneNumberId}</p>{connection.connected && healthResults[connection.phoneNumberId] && <div className="mt-2 rounded-lg bg-gray-50 p-2"><p className={`text-xs font-medium ${healthResults[connection.phoneNumberId].status === "healthy" ? "text-green-700" : "text-amber-700"}`}>{healthResults[connection.phoneNumberId].status === "healthy" ? "Healthy · Meta verified" : "Attention required"}</p>{healthResults[connection.phoneNumberId].error && <p className="mt-1 text-xs text-amber-700">{healthResults[connection.phoneNumberId].error}</p>}<p className="mt-1 text-[11px] text-gray-400">Checked: {new Date(healthResults[connection.phoneNumberId].checkedAt).toLocaleString()}</p></div>}</div>)}</div> : <p className="text-sm text-gray-500">No WhatsApp numbers connected to this workspace yet.</p>}
+        {connectionsLoading ? <p className="text-sm text-gray-500">Loading connected numbers...</p> : connections.length ? <div className="space-y-2">{connections.map(connection => <div key={connection.phoneNumberId} className="rounded-xl border border-gray-200 p-3"><div className="flex items-center justify-between gap-3"><p className="font-medium">{connection.displayPhoneNumber || "WhatsApp number"}</p><div className="flex items-center gap-2"><span className={`text-xs ${connection.connected ? "text-green-700" : "text-gray-500"}`}>{connection.connected ? "Connected" : "Disconnected"}</span>{connection.connected && <button type="button" disabled={busy} onClick={() => void handleDisconnect(connection)} className="text-xs font-medium text-red-600 disabled:opacity-50">Disconnect</button>}</div></div><p className="mt-1 text-sm text-gray-600">{connection.verifiedName || "Business name not provided"}</p><div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><p className="break-all text-xs text-gray-400">Phone Number ID: {connection.phoneNumberId}</p>{connection.wabaId && <p className="break-all text-xs text-gray-400">WABA ID: {connection.wabaId}</p>}{connection.wabaId && <button type="button" onClick={() => void handleShowRegistrationPin(connection)} className="text-xs font-medium text-[#075e54] underline">{registrationPins[connection.phoneNumberId] ? "Hide security PIN" : "View security PIN"}</button>}</div>{registrationPins[connection.phoneNumberId] && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">WhatsApp two-step verification PIN: <strong className="font-mono tracking-widest">{registrationPins[connection.phoneNumberId]}</strong>. Joy Inbox stores this PIN encrypted so an owner can retrieve it when needed.</p>}{connection.connected && healthResults[connection.phoneNumberId] && <div className="mt-2 rounded-lg bg-gray-50 p-2"><p className={`text-xs font-medium ${healthResults[connection.phoneNumberId].status === "healthy" ? "text-green-700" : "text-amber-700"}`}>{healthResults[connection.phoneNumberId].status === "healthy" ? "Healthy · Meta verified" : "Attention required"}</p>{healthResults[connection.phoneNumberId].error && <p className="mt-1 text-xs text-amber-700">{healthResults[connection.phoneNumberId].error}</p>}<p className="mt-1 text-[11px] text-gray-400">Checked: {new Date(healthResults[connection.phoneNumberId].checkedAt).toLocaleString()}</p></div>}</div>)}</div> : <p className="text-sm text-gray-500">No WhatsApp numbers connected to this workspace yet.</p>}
       </section>
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <div className="mb-2 flex items-center gap-2"><MessageCircle className="text-[#075e54]"/><h2 className="text-lg font-semibold">Connect WhatsApp Business</h2></div>
