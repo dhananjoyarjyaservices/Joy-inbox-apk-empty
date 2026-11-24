@@ -12,6 +12,16 @@ function billingError(message, statusCode = 400) {
   return error;
 }
 
+function getBillingPlanCatalog() {
+  return [
+    { key: "lite", name: "Lite", monthlyPriceInr: 299, annualPriceInr: 2990, limits: { messages: 10000, agents: 1, mediaTransferGb: 1, historyMonths: 3 } },
+    { key: "starter", name: "Starter", monthlyPriceInr: 599, annualPriceInr: 5990, limits: { messages: 40000, agents: 2, mediaTransferGb: 3, historyMonths: 6 } },
+    { key: "growth", name: "Growth", monthlyPriceInr: 999, annualPriceInr: 9990, limits: { messages: 100000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
+    { key: "business", name: "Business", monthlyPriceInr: 1499, annualPriceInr: 14990, limits: { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
+    { key: "pro", name: "Pro", monthlyPriceInr: 1999, annualPriceInr: 19990, limits: { messages: 300000, agents: 10, mediaTransferGb: 15, historyMonths: 12 } }
+  ];
+}
+
 function getConfiguredBillingPlans(env = process.env) {
   return [
     { key: "lite", name: "Lite", monthlyPriceInr: 299, annualPriceInr: 2990, priceId: env.STRIPE_PRICE_LITE || "", annualPriceId: env.STRIPE_PRICE_LITE_ANNUAL || "", limits: { messages: 10000, agents: 1, mediaTransferGb: 1, historyMonths: 3 } },
@@ -153,7 +163,9 @@ function extractSubscriptionFields(subscription, plans = getConfiguredBillingPla
     status: String(subscription.status || "unknown"),
     stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : String(subscription.customer?.id || ""),
     stripeSubscriptionId: String(subscription.id || ""),
+    currentPeriodStart: timestamp(subscription.current_period_start),
     currentPeriodEnd: timestamp(subscription.current_period_end),
+    trialStart: timestamp(subscription.trial_start),
     trialEnd: timestamp(subscription.trial_end),
     cancelAtPeriodEnd: subscription.cancel_at_period_end === true,
     updatedAt: new Date()
@@ -254,6 +266,7 @@ async function writeOrganizationSubscription(db, organizationId, subscription) {
 module.exports = {
   EVENT_LEASE_MS,
   TRIAL_PERIOD_DAYS,
+  getBillingPlanCatalog,
   getConfiguredBillingPlans,
   validReturnUrl,
   verifyStripeSignature,
