@@ -5,6 +5,7 @@ const {
   normalizeCrmFieldDefinition,
   normalizeCrmFieldValues,
   normalizePipelineStage,
+  canAccessCrmLead,
   normalizeCrmLead
 } = require("../src/crm");
 
@@ -78,4 +79,12 @@ test("ships a default sales pipeline with exactly one initial stage", () => {
   assert.equal(DEFAULT_PIPELINE_STAGES.filter(stage => stage.isDefault).length, 1);
   assert.equal(DEFAULT_PIPELINE_STAGES.filter(stage => stage.isWon).length, 1);
   assert.equal(DEFAULT_PIPELINE_STAGES.filter(stage => stage.isLost).length, 1);
+});
+
+test("agent CRM visibility is limited to leads owned by that agent", () => {
+  assert.equal(canAccessCrmLead("agent", "agent_a", { ownerUid: "agent_a" }), true);
+  assert.equal(canAccessCrmLead("agent", "agent_a", { ownerUid: "agent_b" }), false);
+  assert.equal(canAccessCrmLead("agent", "agent_a", { ownerUid: "" }), false);
+  assert.equal(canAccessCrmLead("admin", "admin_a", { ownerUid: "agent_b" }), true);
+  assert.equal(canAccessCrmLead("owner", "owner_a", { ownerUid: "" }), true);
 });
