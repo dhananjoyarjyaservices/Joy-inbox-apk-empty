@@ -437,3 +437,27 @@ test("WhatsApp phone number IDs must be numeric and bounded at credential bounda
     );
   }
 });
+
+
+test("Embedded Signup stores the WABA ID and encrypts the generated two-step registration PIN", async () => {
+  const db = fakeTenantDb();
+  process.env.TENANT_SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
+  const organization = { id: "org_embedded", ref: db.collection("organizations").doc("org_embedded") };
+  await saveWhatsAppConnection(db, organization, {
+    phoneNumberId: "555555555555555",
+    wabaId: "666666666666666",
+    accessToken: "EAA_embedded_signup_business_token",
+    registrationPin: "042731",
+    displayPhoneNumber: "+91 98765 43210",
+    verifiedName: "Embedded Signup Business"
+  });
+  const stored = db.docs.get("organizations/org_embedded/settings/whatsapp/numbers/555555555555555");
+  assert.equal(stored.wabaId, "666666666666666");
+  assert.notEqual(stored.registrationPin.ciphertext, Buffer.from("042731").toString("base64"));
+  const credentials = await getWhatsAppCredentials(db, "org_embedded", "555555555555555");
+  assert.equal(credentials.wabaId, "666666666666666");
+  assert.equal(credentials.registrationPin, "042731");
+  const connections = await listWhatsAppConnections(db, "org_embedded");
+  assert.equal(connections[0].wabaId, "666666666666666");
+  delete process.env.TENANT_SECRET_ENCRYPTION_KEY;
+});
