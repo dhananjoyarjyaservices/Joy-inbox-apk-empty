@@ -52,6 +52,7 @@ const {
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { listPublicLeads, savePublicLead, deletePublicLead } = require("./publicCrmApi");
 const { importCrmLeads } = require("./crmBulkImport");
+const { buildCrmSalesReport } = require("./crmSalesReport");
 const {
   createOrganizationApiKey,
   listOrganizationApiKeys,
@@ -752,6 +753,15 @@ async function handleTenantAutomationRules(event) {
     return jsonResponse(event, 200, { success: true });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+async function handleTenantCrmSalesReport(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "contacts:manage");
+  const report = await buildCrmSalesReport(getDb(), organization, decoded.uid);
+  return jsonResponse(event, 200, { report });
 }
 
 async function handleTenantCrmBulkImport(event) {
@@ -3812,6 +3822,14 @@ exports.handler = async (event) => {
       return jsonResponse(event, error.statusCode || 500, {
         error: error.statusCode ? error.message : "Campaign request could not be completed."
       });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/crm/report")) {
+    try { return await handleTenantCrmSalesReport(event); }
+    catch (error) {
+      console.error("Tenant CRM sales report failed:", error.statusCode || "CRM_REPORT_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "CRM sales report could not be loaded." });
     }
   }
 
