@@ -62,3 +62,32 @@ export interface CrmLeadImportResult {
 export async function importCrmLeads(organizationId: string, rows: Array<Record<string, unknown>>): Promise<CrmLeadImportResult> {
   return request<CrmLeadImportResult>("leads/import", organizationId, "POST", { rows });
 }
+
+export interface CrmSalesReport {
+  generatedAt: string;
+  limited: boolean;
+  total: number;
+  won: number;
+  lost: number;
+  open: number;
+  wonValue: number;
+  openValue: number;
+  lostValue: number;
+  conversionRate: number;
+  byStage: Array<{ id: string; name: string; total: number; value: number; won: number; lost: number; open: number }>;
+  byOwner: Array<{ uid: string; name: string; total: number; value: number; won: number; lost: number; open: number; wonValue: number }>;
+  bySource: Array<{ source: string; total: number; value: number; won: number }>;
+}
+export async function getCrmSalesReport(organizationId: string): Promise<CrmSalesReport> {
+  const user = auth.currentUser;
+  if (!API_URL) throw new Error("AWS API URL is not configured.");
+  if (!user) throw new Error("Please sign in again.");
+  const token = await user.getIdToken();
+  const query = new URLSearchParams({ organizationId });
+  const response = await fetch(`${API_URL.replace(/\/$/, "")}/organizations/crm/report?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "CRM sales report could not be loaded.");
+  return result.report as CrmSalesReport;
+}
