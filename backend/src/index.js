@@ -57,6 +57,13 @@ const {
   authenticateOrganizationApiKey,
   requireApiScope
 } = require("./publicApi");
+const {
+  createOrganizationWebhook,
+  listOrganizationWebhooks,
+  revokeOrganizationWebhook,
+  enqueueOrganizationWebhookEvent,
+  processPendingWebhookDeliveries
+} = require("./publicWebhooks");
 const { isValidBase64, isAllowedTemplateMedia } = require("./templateValidation");
 const { resolveReplyContext, getReplyMessageFields } = require("./replies");
 const {
@@ -270,6 +277,32 @@ async function handleWhatsAppConnectionHealth(event) {
   return jsonResponse(event, 200, { results, checkedAt });
 }
 
+async function handleOrganizationWebhooks(event) {
+  const decoded = await authenticateUser(event);
+  const method = getMethod(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); } catch {
+      return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+    }
+  }
+  const organizationId = method === "GET"
+    ? event.queryStringParameters?.organizationId
+    : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "api:manage");
+  if (method === "GET") {
+    const webhooks = await listOrganizationWebhooks(getDb(), organization.id);
+    return jsonResponse(event, 200, { webhooks });
+  }
+  if (method === "DELETE") {
+    const result = await revokeOrganizationWebhook(getDb(), organization.id, String(body.webhookId || ""));
+    return jsonResponse(event, 200, result);
+  }
+  const result = await createOrganizationWebhook(getDb(), organization.id, decoded.uid, body);
+  return jsonResponse(event, 201, result);
+}
+
 async function handleOrganizationApiKeys(event) {
   const decoded = await authenticateUser(event);
   const method = getMethod(event);
@@ -317,6 +350,11 @@ async function handlePublicApiContacts(event) {
       return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
     }
     const contact = await saveTenantResource(getDb(), authenticatedKey.organizationId, "contacts", { ...body, source: "local" });
+    await enqueueOrganizationWebhookEvent(
+      getDb(), authenticatedKey.organizationId, "contact.upserted",
+      `public-api:${contact.id}:${Date.now()}`,
+      { id: contact.id, name: contact.name, phone: contact.phone, email: contact.email, tags: contact.tags, source: "local" }
+    ).catch(error => console.error("Public API contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
     return jsonResponse(event, 201, { data: contact });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
@@ -812,10 +850,20 @@ async function handleTenantResource(event, resource) {
   }
   if (method === "POST") {
     const item = await saveTenantResource(getDb(), organization.id, resource, body.data);
+    if (resource === "contacts") {
+      await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted", `app:${item.id}:${Date.now()}`,
+        { id: item.id, name: item.name, phone: item.phone, email: item.email, tags: item.tags, source: item.source }
+      ).catch(error => console.error("Workspace contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+    }
     return jsonResponse(event, 201, { item });
   }
   if (method === "PUT") {
     const item = await saveTenantResource(getDb(), organization.id, resource, body.data, body.resourceId);
+    if (resource === "contacts") {
+      await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted", `app:${item.id}:${Date.now()}`,
+        { id: item.id, name: item.name, phone: item.phone, email: item.email, tags: item.tags, source: item.source }
+      ).catch(error => console.error("Workspace contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+    }
     return jsonResponse(event, 200, { item });
   }
   if (method === "DELETE") {
@@ -3376,11 +3424,12 @@ async function handleTenantCampaigns(event) {
 // EventBridge Scheduler invokes this handler through Lambda's IAM permissions.
 // Set the configured handler name to "src/index.slaScheduledHandler".
 exports.slaScheduledHandler = async () => {
-  const [sla, automation] = await Promise.all([
+  const [sla, automation, webhooks] = await Promise.all([
     runScheduledSlaChecks(),
-    runScheduledAutomationSteps()
+    runScheduledAutomationSteps(),
+    processPendingWebhookDeliveries(getDb(), { limit: 10 })
   ]);
-  const result = { sla, automation };
+  const result = { sla, automation, webhooks };
   console.info("Scheduled SLA and automation checks completed:", JSON.stringify(result));
   return result;
 };
@@ -3436,6 +3485,14 @@ exports.handler = async (event) => {
     return jsonResponse(event, 410, {
       error: "This legacy endpoint is disabled. Use the organization-scoped Joy Inbox API."
     });
+  }
+
+  if (["GET", "POST", "DELETE"].includes(method) && path.endsWith("/organizations/developer/webhooks")) {
+    try { return await handleOrganizationWebhooks(event); }
+    catch (error) {
+      console.error("Organization webhook request failed:", error.statusCode || "WEBHOOK_REQUEST_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Webhook request could not be completed." });
+    }
   }
 
   if (["GET", "POST", "DELETE"].includes(method) && path.endsWith("/organizations/developer/api-keys")) {
