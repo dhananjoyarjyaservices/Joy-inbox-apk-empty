@@ -17,13 +17,18 @@ function validId(value) {
 
 function getEmbeddedSignupConfig(env = process.env) {
   const appId = String(env.META_APP_ID || "").trim();
+  const appSecret = String(env.META_APP_SECRET || "").trim();
   const configId = String(env.META_EMBEDDED_SIGNUP_CONFIG_ID || "").trim();
-  if (!/^\d{5,32}$/.test(appId) || !/^\d{5,32}$/.test(configId)) return null;
+  if (!/^\d{5,32}$/.test(appId) || !appSecret || !/^\d{5,32}$/.test(configId)) return null;
   const partnerMode = env.META_PARTNER_MODE === "solution_partner" ? "solution_partner" : "tech_provider";
+  const solutionId = /^\d{5,32}$/.test(env.META_EMBEDDED_SIGNUP_SOLUTION_ID || "")
+    ? env.META_EMBEDDED_SIGNUP_SOLUTION_ID
+    : null;
   if (partnerMode === "solution_partner" &&
       (!/^\d{5,32}$/.test(env.META_SYSTEM_USER_ID || "") ||
        !String(env.META_SYSTEM_USER_ACCESS_TOKEN || "").trim() ||
-       !/^\d{5,32}$/.test(env.META_EXTENDED_CREDIT_LINE_ID || ""))) return null;
+       !/^\d{5,32}$/.test(env.META_EXTENDED_CREDIT_LINE_ID || "") ||
+       !solutionId)) return null;
   return {
     appId,
     configId,
@@ -31,9 +36,7 @@ function getEmbeddedSignupConfig(env = process.env) {
       ? env.GRAPH_API_VERSION
       : DEFAULT_GRAPH_VERSION,
     partnerMode,
-    solutionId: /^\d{5,32}$/.test(env.META_EMBEDDED_SIGNUP_SOLUTION_ID || "")
-      ? env.META_EMBEDDED_SIGNUP_SOLUTION_ID
-      : null
+    solutionId
   };
 }
 
