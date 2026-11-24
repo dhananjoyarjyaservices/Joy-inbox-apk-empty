@@ -38,6 +38,12 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Legacy single-owner HTTP API routes (`/send`, chat state/deletion, media, status, greeting settings and legacy FCM token routes) fail closed with HTTP 410 unless `LEGACY_OWNER_API_ENABLED=true`; organization-scoped routes and Meta webhooks are excluded. Automated tests cover the default-off behavior, explicit migration opt-in and tenant-route isolation.
 - [x] A route-inventory regression test scans backend HTTP route suffixes and fails CI if a newly added unscoped endpoint is neither classified as a deliberate system endpoint nor added to the legacy fail-closed list.
 - [x] A genuine `backend/package-lock.json` is committed; backend CI uses `npm ci`, and a Node.js 22 workflow regenerates and commits the lockfile when the backend dependency manifest changes.
+- [x] Route-level code splitting lazy-loads Login, Setup, Dashboard and Tenant Inbox rather than shipping the entire application in the initial route bundle.
+- [x] Firebase Authentication and Firestore client initialization are separated; Firestore SDK imports are deferred to workspace data services instead of the login/auth entry path.
+- [x] Vite vendor chunking separates React, motion, Firebase Auth, Firebase core and Firestore; the verified frontend build has no oversized-chunk warning and the largest generated chunk is about 400 KB.
+- [x] GitHub Actions checkout/setup-node/setup-java use Node 24-compatible major versions while project builds remain on Node.js 22.
+- [x] CI concurrency no longer cancels the validation run on every subsequent push.
+- [x] Dependabot weekly update groups target `feature/saas-foundation`; repository security and contribution policies are documented in `SECURITY.md` and `CONTRIBUTING.md`.
 
 ## History retention worker
 
@@ -86,10 +92,10 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-The following GitHub Actions runs completed successfully for commit `9ecb2196e1c78c7c0713b96ed68fb8da86a4bdf6` on `feature/saas-foundation`:
+The latest code-bearing commit verified by all three GitHub Actions workflows is `f0feca5ce4fef23aca99a0a2867d6da85a664d54` on `feature/saas-foundation`:
 
-- Frontend build (run 45335239061): dependency installation, frontend unit tests and production build passed.
-- Backend tests (run 45335239032): Node.js 22 setup, locked dependency installation, and backend tests with the Firestore emulator passed.
-- Joy Inbox CI (run 45335239021): frontend unit tests/build and backend unit tests passed.
+- Frontend build (run 45349483444): dependency installation, 6 frontend tests, TypeScript check and Vite production build passed. Largest generated chunk was about 400 KB; no oversized-chunk warning was emitted.
+- Backend tests (run 45349483428): Node.js 22 setup, locked dependency installation and all 282 backend tests with the Firestore emulator passed.
+- Joy Inbox CI (run 45349483369): backend unit tests and frontend TypeScript/tests/production build passed.
 
-These results validate the repository's automated checks at that commit only. They do not satisfy the external-service staging, migration, security-review or production-deployment gates listed above.
+These checks validate the code at the stated commit. They do not prove that a live Firebase project, Meta account, Stripe account, email provider, deployed AWS worker or customer device is correctly configured. Documentation-only and configuration-only commits may follow this code-bearing commit; rerun checks for any later source-code changes before treating them as verified.
