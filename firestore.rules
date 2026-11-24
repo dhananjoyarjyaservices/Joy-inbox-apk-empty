@@ -69,6 +69,14 @@ service cloud.firestore {
       match /invitations/{invitationId} {
         allow read, write: if false;
       }
+
+      match /whatsappSignupSessions/{sessionId} {
+        allow read, write: if false;
+      }
+
+      match /webhookSubscriptions/{webhookId} {
+        allow read, write: if false;
+      }
     }
 
     // Public API key hashes and metadata are server-only. The plaintext key is
@@ -78,6 +86,10 @@ service cloud.firestore {
     }
 
     match /publicApiRateLimits/{bucketId} {
+      allow read, write: if false;
+    }
+
+    match /webhookDeliveryQueue/{deliveryId} {
       allow read, write: if false;
     }
 
