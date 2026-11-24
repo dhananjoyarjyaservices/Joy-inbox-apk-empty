@@ -82,3 +82,19 @@ test("accepts only documented workflow step properties", () => {
     steps: [{ message: "Welcome", delaySeconds: 30 }]
   }).steps, [{ message: "Welcome", delaySeconds: 30 }]);
 });
+
+
+test("sorts automation rules by numeric priority including zero with stable tie breakers", () => {
+  const { sortAutomationRules } = require("../src/automationRules");
+  const sorted = sortAutomationRules([
+    { id: "z", name: "Alpha", priority: 100 },
+    { id: "b", name: "Beta", priority: 0 },
+    { id: "a", name: "Alpha", priority: 0 },
+    { id: "c", name: "Default" }
+  ]);
+  assert.deepEqual(sorted.map(rule => rule.id), ["a", "b", "z", "c"]);
+  assert.deepEqual(
+    sortAutomationRules([{ id: "x", priority: 0 }, { id: "y", priority: 5 }]).map(rule => rule.id),
+    ["x", "y"]
+  );
+});
