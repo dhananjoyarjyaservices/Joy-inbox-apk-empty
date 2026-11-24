@@ -108,6 +108,35 @@ test("Firestore emulator enforces Joy Inbox tenant boundaries", {
   await assertFails(getDoc(doc(agentDb, "users/agent_a/privateProfiles/profile_a")));
   await assertFails(setDoc(doc(legacyOwnerDb, "chats/legacy_chat"), { customerPhone: "+15559999999" }));
 
+  // Non-owner workspace members cannot create legacy owner-only profile data,
+  // even beneath their own user document.
+  await assertFails(setDoc(doc(agentDb, "users/agent_a/quickReplies/forbidden_reply"), {
+    title: "Not owner",
+    shortcut: "nope",
+    message: "Must be rejected"
+  }));
+  await assertFails(setDoc(doc(agentDb, "users/agent_a/contacts/919876543210"), {
+    name: "Not owner",
+    phone: "+919876543210",
+    phoneId: "919876543210",
+    email: "",
+    notes: "",
+    source: "local"
+  }));
+  await assertFails(setDoc(doc(otherTenantDb, "users/owner_b/quickReplies/forbidden_reply"), {
+    title: "Not owner",
+    message: "Must be rejected"
+  }));
+  await assertFails(setDoc(doc(otherTenantDb, "users/owner_b/contacts/919876543210"), {
+    name: "Not owner",
+    phone: "+919876543210",
+    phoneId: "919876543210",
+    email: "",
+    notes: "",
+    source: "local"
+  }));
+
+
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/chats/new_chat"), { text: "client write" }));
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/contacts/new_contact"), { name: "client write" }));
   await assertFails(setDoc(doc(ownerDb, "organizations/org_a/quickReplies/new_reply"), { title: "client write" }));
