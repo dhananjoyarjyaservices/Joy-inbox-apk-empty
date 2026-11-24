@@ -137,13 +137,13 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-Latest fully verified code commit: `197a5c040fcb82a0b8ce32cc975727dec051ff1d` (documentation-only follow-up commits do not change executable code).
-- Backend tests with Firestore emulator (run 45397740905): **344 passed, 0 failed, 0 skipped**; production Lambda ZIP packaging and integrity verification passed.
-- Frontend build (run 45397741287): **8 tests passed, 0 failed, 0 skipped**; TypeScript and Vite production build passed.
-- Joy Inbox CI (run 45397740999): backend unit tests and frontend TypeScript/tests/build both passed.
-- These checks include CRM lead activity history and probability-weighted pipeline forecast code.
+Latest fully verified code commit: `400e5b0166809857668aca4d9820cc31915ee1fa` (subsequent documentation-only commits do not change executable code).
+- Backend tests with Firestore emulator (run 45398173170): **344 passed, 0 failed, 0 skipped**; production Lambda ZIP packaging and integrity verification passed.
+- Frontend build (run 45398172670): **8 tests passed, 0 failed, 0 skipped**; TypeScript and Vite production build passed.
+- Joy Inbox CI (run 45398173311): backend unit tests and frontend TypeScript/tests/build both passed.
+- These checks include tenant-scoped CRM lead activity history (including CSV imports), configurable stage win probabilities and probability-weighted forecast totals.
 
-The PR #1 branch tip is `3bb46e304ce5f728c25b792c902b59a4da224950` after documentation-only parity updates. A fresh Cloudflare preview for this exact head has not been verified; do not treat the older preview URL as current.
+The PR #1 branch tip is `400e5b0166809857668aca4d9820cc31915ee1fa` at this verification point. A fresh Cloudflare preview for this exact head has not been verified; do not treat an older preview URL as current.
 
 ## Static security review completed in repository
 
