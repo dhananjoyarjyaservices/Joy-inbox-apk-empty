@@ -45,6 +45,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
   const [writeMessages, setWriteMessages] = useState(false);
   const [readTemplates, setReadTemplates] = useState(false);
   const [readCampaigns, setReadCampaigns] = useState(false);
+  const [writeCampaigns, setWriteCampaigns] = useState(false);
   const [expiryDays, setExpiryDays] = useState(90);
   const [newKey, setNewKey] = useState("");
   const [copied, setCopied] = useState(false);
@@ -80,7 +81,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
       const result = await createOrganizationApiKey({
         organizationId,
         name,
-        scopes: [ ...(readContacts ? ["contacts:read"] : []), ...(writeContacts ? ["contacts:write"] : []), ...(readLeads ? ["leads:read"] : []), ...(writeLeads ? ["leads:write"] : []), ...(writeMessages ? ["messages:write"] : []), ...(readTemplates ? ["templates:read"] : []), ...(readCampaigns ? ["campaigns:read"] : []) ],
+        scopes: [ ...(readContacts ? ["contacts:read"] : []), ...(writeContacts ? ["contacts:write"] : []), ...(readLeads ? ["leads:read"] : []), ...(writeLeads ? ["leads:write"] : []), ...(writeMessages ? ["messages:write"] : []), ...(readTemplates ? ["templates:read"] : []), ...(readCampaigns ? ["campaigns:read"] : []), ...(writeCampaigns ? ["campaigns:write"] : []) ],
         expiryDays
       });
       setNewKey(result.apiKey.apiKey);
@@ -201,13 +202,14 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={writeMessages} onChange={event => setWriteMessages(event.target.checked)}/> Send WhatsApp text messages</label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readTemplates} onChange={event => setReadTemplates(event.target.checked)}/> Read approved WhatsApp templates</label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readCampaigns} onChange={event => setReadCampaigns(event.target.checked)}/> Read campaign reports (no recipient details)</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={writeCampaigns} onChange={event => setWriteCampaigns(event.target.checked)}/> Create campaign drafts only (cannot send)</label>
           </div>
           <label className="block text-sm text-gray-600">Key expires after
             <select value={expiryDays} onChange={event => setExpiryDays(Number(event.target.value))} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">
               <option value={30}>30 days</option><option value={90}>90 days</option><option value={180}>180 days</option><option value={365}>365 days</option>
             </select>
           </label>
-          <button disabled={saving || !organizationId || (!readContacts && !writeContacts && !readLeads && !writeLeads && !writeMessages && !readTemplates && !readCampaigns)} className="rounded-lg bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Creating..." : "Create API key"}</button>
+          <button disabled={saving || !organizationId || (!readContacts && !writeContacts && !readLeads && !writeLeads && !writeMessages && !readTemplates && !readCampaigns && !writeCampaigns)} className="rounded-lg bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Creating..." : "Create API key"}</button>
         </form>
         <div className="rounded-xl border bg-white p-4">
           <div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">API keys</h3><button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-lg border px-3 py-1.5 text-xs text-[#075e54]">{loading ? "Refreshing..." : "Refresh"}</button></div>
