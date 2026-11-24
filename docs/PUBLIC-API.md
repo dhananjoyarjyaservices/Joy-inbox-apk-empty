@@ -15,7 +15,7 @@ Example header:
 Authorization: Bearer joy_live_REPLACE_WITH_YOUR_KEY
 ```
 
-The raw key is generated from cryptographic random bytes. Joy Inbox stores only its SHA-256 hash. Keys are workspace-scoped, expire within 1–365 days, can be revoked immediately, update a throttled last-used timestamp and are limited to 60 requests per key per minute. Rate-limit counters expire automatically after the window. The workspace ID is derived from the key and is never accepted from the API request.
+The raw key is generated from cryptographic random bytes. Joy Inbox stores only its SHA-256 hash. Keys are workspace-scoped, expire within 1–365 days, can be revoked immediately, update a throttled last-used timestamp and are limited to 60 requests per key per minute. Rate-limit counter documents include an `expiresAt` field; the Firestore TTL policy must be enabled in the project before production so old buckets are deleted. The workspace ID is derived from the key and is never accepted from the API request.
 
 ## Endpoints
 
