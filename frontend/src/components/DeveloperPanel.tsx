@@ -9,6 +9,8 @@ import {
   rotateOrganizationWebhookSecret,
   listOrganizationWebhookDeliveries,
   replayOrganizationWebhookDelivery,
+  getOrganizationApiUsage,
+  type OrganizationApiUsage,
   type OrganizationApiKey,
   type OrganizationWebhook,
   type OrganizationWebhookDelivery
@@ -24,6 +26,8 @@ function displayDate(value: unknown) {
 
 export default function DeveloperPanel({ organizationId }: { organizationId: string }) {
   const [keys, setKeys] = useState<OrganizationApiKey[]>([]);
+  const [apiUsage, setApiUsage] = useState<OrganizationApiUsage | null>(null);
+  const [usageDays, setUsageDays] = useState(30);
   const [webhooks, setWebhooks] = useState<OrganizationWebhook[]>([]);
   const [deliveries, setDeliveries] = useState<OrganizationWebhookDelivery[]>([]);
   const [replayingDeliveryId, setReplayingDeliveryId] = useState("");
@@ -50,14 +54,16 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
     if (!organizationId) return;
     setLoading(true);
     try {
-      const [apiKeys, subscriptions, deliveryHistory] = await Promise.all([
+      const [apiKeys, subscriptions, deliveryHistory, usage] = await Promise.all([
         listOrganizationApiKeys(organizationId),
         listOrganizationWebhooks(organizationId),
-        listOrganizationWebhookDeliveries(organizationId)
+        listOrganizationWebhookDeliveries(organizationId),
+        getOrganizationApiUsage(organizationId, usageDays)
       ]);
       setKeys(apiKeys);
       setWebhooks(subscriptions);
       setDeliveries(deliveryHistory);
+      setApiUsage(usage);
     } catch (e) { setError(e instanceof Error ? e.message : "Developer settings could not be loaded."); }
     finally { setLoading(false); }
   }
@@ -206,6 +212,20 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <p className="mt-1 text-[11px] text-gray-400">Created: {displayDate(key.createdAt)} · Last used: {displayDate(key.lastUsedAt)}</p>
             {key.status === "active" && <button type="button" onClick={() => void revoke(key)} className="mt-2 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600">Revoke key</button>}
           </article>)}</div> : <p className="text-sm text-gray-500">{loading ? "Loading API keys..." : "No API keys created for this workspace."}</p>}
+        </div>
+        <div className="rounded-xl border bg-white p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div><h3 className="font-semibold">API usage analytics</h3><p className="mt-1 text-xs text-gray-500">Daily requests and rate-limited attempts across this workspace's API keys.</p></div>
+            <select aria-label="API usage period" value={usageDays} onChange={event => setUsageDays(Number(event.target.value))} className="rounded-lg border bg-white px-3 py-2 text-xs">
+              <option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">API requests</p><p className="mt-1 text-2xl font-semibold tabular-nums">{apiUsage?.totals.requests.toLocaleString() ?? "—"}</p></div>
+            <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">Rate limited</p><p className="mt-1 text-2xl font-semibold tabular-nums">{apiUsage?.totals.rateLimited.toLocaleString() ?? "—"}</p></div>
+          </div>
+          {apiUsage?.daily.length ? <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">{apiUsage.daily.map(item => <div key={item.keyId + item.date} className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-xs last:border-0"><div><p className="font-medium">{item.date.slice(0, 4)}-{item.date.slice(4, 6)}-{item.date.slice(6, 8)}</p><p className="font-mono text-[10px] text-gray-400">Key {item.keyId.slice(0, 12)}…</p></div><div className="text-right"><p className="font-semibold tabular-nums">{item.requests.toLocaleString()} requests</p><p className="text-gray-500 tabular-nums">{item.rateLimited.toLocaleString()} rate limited</p></div></div>)}</div> : <p className="mt-3 text-xs text-gray-500">{loading ? "Loading usage..." : "No API usage recorded for this period yet."}</p>}
+          <button type="button" onClick={() => void refresh()} disabled={loading} className="mt-3 rounded-lg border px-3 py-1.5 text-xs text-[#075e54]">{loading ? "Refreshing..." : "Refresh usage"}</button>
         </div>
         <div className="rounded-xl border bg-white p-4 space-y-3">
           <div><h3 className="font-semibold">Outbound webhooks</h3><p className="mt-1 text-xs text-gray-500">Send signed contact, message and CRM lead events to your HTTPS endpoint. Delivery is queued, retried and can be replayed after terminal failure.</p></div>
