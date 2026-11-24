@@ -17,7 +17,8 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add versioned `GET /public/v1/contacts` and `POST /public/v1/contacts` endpoints.
 - [x] Add a workspace Developer panel to create/revoke keys and view API examples.
 - [x] Deny client-side Firestore access to API key records.
-- [ ] Add per-key rate limits, cursor pagination, idempotency and request-usage analytics.
+- [x] Enforce a fixed 60-requests-per-minute rate limit per API key using server-only Firestore counters.
+- [ ] Add configurable rate-limit tiers, cursor pagination, idempotency and request-usage analytics.
 - [ ] Add public API scopes and endpoints for leads, messages, campaigns and templates.
 - [ ] Add customer-managed outbound webhook subscriptions, signed delivery, retry/replay and delivery logs.
 - [ ] Validate external integration traffic, abuse controls and production CORS strategy before public launch.
