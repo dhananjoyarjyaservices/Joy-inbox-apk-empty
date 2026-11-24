@@ -75,7 +75,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     setSource(lead.source || "");
     setContactId(lead.contactId || "");
     setOwnerUid(lead.ownerUid || "");
-    setFollowUpAt(lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toISOString().slice(0, 16) : "");
+    setFollowUpAt(lead.nextFollowUpAt ? (() => { const date = new Date(lead.nextFollowUpAt as string); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); })() : "");
     setStageId(lead.stageId);
     setCustomValues(lead.customFields || {});
     window.scrollTo({ top: 0, behavior: "smooth" });
