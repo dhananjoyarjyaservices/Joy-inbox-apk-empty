@@ -75,13 +75,26 @@ Legacy `PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN` are only for legacy owner-o
 
 ## Safe rollout sequence
 
-1. Verify the Cloudflare Pages project is connected to this target repository and confirm its build settings.
-2. Generate and commit the backend lockfile; package and test the Lambda artifact with Node.js 22.
-3. Configure secrets and CORS on a staging Lambda; do not copy secrets into GitHub.
-4. Deploy the backend to a staging Lambda and test authentication, tenant membership, message routes, webhook signature/routing, media proxy and CORS.
-5. Deploy a preview build to Cloudflare Pages with staging API/Firebase configuration and test signup, workspace setup and tenant isolation.
-6. Review Firestore/storage rules and complete the owner data migration plus rollback snapshot.
-7. Only after all checks pass, approve/merge the draft PR and explicitly authorize production cutover.
+The project owner has requested that Firebase connection be the final external integration step. Follow this order and do not ask for Firebase credentials while repository-only work remains:
+
+### Phase A — finish without connecting Firebase
+
+1. Complete repository implementation, code review, documentation and regression tests.
+2. Keep Node.js 22 lockfiles current; verify backend tests, Firestore emulator tests, frontend tests and production build on the latest branch commit.
+3. Review Firebase rules, indexes and storage rules statically; add/fix emulator coverage without deploying rules to a live project.
+4. Review AWS Lambda packages, IAM boundaries, worker handlers and EventBridge templates. Validate templates and packaging without deploying or activating customer-facing schedules.
+5. Verify the Cloudflare Pages Git integration, build settings and branch preview behavior. Keep any preview isolated from the existing production Pages project; a successful static build does not prove Firebase/API runtime connectivity.
+6. Finish static security, tenant-isolation, concurrency and migration/rollback reviews that can be completed without live service credentials. Keep a clear list of tests that must be repeated in staging.
+
+### Phase B — final Firebase connection, then integrated staging
+
+7. Only after Phase A is complete, connect the intended Firebase staging project and configure its Admin credentials, web app values, indexes and rules.
+8. Deploy to isolated staging only after confirming backups and rollback. Verify Auth, workspace onboarding, membership isolation, Firestore indexes/rules and tenant data boundaries.
+9. Configure Meta test assets, Stripe test-mode products/secrets and transactional email; deploy isolated AWS API/worker Lambdas and schedules only as required for the staging tests.
+10. Run end-to-end Meta webhook/message delivery, Stripe checkout/trial/portal/webhook, invitation email, campaign/automation/SLA worker, retention cutoff, concurrency, backup/restore and mobile tests.
+11. Review all staging evidence and operational/legal launch requirements. Merge the draft PR and authorize production cutover only with explicit owner approval.
+
+Firebase is deliberately deferred until repository-only work is finished. Do not treat static checks, local emulators or preview builds as a substitute for integrated staging acceptance. Do not change the existing production Pages project, deploy production Firebase rules, activate production schedules, run production data migration, enable Stripe live payments or merge the draft PR without explicit approval.
 
 ## Current status
 
