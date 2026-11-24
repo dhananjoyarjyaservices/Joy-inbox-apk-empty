@@ -3,7 +3,7 @@
 ## Implemented backend foundation
 
 - Organization-scoped billing status and configured-plan discovery at `GET /organizations/billing?organizationId=...`.
-- Stripe Checkout Session creation at `POST /organizations/billing` with `{ organizationId, action: "checkout", plan: "starter" | "growth" | "business" }`.
+- Stripe Checkout Session creation at `POST /organizations/billing` with `{ organizationId, action: "checkout", plan: "lite" | "starter" | "growth" | "business" | "pro", interval?: "month" | "year" }`.
 - Stripe Billing Portal session creation at `POST /organizations/billing` with `{ organizationId, action: "portal" }`.
 - Signed webhook receiver at `POST /billing/stripe-webhook`.
 - Subscription state is stored under `organizations/{organizationId}/billing/subscription`; Stripe webhook idempotency records are stored in the server-only `stripeWebhookEvents` collection.
