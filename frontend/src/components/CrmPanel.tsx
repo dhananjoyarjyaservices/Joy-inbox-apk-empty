@@ -36,6 +36,11 @@ export default function CrmPanel({ organizationId, contacts, members }: Props) {
         listCrmFields(organizationId), listCrmStages(organizationId), listCrmLeads(organizationId)
       ]);
       setFields(nextFields); setStages(nextStages); setLeads(nextLeads);
+      setCustomValues(current => {
+        const next = { ...current };
+        nextFields.filter(field => field.active && field.type === "boolean").forEach(field => { if (next[field.key] === undefined) next[field.key] = false; });
+        return next;
+      });
       setStageId(current => nextStages.some(stage => stage.id === current && stage.active) ? current : nextStages.find(stage => stage.isDefault && stage.active)?.id || nextStages.find(stage => stage.active)?.id || "");
     } catch (e) { setError(e instanceof Error ? e.message : "CRM data could not be loaded."); }
     finally { setLoading(false); }
