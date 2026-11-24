@@ -139,6 +139,13 @@ export async function listWhatsAppConnections(organizationId: string): Promise<W
   return Array.isArray(result.connections) ? result.connections : [];
 }
 
+export async function getWhatsAppRegistrationPin(organizationId: string, phoneNumberId: string): Promise<string> {
+  const query = new URLSearchParams({ organizationId, phoneNumberId });
+  const result = await request(`/whatsapp/registration-pin?${query.toString()}`);
+  if (typeof result.registrationPin !== "string") throw new Error("Saved WhatsApp security PIN is unavailable.");
+  return result.registrationPin;
+}
+
 export interface OrganizationSlaSettings { enabled: boolean; targetMinutes: number; }
 export async function getOrganizationSlaSettings(organizationId: string): Promise<OrganizationSlaSettings> {
   const result = await request(`/organizations/sla/settings?organizationId=${encodeURIComponent(organizationId)}`);
