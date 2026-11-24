@@ -58,7 +58,7 @@ function normalizeCrmFieldValues(input, definitions = []) {
       if (typeof value !== "number" || !Number.isFinite(value)) throw crmError(`${definition.label} must be a valid number.`);
       values[key] = value;
     } else if (definition.type === "date") {
-      const parsedDate = typeof value === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) ? new Date(value + "T00:00:00.000Z") : null;
+      const parsedDate = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value + "T00:00:00.000Z") : null;
       if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== value) {
         throw crmError(`${definition.label} must be a valid YYYY-MM-DD date.`);
       }
