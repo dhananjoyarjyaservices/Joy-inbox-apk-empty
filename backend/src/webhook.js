@@ -7,7 +7,7 @@ const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./te
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
 const { matchesAutomationRule } = require("./automationRules");
-const { recordInboundMessageUsage } = require("./tenantUsage");
+const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 
 function getVerifyToken() {
   return (
@@ -213,7 +213,15 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
 
     for (let index = 0; index < immediateCount; index += 1) {
       const replyText = steps[index].message;
-      const result = await sendWhatsAppText(phone, replyText, undefined, credentials);
+      const quotaReservation = await reserveOutboundMessage(db, organization.id, `automation_${runId}_${index + 1}`);
+      let result;
+      try {
+        result = await sendWhatsAppText(phone, replyText, undefined, credentials);
+        await finishOutboundReservation(db, quotaReservation, "sent");
+      } catch (sendError) {
+        await finishOutboundReservation(db, quotaReservation, sendError?.definitive === true ? "failed" : "sent");
+        throw sendError;
+      }
       const sentAt = new Date();
       responseMessageIds.push(result.messageId);
       const messageBatch = db.batch();
@@ -269,7 +277,15 @@ async function maybeSendTenantGreeting(db, organization, credentials, phone, inb
   });
   if (!claimed || !withinWindow) return;
   try {
-    const result = await sendWhatsAppText(phone, greetingText, undefined, credentials);
+    const quotaReservation = await reserveOutboundMessage(db, organization.id, `greeting_${String(inboundMessage.id || "").slice(0, 220)}`);
+    let result;
+    try {
+      result = await sendWhatsAppText(phone, greetingText, undefined, credentials);
+      await finishOutboundReservation(db, quotaReservation, "sent");
+    } catch (sendError) {
+      await finishOutboundReservation(db, quotaReservation, sendError?.definitive === true ? "failed" : "sent");
+      throw sendError;
+    }
     const timestamp = new Date();
     await db.runTransaction(async (transaction) => {
       const current = await transaction.get(chatRef);
