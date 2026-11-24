@@ -77,6 +77,18 @@ test("subscription normalization extracts plan, status, customer and billing dat
   assert.equal(value.cancelAtPeriodEnd, true);
 });
 
+test("subscription normalization preserves annual billing interval", () => {
+  const value = extractSubscriptionFields({
+    id: "sub_annual",
+    customer: "cus_annual",
+    status: "active",
+    items: { data: [{ price: { id: "price_growth_year" } }] }
+  }, [{ key: "growth", name: "Growth", priceId: "price_growth", annualPriceId: "price_growth_year" }]);
+  assert.equal(value.plan, "growth");
+  assert.equal(value.interval, "year");
+  assert.equal(value.priceId, "price_growth_year");
+});
+
 test("Stripe event claims use a bounded lease and mark completed events as duplicates", async () => {
   const now = new Date("2026-11-23T12:00:00.000Z");
   let stored = null;
