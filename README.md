@@ -69,7 +69,7 @@ No production Firebase rules/indexes, AWS Lambda/EventBridge resources, Meta web
 
 ## Current authoritative checklists
 
-- [docs/INTERAKT-FEATURE-PARITY.md](docs/INTERAKT-FEATURE-PARITY.md) — audited feature-by-feature comparison and missing-work backlog.\n- [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md)
+- [docs/INTERAKT-FEATURE-PARITY.md](docs/INTERAKT-FEATURE-PARITY.md) — audited feature-by-feature comparison and missing-work backlog.\n- [docs/EVENING-IMPLEMENTATION-PLAN.md](docs/EVENING-IMPLEMENTATION-PLAN.md) — prioritized build sequence and acceptance criteria.\n- [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md)
 - [docs/DEPLOYMENT-CLOUDFLARE-AWS.md](docs/DEPLOYMENT-CLOUDFLARE-AWS.md)
 - [docs/BILLING-STRIPE.md](docs/BILLING-STRIPE.md)
 - [docs/ORGANIZATION-ONBOARDING.md](docs/ORGANIZATION-ONBOARDING.md)
