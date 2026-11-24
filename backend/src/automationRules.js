@@ -113,6 +113,7 @@ module.exports = {
   ID_PATTERN,
   normalizeAutomationRule,
   sortAutomationRules,
+  normalizeAutomationMatchText,
   matchesAutomationRule,
   findMatchingAutomationRule
 };
