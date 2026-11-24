@@ -149,7 +149,7 @@ test("media transfer reservations count actual bytes and enforce the plan allowa
   const full = await reserveMediaTransfer(db, "org_one", "upload-full", fullLimit - 80, now);
   await assert.rejects(
     () => reserveMediaTransfer(db, "org_one", "upload-over", 1, now),
-    { statusCode: 429, code: "MESSAGE_QUOTA_EXCEEDED" }
+    { statusCode: 429, code: "MEDIA_QUOTA_EXCEEDED" }
   );
   await finishMediaTransfer(db, full, "failed", 0, now);
 });
