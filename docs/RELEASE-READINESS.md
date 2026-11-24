@@ -4,6 +4,12 @@ Current development branch: `feature/saas-foundation`.
 
 This checklist separates code already present from work that requires real service configuration, production data, external review or an explicit deployment decision. A green CI build does not mean the SaaS product is production-ready.
 
+
+
+## Owner-requested execution order
+
+Complete all repository-only implementation, code review, documentation, local/emulator testing, CI checks, static security review, frontend build/preview preparation, Lambda packaging review and infrastructure-template review before requesting any Firebase connection. Firebase connection is intentionally reserved for the final external integration phase. Once the repository-only phase is complete, connect an isolated Firebase staging project and then run integrated Firebase/Meta/Stripe/AWS acceptance tests. Do not ask the owner to configure Firebase while code-only work remains. This sequencing does not waive any staging or production gate below.
+
 ## Code foundations present
 
 - [x] Tenant authentication, organization membership and role checks.
