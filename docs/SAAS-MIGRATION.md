@@ -37,7 +37,7 @@ The product requirement is to support WhatsApp media without permanently storing
 
 ## Not yet complete
 
-The repository now contains substantial tenant-aware API, frontend and webhook implementation, so this early checklist is superseded by the incremental implementation sections below. Remaining release blockers are tracked in `docs/RELEASE-READINESS.md`: CI confirmation for the current head, end-to-end Firebase/Meta/Stripe staging tests, full audit/retirement of legacy owner-only routes, tenant isolation review, migration backup/rollback rehearsal, operational monitoring and explicit deployment approval. Do not interpret the existence of these code paths as production acceptance.
+The repository now contains substantial tenant-aware API, frontend and webhook implementation, so this early checklist is superseded by the incremental implementation sections below. Remaining release blockers are tracked in `docs/RELEASE-READINESS.md`: CI confirmation for the current head (commit b8d173929405aecae5c743953d547994b562fd3d; GitHub Actions backend tests and frontend TypeScript/production build passed on 2026-11-23), end-to-end Firebase/Meta/Stripe staging tests, full audit/retirement of legacy owner-only routes, tenant isolation review, migration backup/rollback rehearsal, operational monitoring and explicit deployment approval. Do not interpret the existence of these code paths as production acceptance.
 
 
 ## Incremental implementation update
