@@ -54,13 +54,14 @@ function getUsageWindow(subscription, now = new Date(), plans = getBillingPlanCa
   if (!cycleStart || !cycleEnd || cycleEnd <= cycleStart || now < cycleStart || now >= cycleEnd) {
     throw usageError("The billing period could not be verified. Sending is paused until subscription status is refreshed.", 503);
   }
-  let monthStart = cycleStart;
+  let monthIndex = 0;
   for (let month = 0; month < 12; month += 1) {
     const next = addUtcMonths(cycleStart, month + 1);
     if (now < next || next >= cycleEnd) break;
-    monthStart = next;
+    monthIndex = month + 1;
   }
-  const monthEnd = addUtcMonths(monthStart, 1);
+  const monthStart = addUtcMonths(cycleStart, monthIndex);
+  const monthEnd = addUtcMonths(cycleStart, monthIndex + 1);
   const end = monthEnd < cycleEnd ? monthEnd : cycleEnd;
   return {
     plan,
