@@ -127,3 +127,16 @@ test("releases reminder claim after notification failure so the next schedule ca
   assert.equal(failed.failed, 1);
   assert.equal(succeeded.remindersSent, 1);
 });
+
+
+test("respects a member's disabled CRM follow-up notification preference", async () => {
+  const now = new Date("2026-11-24T12:00:00Z"), due = new Date("2026-11-24T10:00:00Z");
+  const db = createDb({
+    leads: [{ id: "lead_opt_out", title: "Do not alert", stageId: "new", ownerUid: "agent_1", nextFollowUpAt: due }],
+    members: { agent_1: { status: "active", role: "agent" } }
+  });
+  db.records.set("organizations/org_a/members/agent_1/settings/notifications", { crm: false });
+  const result = await runScheduledCrmFollowUpReminders({ db, admin, now, notify: async () => assert.fail("must not notify") });
+  assert.equal(result.remindersSent, 0);
+  assert.equal(result.skipped, 1);
+});
