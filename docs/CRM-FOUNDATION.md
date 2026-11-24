@@ -74,3 +74,10 @@ All data remains under the authenticated workspace path. Custom field keys and s
 - The worker writes an in-app notification and sends a push notification, using a deterministic notification ID.
 - Reminder claims are transactional and keyed to the exact follow-up timestamp to avoid duplicate sends across overlapping scheduler invocations. Failed deliveries release the claim for retry.
 - The existing EventBridge `src/index.slaScheduledHandler` now runs this worker alongside SLA and automation checks. Schedule it at a five-minute cadence in staging after deploying the updated Lambda package.
+
+
+## CSV bulk import
+
+Owners and admins can import up to 200 leads per upload from the Sales CRM screen. The importer accepts quoted CSV cells and requires a `title` header. Supported optional columns are `stage_id` (defaults to `new`), `contact_id`, `owner_uid`, `source`, `value`, `currency` (defaults to INR), `next_follow_up_at` and `notes`.
+
+Every row is validated against the workspace's active pipeline stages, contacts, active members and configured custom fields. Invalid rows are reported with their CSV row number while valid rows are committed together in a single Firestore batch. Imports emit the same signed `lead.created` webhook events as individual lead creation.
