@@ -27,6 +27,22 @@ test("backend environment example documents all ten monthly and annual Stripe Pr
   }
 });
 
+test("billing plan discovery ignores untouched example placeholders", () => {
+  const plans = getConfiguredBillingPlans({
+    STRIPE_PRICE_LITE: "price_REPLACE_WITH_LITE_MONTHLY_PRICE_ID",
+    STRIPE_PRICE_STARTER: "price_REPLACE_WITH_STARTER_MONTHLY_PRICE_ID",
+    STRIPE_PRICE_GROWTH: "price_REPLACE_WITH_GROWTH_MONTHLY_PRICE_ID",
+    STRIPE_PRICE_BUSINESS: "price_REPLACE_WITH_BUSINESS_MONTHLY_PRICE_ID",
+    STRIPE_PRICE_PRO: "price_REPLACE_WITH_PRO_MONTHLY_PRICE_ID",
+    STRIPE_PRICE_LITE_ANNUAL: "price_REPLACE_WITH_LITE_ANNUAL_PRICE_ID",
+    STRIPE_PRICE_STARTER_ANNUAL: "price_REPLACE_WITH_STARTER_ANNUAL_PRICE_ID",
+    STRIPE_PRICE_GROWTH_ANNUAL: "price_REPLACE_WITH_GROWTH_ANNUAL_PRICE_ID",
+    STRIPE_PRICE_BUSINESS_ANNUAL: "price_REPLACE_WITH_BUSINESS_ANNUAL_PRICE_ID",
+    STRIPE_PRICE_PRO_ANNUAL: "price_REPLACE_WITH_PRO_ANNUAL_PRICE_ID"
+  });
+  assert.deepEqual(plans, []);
+});
+
 test("billing plan discovery returns only Stripe price IDs configured by the backend", () => {
   const plans = getConfiguredBillingPlans({
     STRIPE_PRICE_LITE: "price_lite",
