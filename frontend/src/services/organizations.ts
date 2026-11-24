@@ -290,6 +290,7 @@ export interface OrganizationBillingState {
   plans: OrganizationBillingPlan[];
   subscription: {
     plan: string;
+    interval: "month" | "year";
     status: string;
     currentPeriodEnd: string | null;
     trialEnd: string | null;
