@@ -204,13 +204,14 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readTemplates} onChange={event => setReadTemplates(event.target.checked)}/> Read approved WhatsApp templates</label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={readCampaigns} onChange={event => setReadCampaigns(event.target.checked)}/> Read campaign reports (no recipient details)</label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={writeCampaigns} onChange={event => setWriteCampaigns(event.target.checked)}/> Create campaign drafts only (cannot send)</label>
+             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={controlCampaigns} onChange={event => setControlCampaigns(event.target.checked)}/> Control campaigns (start, schedule, pause, resume, cancel)</label>
           </div>
           <label className="block text-sm text-gray-600">Key expires after
             <select value={expiryDays} onChange={event => setExpiryDays(Number(event.target.value))} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">
               <option value={30}>30 days</option><option value={90}>90 days</option><option value={180}>180 days</option><option value={365}>365 days</option>
             </select>
           </label>
-          <button disabled={saving || !organizationId || (!readContacts && !writeContacts && !readLeads && !writeLeads && !writeMessages && !readTemplates && !readCampaigns && !writeCampaigns)} className="rounded-lg bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Creating..." : "Create API key"}</button>
+          <button disabled={saving || !organizationId || (!readContacts && !writeContacts && !readLeads && !writeLeads && !writeMessages && !readTemplates && !readCampaigns && !writeCampaigns && !controlCampaigns)} className="rounded-lg bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Creating..." : "Create API key"}</button>
         </form>
         <div className="rounded-xl border bg-white p-4">
           <div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">API keys</h3><button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-lg border px-3 py-1.5 text-xs text-[#075e54]">{loading ? "Refreshing..." : "Refresh"}</button></div>
@@ -266,6 +267,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <div><p className="font-mono text-xs font-semibold text-green-700">GET /public/v1/templates</p><p className="text-xs text-gray-500">Requires <code>templates:read</code>. Supply connected <code>phoneNumberId</code> and <code>wabaId</code>.</p></div>
             <div><p className="font-mono text-xs font-semibold text-green-700">GET /public/v1/campaigns</p><p className="text-xs text-gray-500">Requires <code>campaigns:read</code>. Returns paginated campaign delivery summaries, never recipient phone numbers.</p></div>
             <div><p className="font-mono text-xs font-semibold text-blue-700">POST /public/v1/campaigns</p><p className="text-xs text-gray-500">Requires <code>campaigns:write</code> and an <code>Idempotency-Key</code>. Creates a consent-checked draft only; it cannot send or schedule.</p></div>
+             <div><p className="font-mono text-xs font-semibold text-amber-700">POST /public/v1/campaigns</p><p className="text-xs text-gray-500">Requires <code>campaigns:control</code> and an <code>Idempotency-Key</code>. Use <code>action</code> with <code>campaignId</code> to start, schedule, pause, resume or cancel a campaign.</p></div>
             <div><p className="font-mono text-xs font-semibold text-green-700">GET /public/v1/leads</p><p className="text-xs text-gray-500">Requires <code>leads:read</code>. Optional query: <code>limit</code> (1–100).</p></div>
             <div><p className="font-mono text-xs font-semibold text-blue-700">POST /public/v1/leads</p><p className="text-xs text-gray-500">Requires <code>leads:write</code>. Creates a lead after validating its stage, contact, owner and custom fields.</p></div>
             <div><p className="font-mono text-xs font-semibold text-amber-700">PUT /public/v1/leads · DELETE /public/v1/leads</p><p className="text-xs text-gray-500">Requires <code>leads:write</code>. Supply <code>resourceId</code>; PUT also requires a complete <code>data</code> object.</p></div>
