@@ -228,7 +228,11 @@ async function saveWhatsAppConnection(db, organization, input) {
   const accessToken = String(input?.accessToken || "").trim();
   const displayPhoneNumber = String(input?.displayPhoneNumber || "").trim().slice(0, 40);
   const verifiedName = String(input?.verifiedName || "").trim().slice(0, 100);
-  if (!validPhoneNumberId(phoneNumberId) || !/^EAA[A-Za-z0-9_-]+$/.test(accessToken) || accessToken.length > 4096) {
+  const wabaId = input?.wabaId === undefined ? "" : String(input.wabaId).trim();
+  const registrationPin = input?.registrationPin === undefined ? "" : String(input.registrationPin);
+  if (!validPhoneNumberId(phoneNumberId) || !/^[A-Za-z0-9._|=-]{20,4096}$/.test(accessToken) ||
+      (wabaId && !/^[0-9]{5,32}$/.test(wabaId)) ||
+      (registrationPin && !/^\d{6}$/.test(registrationPin))) {
     throw httpError("A valid WhatsApp Phone Number ID and access token are required.", 400);
   }
   const encrypted = encryptSecret(accessToken);
@@ -242,6 +246,8 @@ async function saveWhatsAppConnection(db, organization, input) {
     const connectionData = {
       phoneNumberId,
       accessToken: encrypted,
+      ...(wabaId ? { wabaId } : {}),
+      ...(registrationPin ? { registrationPin: encryptSecret(registrationPin) } : {}),
       displayPhoneNumber,
       verifiedName,
       connected: true,
@@ -310,6 +316,8 @@ async function getWhatsAppCredentials(db, organizationId, phoneNumberId) {
   return {
     phoneNumberId: data.phoneNumberId,
     accessToken: decryptSecret(data.accessToken),
+    ...(data.wabaId ? { wabaId: data.wabaId } : {}),
+    ...(data.registrationPin ? { registrationPin: decryptSecret(data.registrationPin) } : {}),
     displayPhoneNumber: data.displayPhoneNumber || "",
     verifiedName: data.verifiedName || ""
   };
@@ -323,6 +331,7 @@ async function listWhatsAppConnections(db, organizationId) {
     const data = item.data();
     return {
       phoneNumberId: item.id,
+      ...(data.wabaId ? { wabaId: data.wabaId } : {}),
       displayPhoneNumber: data.displayPhoneNumber || "",
       verifiedName: data.verifiedName || "",
       connected: data.connected === true,
