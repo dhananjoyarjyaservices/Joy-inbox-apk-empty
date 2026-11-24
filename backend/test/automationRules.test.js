@@ -164,12 +164,12 @@ test("evaluates all and any automation conditions without changing legacy matchi
 
 test("normalizes Unicode compatibility forms and repeated whitespace for all condition modes", () => {
   const { normalizeAutomationMatchText } = require("../src/automationRules");
-  assert.equal(normalizeAutomationMatchText("  ＰＲＩＣＥ\\t  LIST  "), "price list");
-  assert.equal(matchesAutomationRule({ keyword: "price list", matchType: "exact" }, "  PRICE\\nLIST "), true);
+  assert.equal(normalizeAutomationMatchText("  ＰＲＩＣＥ\t  LIST  "), "price list");
+  assert.equal(matchesAutomationRule({ keyword: "price list", matchType: "exact" }, "  PRICE\nLIST "), true);
   assert.equal(matchesAutomationRule({
     conditions: [{ keyword: "monthly plan" }, { keyword: "₹ ５００" }],
     conditionMode: "all"
-  }, "Monthly\\tplan costs ₹ 500"), true);
+  }, "Monthly\tplan costs ₹ 500"), true);
 });
 
 test("does not match empty text or whitespace-only condition keywords", () => {
