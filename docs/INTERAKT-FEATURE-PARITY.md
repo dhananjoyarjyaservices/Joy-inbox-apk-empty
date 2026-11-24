@@ -46,7 +46,7 @@ Legend:
 | Team management, roles and invitations | Implemented (code) | Owner/admin/agent permissions, hashed invitations, verified-email acceptance and seat enforcement. Email sending provider is not configured. |
 | Notification center, push and sound | Implemented (code) | Tenant notifications, push-device registration/preferences and notification sound hooks; real-device acceptance pending. |
 | Subscription plans, 7-day trial and usage enforcement | Partial / external validation pending | Monthly/annual plan logic, trial policy, quotas and Stripe Checkout/Portal/webhook code exist. Actual ten Stripe Price IDs, test checkout lifecycle and live payment activation are not configured. |
-| Public developer APIs and customer-configurable outbound webhooks | Partial | Versioned public contacts and CRM leads read/write endpoints now exist, with hashed expiring scoped API keys and a fixed per-key rate limit. Signed webhook subscriptions support contact, message and CRM lead lifecycle events, delivery history, failed-delivery replay and secret rotation. Message/campaign/template scopes, cursor pagination, idempotency and usage analytics remain missing. |
+| Public developer APIs and customer-configurable outbound webhooks | Partial | Versioned public contacts and CRM leads read/write endpoints have hashed expiring scoped API keys, per-key rate limits, cursor pagination, 24-hour idempotency for writes and daily per-key usage/rate-limit analytics exposed in the Developer panel. Signed webhook subscriptions support contact, message and CRM lead lifecycle events, delivery history, failed-delivery replay and secret rotation. Message/campaign/template APIs and configurable rate tiers remain missing. |
 | Instagram inbox and Instagram automation | Missing | No Instagram channel integration or inbox implementation found. |
 | RCS channel and WhatsApp-to-RCS fallback | Missing | No RCS provider/channel implementation found. |
 | Click-to-WhatsApp ads launcher/conversion analytics | Missing | No CTWA ad management or Meta conversion-event pipeline found. |
@@ -72,7 +72,7 @@ Firebase remains intentionally deferred until all repository-only work is comple
 ## Recommended implementation order for missing product scope
 
 1. **CRM foundation:** custom fields, lead records, sales pipeline stages, owner assignment, filtering and reports.
-2. **Public API/webhooks:** versioned API keys with scopes/rotation, rate limits, idempotency, signed outbound webhook delivery, retries and audit logs.
+2. **Public API/webhooks:** extend current contacts/leads API with message, campaign and template endpoints, configurable rate tiers, and richer delivery filters/analytics.
 3. **Automation builder:** branch/condition nodes, schedules, OOO/delayed replies, FAQ knowledge entries and safe API action nodes.
 4. **Commerce:** catalog/product sync and customer payment-link/order lifecycle (separate from subscription billing).
 5. **Forms and campaign attribution:** lead forms, response mapping, click/conversion events and segmentation.
