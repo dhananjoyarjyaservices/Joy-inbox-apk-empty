@@ -123,7 +123,7 @@ test("builds media carousel messages with two to ten HTTPS image cards and URL a
     body: { text: "First offer" },
     action: { name: "cta_url", parameters: { display_text: "View offer", url: "https://shop.example.com/one" } }
   });
-  assert.match(getInteractivePreview(normalized), /2 option/);
+  assert.match(getInteractivePreview(normalized), /2 card/);
 });
 
 test("rejects carousel counts, unsupported headers and unsafe card URLs", () => {
