@@ -4,7 +4,7 @@ const crypto = require("crypto");
 
 const API_KEY_PATTERN = /^joy_live_[A-Za-z0-9_-]{40,64}$/;
 const API_KEY_ID_PATTERN = /^[a-f0-9]{64}$/;
-const ALLOWED_SCOPES = new Set(["contacts:read", "contacts:write", "leads:read", "leads:write", "messages:write", "templates:read"]);
+const ALLOWED_SCOPES = new Set(["contacts:read", "contacts:write", "leads:read", "leads:write", "messages:write", "templates:read", "campaigns:read"]);
 const DEFAULT_EXPIRY_DAYS = 90;
 const MAX_EXPIRY_DAYS = 365;
 const MAX_REQUESTS_PER_MINUTE = 60;
