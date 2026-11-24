@@ -60,7 +60,8 @@ const {
   revokeOrganizationApiKey,
   authenticateOrganizationApiKey,
   requireApiScope,
-  listOrganizationApiUsage
+  listOrganizationApiUsage,
+  runIdempotentApiRequest
 } = require("./publicApi");
 const {
   createOrganizationWebhook,
@@ -394,25 +395,37 @@ async function handlePublicApiLeads(event) {
   }
   requireApiScope(authenticatedKey, "leads:write");
   if (method === "DELETE") {
-    const result = await deletePublicLead(db, authenticatedKey.organizationId, String(body.resourceId || ""));
-    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.deleted", `public-api:${result.id}:${crypto.randomUUID()}`, result)
-      .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
-    return jsonResponse(event, 200, result);
+    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), async () => {
+      const deleted = await deletePublicLead(db, authenticatedKey.organizationId, String(body.resourceId || ""));
+      await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.deleted", `public-api:${deleted.id}:${crypto.randomUUID()}`, deleted)
+        .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+      return deleted;
+    });
+    const { statusCode = 200, ...response } = result;
+    return jsonResponse(event, statusCode, response);
   }
   if (method === "POST") {
-    const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data || body);
-    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.created", `public-api:${lead.id}:${crypto.randomUUID()}`, lead)
-      .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
-    return jsonResponse(event, 201, { data: lead });
+    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), async () => {
+      const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data || body);
+      await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.created", `public-api:${lead.id}:${crypto.randomUUID()}`, lead)
+        .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+      return { data: lead, statusCode: 201 };
+    });
+    const { statusCode = 201, ...response } = result;
+    return jsonResponse(event, statusCode, response);
   }
   if (method === "PUT") {
     if (!body.data || typeof body.data !== "object" || Array.isArray(body.data)) {
       return jsonResponse(event, 400, { error: "A lead data object is required for updates." });
     }
-    const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data, String(body.resourceId || ""));
-    await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.updated", `public-api:${lead.id}:${crypto.randomUUID()}`, lead)
-      .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
-    return jsonResponse(event, 200, { data: lead });
+    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), async () => {
+      const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data, String(body.resourceId || ""));
+      await enqueueOrganizationWebhookEvent(db, authenticatedKey.organizationId, "lead.updated", `public-api:${lead.id}:${crypto.randomUUID()}`, lead)
+        .catch(error => console.error("Public API lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+      return { data: lead, statusCode: 200 };
+    });
+    const { statusCode = 200, ...response } = result;
+    return jsonResponse(event, statusCode, response);
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
 }
@@ -437,13 +450,18 @@ async function handlePublicApiContacts(event) {
     try { body = parseBody(event); } catch {
       return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
     }
-    const contact = await saveTenantResource(getDb(), authenticatedKey.organizationId, "contacts", { ...body, source: "local" });
-    await enqueueOrganizationWebhookEvent(
-      getDb(), authenticatedKey.organizationId, "contact.upserted",
-      `public-api:${contact.id}:${crypto.randomUUID()}`,
-      { id: contact.id, name: contact.name, phone: contact.phone, email: contact.email, tags: contact.tags, source: "local" }
-    ).catch(error => console.error("Public API contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
-    return jsonResponse(event, 201, { data: contact });
+    const db = getDb();
+    const result = await runIdempotentApiRequest(db, authenticatedKey, getHeader(event, "idempotency-key"), async () => {
+      const contact = await saveTenantResource(db, authenticatedKey.organizationId, "contacts", { ...body, source: "local" });
+      await enqueueOrganizationWebhookEvent(
+        db, authenticatedKey.organizationId, "contact.upserted",
+        `public-api:${contact.id}:${crypto.randomUUID()}`,
+        { id: contact.id, name: contact.name, phone: contact.phone, email: contact.email, tags: contact.tags, source: "local" }
+      ).catch(error => console.error("Public API contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+      return { data: contact, statusCode: 201 };
+    });
+    const { statusCode = 201, ...response } = result;
+    return jsonResponse(event, statusCode, response);
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
 }
