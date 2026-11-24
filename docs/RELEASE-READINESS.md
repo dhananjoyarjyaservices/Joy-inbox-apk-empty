@@ -143,14 +143,16 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-Latest verified code commit: `170d325d54c846ba2fd61231582d4d33666c6484`.
-- Backend tests with Firestore emulator (run 45406409617): **358 passed, 0 failed, 0 skipped**.
-- Frontend build (run 45406409520): **passed**.
-- Combined Joy Inbox CI (run 45406409704): **passed**.
-- The passing backend suite includes public campaign pagination, least-privilege `campaigns:write` scope coverage and route-security inventory checks. The public campaign draft endpoint itself still requires isolated Meta/Firebase staging acceptance.
-- CI is repository-level verification. It does not prove that live Firebase, Meta, Stripe, email, AWS or customer-device integrations are configured correctly.
+Latest verified code commit: `188a686ccd99a727f08ec0e0ffe3b5189c9ad744`.
+- Frontend TypeScript and production build (run 45417962816): **passed**.
+- Backend unit tests (run 45417976709): **passed**.
+- Frontend build (run 45417976712): **passed**.
+- Backend tests (run 45417976726): **passed**.
+- Cloudflare Pages branch preview: **deployed successfully** at https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev.
+- The passing checks validate repository CI and the static frontend preview only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
 
-The PR #1 branch tip at this verification point is `170d325d54c846ba2fd61231582d4d33666c6484`. Keep the pull request in draft until the external staging and launch gates below pass.
+The PR #1 branch tip at this verification point is `188a686ccd99a727f08ec0e0ffe3b5189c9ad744`. Keep the pull request in draft until all external staging and launch gates pass.
+
 ## Static security review completed in repository
 
 Reviewed the current implementation paths for Firebase ID-token verification, active workspace membership and role permissions, legacy single-owner route kill-switch coverage, Firestore tenant read/write boundaries, Meta raw-body HMAC verification, Stripe timestamped HMAC verification, tenant Phone Number ID webhook routing, encrypted per-number credentials, outbound idempotency/uncertain delivery handling, subscription/usage fail-closed behavior and media metadata-only inbound persistence. The review found and fixed a multi-number connection-status fallback edge case; the regression has an automated backend test; the exact current suite count must be read from the latest workflow logs, not inferred from an older run.
