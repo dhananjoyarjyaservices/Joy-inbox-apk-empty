@@ -52,7 +52,7 @@ Cloudflare documents that Git-integrated Pages projects can create branch and pu
 
 ### Reproducible Lambda package
 
-From the repository root, run `npm run package:lambda --prefix backend`. The script creates an isolated temporary build directory, installs only locked production dependencies with `npm ci --omit=dev`, includes the HTTP and scheduled handler source files, creates `backend/dist/joy-inbox-lambda.zip`, and verifies the ZIP archive. It does not deploy or upload the artifact. The backend Firestore-emulator workflow runs this packaging check after the regression suite. Configure each Lambda handler explicitly: `src/index.handler` for HTTP, `src/index.slaScheduledHandler` for SLA/retention/campaign scheduling, and `src/automationWorker.handler` for the separate automation queue worker.
+From the repository root, run `npm run package:lambda --prefix backend`. The script creates an isolated temporary build directory, installs only locked production dependencies with `npm ci --omit=dev`, includes the HTTP and scheduled handler source files, creates `backend/dist/joy-inbox-lambda.zip`, and verifies the ZIP archive. It does not deploy or upload the artifact. The backend Firestore-emulator workflow runs this packaging check after the regression suite. Configure each Lambda handler explicitly: `src/index.handler` for HTTP, `src/index.slaScheduledHandler` for SLA checks and delayed automation steps, `src/index.historyRetentionScheduledHandler` for history retention, `src/index.campaignScheduledHandler` for campaign delivery, and `src/automationWorker.handler` for the separate automation queue worker.
 
 ## AWS Lambda environment
 
