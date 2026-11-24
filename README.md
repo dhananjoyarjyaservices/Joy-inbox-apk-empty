@@ -70,6 +70,7 @@ No production Firebase rules/indexes, AWS Lambda/EventBridge resources, Meta web
 
 ## Current authoritative checklists
 
+- [docs/WEBHOOKS.md](docs/WEBHOOKS.md) — signed outbound webhook setup, verification and retry behavior.
 - [docs/PUBLIC-API.md](docs/PUBLIC-API.md) — initial scoped contacts API and developer key guide.
 - [docs/INTERAKT-FEATURE-PARITY.md](docs/INTERAKT-FEATURE-PARITY.md) — audited feature-by-feature comparison and missing-work backlog.\n- [docs/EVENING-IMPLEMENTATION-PLAN.md](docs/EVENING-IMPLEMENTATION-PLAN.md) — prioritized build sequence and acceptance criteria.\n- [docs/CRM-FOUNDATION.md](docs/CRM-FOUNDATION.md)
 - [docs/RELEASE-READINESS.md](docs/RELEASE-READINESS.md)
