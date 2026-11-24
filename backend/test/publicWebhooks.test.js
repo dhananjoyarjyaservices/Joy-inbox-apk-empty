@@ -182,7 +182,7 @@ test("delivers a signed webhook and records the HTTP result", async () => {
     }
   });
   assert.deepEqual(result, { delivered: 1, retried: 0, failed: 0 });
-  const expected = "sha256=" + crypto.createHmac("sha256", created.secret).update(sentBody).digest("hex");
+  const expected = "sha256=" + crypto.createHmac("sha256", created.secret).update(`${sentHeaders["X-Joy-Timestamp"]}.${sentBody}`).digest("hex");
   assert.equal(sentHeaders["X-Joy-Signature"], expected);
   assert.equal(sentHeaders["X-Joy-Event"], "contact.upserted");
   const delivery = [...db.records.entries()].find(([path]) => path.startsWith("webhookDeliveryQueue/"))[1];
