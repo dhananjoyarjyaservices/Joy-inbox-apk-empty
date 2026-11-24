@@ -33,7 +33,7 @@ Annual customers pay for 10 months and receive 12 months of service (16.67% lowe
 
 ## Usage measurement and reset
 
-- Message usage counts unique inbound WhatsApp messages accepted by the webhook plus outbound messages accepted by Meta. Deduplicate inbound messages by provider message ID. Do not count failed outbound attempts or duplicate webhook deliveries.
+- Message usage counts unique inbound WhatsApp messages accepted by the webhook plus outbound messages accepted by Meta. Inbound usage is deduplicated by provider message ID; outbound usage uses a transaction-backed reservation keyed by the idempotent client send ID. Definitive outbound rejections release the reservation; ambiguous send outcomes are conservatively charged to prevent retries bypassing the limit.
 - Media transfer counts bytes actually transferred through Joy Inbox's media proxy/upload/download path, not the size of media merely referenced by a Meta media ID.
 - Active agents count active workspace members who consume an agent seat; pending invitations do not consume a seat until accepted.
 - Usage periods follow the Stripe subscription billing period. Trial usage is tracked separately and resets to the full monthly allowance when the paid period begins.
@@ -57,6 +57,6 @@ Annual customers pay for 10 months and receive 12 months of service (16.67% lowe
 
 ## Implementation and launch gates
 
-The current Stripe integration foundation supports plan discovery, Checkout, Billing Portal and signed webhook synchronization. The backend plan catalog and seven-day one-time trial are wired to this policy. However, message/media/agent quota counters, atomic quota enforcement across every send route, usage alerts, retention deletion, Stripe trial-end behavior and full staging tests are not yet complete.
+The Stripe integration foundation supports plan discovery, Checkout, Billing Portal and signed webhook synchronization. Server-side message quota enforcement is now transaction-backed for tenant text, interactive, approved-template, media, retry, quick-reply image, greeting, keyword automation and queued automation sends. Unique inbound webhook messages are also counted idempotently. The billing API and workspace billing panel show the current service-month message usage and 80%/95%/100% threshold warnings. Definitive failed sends release reserved quota; ambiguous delivery outcomes are charged conservatively. Media-transfer and active-agent quota enforcement, customer-facing alert notifications, retention deletion, Stripe trial-end behavior and full staging tests are still pending.
 
 **Do not enable live paid checkout or advertise these limits as enforced until all quota checks are server-side, transaction-safe, tenant-isolated, tested for concurrent sends and wired into every outbound send path.** Configure all ten real Stripe Price IDs (five monthly and five annual) only after the final prices are approved in the Stripe Dashboard.
