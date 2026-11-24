@@ -533,7 +533,7 @@ async function processWebhookPayload(payload) {
               recipient: normalizePhoneNumber(status.recipient_id || ""),
               phoneNumberId: String(phoneNumberId),
               status: String(status.status),
-              timestamp: status.timestamp ? new Date(Number(status.timestamp) * 1000).toISOString() : new Date().toISOString(),
+              timestamp: Number.isFinite(Number(status.timestamp)) && Number(status.timestamp) > 0 ? new Date(Number(status.timestamp) * 1000).toISOString() : new Date().toISOString(),
               errorCode: status.errors?.[0]?.code ? String(status.errors[0].code) : undefined,
               errorTitle: status.errors?.[0]?.title ? String(status.errors[0].title).slice(0, 200) : undefined
             }
