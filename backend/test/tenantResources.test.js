@@ -67,7 +67,27 @@ function tenantResourceDb(seed = {}) {
       }
     };
   }
-  return { records, collection };
+  return {
+    records,
+    collection,
+    async runTransaction(callback) {
+      const writes = [];
+      const transaction = {
+        async get(ref) {
+          const value = records.get(ref.path);
+          return { exists: Boolean(value), data: () => value };
+        },
+        set(ref, value, options) { writes.push({ type: "set", path: ref.path, value, merge: options?.merge }); },
+        delete(ref) { writes.push({ type: "delete", path: ref.path }); }
+      };
+      const result = await callback(transaction);
+      for (const write of writes) {
+        if (write.type === "delete") records.delete(write.path);
+        else records.set(write.path, write.merge ? { ...(records.get(write.path) || {}), ...write.value } : write.value);
+      }
+      return result;
+    }
+  };
 }
 
 test("tenant contact updates and deletes stay inside the selected organization", async () => {
@@ -84,6 +104,49 @@ test("tenant contact updates and deletes stay inside the selected organization",
   assert.equal(db.records.has(`organizations/org_a/contacts/${phoneId}`), false);
   assert.equal(db.records.get(`organizations/org_b/contacts/${phoneId}`).name, "B Private Contact");
   assert.equal(getTenantResourceCollection(db, "org_b", "contacts").doc(phoneId).id, phoneId);
+});
+
+
+test("changing a tenant contact phone number atomically moves the contact and preserves creation time", async () => {
+  const { saveTenantResource } = require("../src/tenantResources");
+  const createdAt = new Date("2026-01-01T00:00:00Z");
+  const oldId = "919876543210";
+  const newId = "919876543211";
+  const db = tenantResourceDb({
+    [`organizations/org_a/contacts/${oldId}`]: { name: "Alex", phone: "+919876543210", createdAt }
+  });
+  await saveTenantResource(db, "org_a", "contacts", { name: "Alex Updated", phone: "+919876543211" }, oldId);
+  assert.equal(db.records.has(`organizations/org_a/contacts/${oldId}`), false);
+  const moved = db.records.get(`organizations/org_a/contacts/${newId}`);
+  assert.equal(moved.name, "Alex Updated");
+  assert.equal(moved.createdAt, createdAt);
+  assert.ok(moved.updatedAt instanceof Date);
+});
+
+test("changing a tenant contact phone rejects an existing destination without modifying either contact", async () => {
+  const { saveTenantResource } = require("../src/tenantResources");
+  const oldId = "919876543210";
+  const newId = "919876543211";
+  const db = tenantResourceDb({
+    [`organizations/org_a/contacts/${oldId}`]: { name: "Original", phone: "+919876543210" },
+    [`organizations/org_a/contacts/${newId}`]: { name: "Existing", phone: "+919876543211" }
+  });
+  await assert.rejects(
+    () => saveTenantResource(db, "org_a", "contacts", { name: "Original renamed", phone: "+919876543211" }, oldId),
+    { statusCode: 409 }
+  );
+  assert.equal(db.records.get(`organizations/org_a/contacts/${oldId}`).name, "Original");
+  assert.equal(db.records.get(`organizations/org_a/contacts/${newId}`).name, "Existing");
+});
+
+test("changing a tenant contact phone rejects a missing source contact", async () => {
+  const { saveTenantResource } = require("../src/tenantResources");
+  const db = tenantResourceDb();
+  await assert.rejects(
+    () => saveTenantResource(db, "org_a", "contacts", { name: "Alex", phone: "+919876543211" }, "919876543210"),
+    { statusCode: 404 }
+  );
+  assert.equal(db.records.size, 0);
 });
 
 test("tenant Quick Reply updates and deletes cannot affect another organization with the same document ID", async () => {
