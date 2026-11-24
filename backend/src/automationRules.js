@@ -18,6 +18,7 @@ function normalizeAutomationRule(input) {
   if (hasConditions && (!Array.isArray(input.conditions) || input.conditions.length < 1 || input.conditions.length > 5)) {
     throw httpError("Provide between 1 and 5 automation conditions.", 400);
   }
+  if (!hasConditions && input.conditionMode !== undefined) throw httpError("Condition mode can only be used with conditions.", 400);
   if (input.conditionMode !== undefined && !["all", "any"].includes(input.conditionMode)) {
     throw httpError("Condition mode must be all or any.", 400);
   }
