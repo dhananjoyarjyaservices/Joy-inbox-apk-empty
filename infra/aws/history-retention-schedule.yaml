@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Disabled-by-default EventBridge schedule for Joy Inbox plan-based history retention.
+
+Parameters:
+  HistoryRetentionLambdaArn:
+    Type: String
+    Description: ARN of the deployed Lambda whose handler is src/index.historyRetentionScheduledHandler.
+
+Resources:
+  HistoryRetentionSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: joy-inbox-history-retention-daily
+      Description: Deletes tenant messages older than each active plan's configured history window.
+      ScheduleExpression: rate(1 day)
+      State: DISABLED
+      Targets:
+        - Id: JoyInboxHistoryRetention
+          Arn: !Ref HistoryRetentionLambdaArn
+
+  AllowEventBridgeInvokeHistoryRetention:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref HistoryRetentionLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt HistoryRetentionSchedule.Arn
+
+Outputs:
+  HistoryRetentionScheduleArn:
+    Description: Disabled schedule ARN. Enable only after staging verification, backup and restore testing.
+    Value: !GetAtt HistoryRetentionSchedule.Arn
