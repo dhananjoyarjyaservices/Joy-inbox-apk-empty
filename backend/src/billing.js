@@ -4,6 +4,7 @@ const crypto = require("crypto");
 
 const STRIPE_API = "https://api.stripe.com/v1";
 const EVENT_LEASE_MS = 2 * 60 * 1000;
+const TRIAL_PERIOD_DAYS = 7;
 
 function billingError(message, statusCode = 400) {
   const error = new Error(message);
@@ -13,9 +14,11 @@ function billingError(message, statusCode = 400) {
 
 function getConfiguredBillingPlans(env = process.env) {
   return [
-    { key: "starter", name: "Starter", priceId: env.STRIPE_PRICE_STARTER || "" },
-    { key: "growth", name: "Growth", priceId: env.STRIPE_PRICE_GROWTH || "" },
-    { key: "business", name: "Business", priceId: env.STRIPE_PRICE_BUSINESS || "" }
+    { key: "lite", name: "Lite", monthlyPriceInr: 299, priceId: env.STRIPE_PRICE_LITE || "", limits: { messages: 10000, agents: 1, mediaTransferGb: 1, historyMonths: 3 } },
+    { key: "starter", name: "Starter", monthlyPriceInr: 599, priceId: env.STRIPE_PRICE_STARTER || "", limits: { messages: 40000, agents: 2, mediaTransferGb: 3, historyMonths: 6 } },
+    { key: "growth", name: "Growth", monthlyPriceInr: 999, priceId: env.STRIPE_PRICE_GROWTH || "", limits: { messages: 100000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
+    { key: "business", name: "Business", monthlyPriceInr: 1499, priceId: env.STRIPE_PRICE_BUSINESS || "", limits: { messages: 150000, agents: 5, mediaTransferGb: 6, historyMonths: 12 } },
+    { key: "pro", name: "Pro", monthlyPriceInr: 1999, priceId: env.STRIPE_PRICE_PRO || "", limits: { messages: 300000, agents: 10, mediaTransferGb: 15, historyMonths: 12 } }
   ].filter(plan => /^price_[A-Za-z0-9]+$/.test(plan.priceId));
 }
 
@@ -82,6 +85,7 @@ async function createCheckoutSession({ organization, decoded, planKey, env = pro
     throw billingError("This workspace already has a subscription. Use the Stripe Billing Portal to change or update it.", 409);
   }
   const customerId = existing.exists ? String(existing.get("stripeCustomerId") || "") : "";
+  const trialAlreadyUsed = Boolean(existing.exists && existing.get("trialUsedAt"));
   const params = {
     mode: "subscription",
     "line_items[0][price]": plan.priceId,
@@ -94,6 +98,7 @@ async function createCheckoutSession({ organization, decoded, planKey, env = pro
     "subscription_data[metadata][organizationId]": organization.id,
     "subscription_data[metadata][planKey]": plan.key
   };
+  if (!trialAlreadyUsed) params["subscription_data[trial_period_days]"] = String(TRIAL_PERIOD_DAYS);
   if (customerId) params.customer = customerId;
   else if (decoded.email) params.customer_email = String(decoded.email).slice(0, 254);
   const session = await stripeRequest("/checkout/sessions", {
@@ -108,7 +113,7 @@ async function createCheckoutSession({ organization, decoded, planKey, env = pro
     checkoutStartedAt: new Date(),
     updatedAt: new Date()
   }, { merge: true });
-  return { id: session.id, url: session.url, plan: plan.key };
+  return { id: session.id, url: session.url, plan: plan.key, trialDays: trialAlreadyUsed ? 0 : TRIAL_PERIOD_DAYS };
 }
 
 async function createPortalSession({ organization, env = process.env }) {
@@ -230,6 +235,7 @@ async function writeOrganizationSubscription(db, organizationId, subscription) {
   }
   await subscriptionRef.set({
     ...details,
+    ...(details.trialEnd ? { trialUsedAt: existing.exists && existing.get("trialUsedAt") ? existing.get("trialUsedAt") : new Date() } : {}),
     updatedAt: new Date()
   }, { merge: true });
   return details;
@@ -237,6 +243,7 @@ async function writeOrganizationSubscription(db, organizationId, subscription) {
 
 module.exports = {
   EVENT_LEASE_MS,
+  TRIAL_PERIOD_DAYS,
   getConfiguredBillingPlans,
   validReturnUrl,
   verifyStripeSignature,
