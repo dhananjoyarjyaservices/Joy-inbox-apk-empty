@@ -50,6 +50,7 @@ const {
   generateRegistrationPin
 } = require("./embeddedSignup");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
+const { listPublicLeads, savePublicLead, deletePublicLead } = require("./publicCrmApi");
 const {
   createOrganizationApiKey,
   listOrganizationApiKeys,
@@ -327,6 +328,39 @@ async function handleOrganizationApiKeys(event) {
   }
   const apiKey = await createOrganizationApiKey(getDb(), organization.id, decoded.uid, body);
   return jsonResponse(event, 201, { apiKey });
+}
+
+async function handlePublicApiLeads(event) {
+  const db = getDb();
+  const authorization = getHeader(event, "authorization");
+  const authenticatedKey = await authenticateOrganizationApiKey(db, authorization);
+  const method = getMethod(event);
+  if (method === "GET") {
+    requireApiScope(authenticatedKey, "leads:read");
+    const result = await listPublicLeads(db, authenticatedKey.organizationId, event.queryStringParameters?.limit || 50);
+    return jsonResponse(event, 200, result);
+  }
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  requireApiScope(authenticatedKey, "leads:write");
+  if (method === "DELETE") {
+    const result = await deletePublicLead(db, authenticatedKey.organizationId, String(body.resourceId || ""));
+    return jsonResponse(event, 200, result);
+  }
+  if (method === "POST") {
+    const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data || body);
+    return jsonResponse(event, 201, { data: lead });
+  }
+  if (method === "PUT") {
+    if (!body.data || typeof body.data !== "object" || Array.isArray(body.data)) {
+      return jsonResponse(event, 400, { error: "A lead data object is required for updates." });
+    }
+    const lead = await savePublicLead(db, authenticatedKey.organizationId, body.data, String(body.resourceId || ""));
+    return jsonResponse(event, 200, { data: lead });
+  }
+  return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
 async function handlePublicApiContacts(event) {
