@@ -15,6 +15,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Tenant authentication, organization membership and role checks.
 - [x] Tenant-scoped text messaging and webhook routing by Meta Phone Number ID.
 - [x] Tenant chat, contact and Quick Reply data foundations.
+- [x] Tenant inbox customer phone links validate international digits and open the contact in WhatsApp; unit tests cover valid and invalid numbers.
 - [x] Contact phone-number changes use a Firestore transaction, preserve creation timestamps and reject destination-number collisions; regression tests cover missing source and collision cases.
 - [x] Inbox assignment and agent-performance views page through the complete organization member list instead of silently stopping at the first 100 members.
 - [x] Assignment/state management, SLA checks and team notifications.
