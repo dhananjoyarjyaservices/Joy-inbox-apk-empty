@@ -8,20 +8,25 @@ function aggregateCrmSalesReport(leads, stages, members, limited = false, genera
   const byStage = new Map();
   const byOwner = new Map();
   const bySource = new Map();
+  const byCurrency = new Map();
   let won = 0, lost = 0, open = 0, wonValue = 0, openValue = 0, lostValue = 0;
 
   for (const lead of leads) {
     const stage = stageMap.get(lead.stageId) || {};
     const value = typeof lead.value === "number" && Number.isFinite(lead.value) ? lead.value : 0;
+    const currency = /^[A-Z]{3}$/.test(String(lead.currency || "INR").toUpperCase()) ? String(lead.currency || "INR").toUpperCase() : "INR";
     const isWon = stage.isWon === true;
     const isLost = stage.isLost === true;
-    if (isWon) { won += 1; wonValue += value; }
-    else if (isLost) { lost += 1; lostValue += value; }
-    else { open += 1; openValue += value; }
+    const currencyRow = byCurrency.get(currency) || { currency, total: 0, won: 0, lost: 0, open: 0, wonValue: 0, lostValue: 0, openValue: 0 };
+    currencyRow.total += 1;
+    if (isWon) { won += 1; currencyRow.won += 1; currencyRow.wonValue += value; if (currency === "INR") wonValue += value; }
+    else if (isLost) { lost += 1; currencyRow.lost += 1; currencyRow.lostValue += value; if (currency === "INR") lostValue += value; }
+    else { open += 1; currencyRow.open += 1; currencyRow.openValue += value; if (currency === "INR") openValue += value; }
+    byCurrency.set(currency, currencyRow);
 
     const stageId = String(lead.stageId || "unknown");
     const stageRow = byStage.get(stageId) || { id: stageId, name: String(stage.name || lead.stageName || stageId), total: 0, value: 0, won: 0, lost: 0, open: 0 };
-    stageRow.total += 1; stageRow.value += value;
+    stageRow.total += 1; if (currency === "INR") stageRow.value += value;
     if (isWon) stageRow.won += 1;
     else if (isLost) stageRow.lost += 1;
     else stageRow.open += 1;
@@ -34,15 +39,15 @@ function aggregateCrmSalesReport(leads, stages, members, limited = false, genera
       name: ownerUid === "unassigned" ? "Unassigned" : String(owner?.displayName || owner?.name || owner?.email || "Workspace member"),
       total: 0, value: 0, won: 0, lost: 0, open: 0, wonValue: 0
     };
-    ownerRow.total += 1; ownerRow.value += value;
-    if (isWon) { ownerRow.won += 1; ownerRow.wonValue += value; }
+    ownerRow.total += 1; if (currency === "INR") ownerRow.value += value;
+    if (isWon) { ownerRow.won += 1; if (currency === "INR") ownerRow.wonValue += value; }
     else if (isLost) ownerRow.lost += 1;
     else ownerRow.open += 1;
     byOwner.set(ownerUid, ownerRow);
 
     const source = String(lead.source || "Unknown");
     const sourceRow = bySource.get(source) || { source, total: 0, value: 0, won: 0 };
-    sourceRow.total += 1; sourceRow.value += value; if (isWon) sourceRow.won += 1;
+    sourceRow.total += 1; if (currency === "INR") sourceRow.value += value; if (isWon) sourceRow.won += 1;
     bySource.set(source, sourceRow);
   }
 
@@ -56,7 +61,8 @@ function aggregateCrmSalesReport(leads, stages, members, limited = false, genera
     conversionRate: closed ? Math.round((won / closed) * 1000) / 10 : 0,
     byStage: [...byStage.values()].sort((a, b) => a.name.localeCompare(b.name)),
     byOwner: [...byOwner.values()].sort((a, b) => b.wonValue - a.wonValue || b.total - a.total).slice(0, 20),
-    bySource: [...bySource.values()].sort((a, b) => b.total - a.total).slice(0, 20)
+    bySource: [...bySource.values()].sort((a, b) => b.total - a.total).slice(0, 20),
+    byCurrency: [...byCurrency.values()].sort((a, b) => a.currency.localeCompare(b.currency))
   };
 }
 
