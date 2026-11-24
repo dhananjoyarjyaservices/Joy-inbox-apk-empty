@@ -14,6 +14,12 @@ function httpError(message, statusCode) {
   return error;
 }
 
+function toIso(value) {
+  if (!value) return null;
+  const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function normalizeApiKeyInput(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw httpError("API key details are required.", 400);
@@ -75,10 +81,10 @@ async function listOrganizationApiKeys(db, organizationId) {
       keyPrefix: data.keyPrefix,
       scopes: Array.isArray(data.scopes) ? data.scopes : [],
       status: data.status,
-      createdAt: data.createdAt || null,
-      expiresAt: data.expiresAt || null,
-      lastUsedAt: data.lastUsedAt || null,
-      revokedAt: data.revokedAt || null
+      createdAt: toIso(data.createdAt),
+      expiresAt: toIso(data.expiresAt),
+      lastUsedAt: toIso(data.lastUsedAt),
+      revokedAt: toIso(data.revokedAt)
     };
   }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }
@@ -108,7 +114,9 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
   if (!snapshot.exists) throw httpError("API key is invalid or revoked.", 401);
   const data = snapshot.data() || {};
   if (data.status !== "active") throw httpError("API key is invalid or revoked.", 401);
-  const expiresAt = data.expiresAt instanceof Date ? data.expiresAt.getTime() : new Date(data.expiresAt).getTime();
+  const expiresAt = typeof data.expiresAt?.toDate === "function"
+    ? data.expiresAt.toDate().getTime()
+    : data.expiresAt instanceof Date ? data.expiresAt.getTime() : new Date(data.expiresAt).getTime();
   if (!Number.isFinite(expiresAt) || expiresAt <= now) throw httpError("API key has expired. Create a new key.", 401);
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(data.organizationId || "")) throw httpError("API key workspace is invalid.", 403);
   const organization = await db.collection("organizations").doc(data.organizationId).get();
