@@ -77,3 +77,13 @@ This checklist separates code already present from work that requires real servi
 ## Deployment boundary
 
 No production data migration, Firebase rules deployment, Lambda deployment, EventBridge activation, Meta webhook change, Stripe live-mode payment or PR merge is performed by this development workflow. These actions require the correct account credentials, an agreed maintenance window and explicit approval.
+
+## Latest automated verification (2026-11-24)
+
+The following GitHub Actions runs completed successfully for commit `9ecb2196e1c78c7c0713b96ed68fb8da86a4bdf6` on `feature/saas-foundation`:
+
+- Frontend build (run 45335239061): dependency installation, frontend unit tests and production build passed.
+- Backend tests (run 45335239032): Node.js 22 setup, locked dependency installation, and backend tests with the Firestore emulator passed.
+- Joy Inbox CI (run 45335239021): frontend unit tests/build and backend unit tests passed.
+
+These results validate the repository's automated checks at that commit only. They do not satisfy the external-service staging, migration, security-review or production-deployment gates listed above.
