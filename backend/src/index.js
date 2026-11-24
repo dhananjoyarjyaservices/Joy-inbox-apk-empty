@@ -72,6 +72,7 @@ const {
   markSendRequestFailed
 } = require("./sendRequests");
 const { runScheduledSlaChecks, saveTenantSlaNotification } = require("./slaScheduler");
+const { runScheduledCrmFollowUpReminders } = require("./crmFollowUpScheduler");
 const { runScheduledAutomationSteps } = require("./automationScheduler");
 const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_SLA_MINUTES } = require("./slaSettings");
 const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
@@ -3458,12 +3459,13 @@ async function handleTenantCampaigns(event) {
 // EventBridge Scheduler invokes this handler through Lambda's IAM permissions.
 // Set the configured handler name to "src/index.slaScheduledHandler".
 exports.slaScheduledHandler = async () => {
-  const [sla, automation, webhooks] = await Promise.all([
+  const [sla, automation, crmFollowUps, webhooks] = await Promise.all([
     runScheduledSlaChecks(),
     runScheduledAutomationSteps(),
+    runScheduledCrmFollowUpReminders(),
     processPendingWebhookDeliveries(getDb(), { limit: 10 })
   ]);
-  const result = { sla, automation, webhooks };
+  const result = { sla, automation, crmFollowUps, webhooks };
   console.info("Scheduled SLA and automation checks completed:", JSON.stringify(result));
   return result;
 };
