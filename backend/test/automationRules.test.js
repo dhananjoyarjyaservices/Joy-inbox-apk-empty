@@ -178,3 +178,9 @@ test("does not match empty text or whitespace-only condition keywords", () => {
     conditions: [{ keyword: "   " }], conditionMode: "any"
   }, "hello"), false);
 });
+
+test("rejects condition mode when no conditions are supplied", () => {
+  assert.throws(() => normalizeAutomationRule({
+    name: "Orphan mode", keyword: "hello", conditionMode: "any", response: "Welcome"
+  }), { statusCode: 400 });
+});
