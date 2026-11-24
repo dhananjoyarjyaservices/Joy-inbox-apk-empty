@@ -13,7 +13,8 @@ Complete all repository-only implementation, code review, documentation, local/e
 ## Current parity implementation plan\n\n- [x] Prepare a phased implementation backlog with acceptance criteria for CRM, public APIs/webhooks, advanced automation, commerce/forms/attribution, additional channels and AI/voice in [docs/EVENING-IMPLEMENTATION-PLAN.md](EVENING-IMPLEMENTATION-PLAN.md). This is planning documentation, not implementation of those modules.\n\n- [x] Initial tenant-scoped CRM foundation: pipeline stages, typed custom field definitions/validation, lead records, contact and owner pickers, lead editing/stage changes, follow-up dates, agent-only assigned-lead access and Sales CRM UI.
 - [x] Automated CRM follow-up reminders: scheduled scan, transactional deduplication, active-owner validation, in-app notification, push delivery, member opt-out and retry after failure. Notification Center routes CRM alerts to Sales CRM. See `docs/CRM-FOUNDATION.md`.
 - [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.
-- [ ] CRM sales reporting and forecasting remain open.\n\n## Public developer API — initial contacts slice
+- [x] CRM sales performance report: pipeline totals, won revenue, conversion rate, stage, owner and source breakdowns with agent-scoped visibility and a 1,000-lead sample cap.
+- [ ] CRM forecasting and activity timeline remain open.\n\n## Public developer API — initial contacts slice
 
 - [x] Add owner/admin API key creation, metadata listing and revocation with one-time raw-key display, SHA-256-only storage, scopes, expiry and throttled last-used metadata.
 - [x] Add API-key authentication that derives the workspace from the key, checks active workspace state and enforces contacts read/write scopes.
