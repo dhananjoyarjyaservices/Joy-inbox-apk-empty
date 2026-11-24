@@ -7,6 +7,7 @@ const API_KEY_ID_PATTERN = /^[a-f0-9]{64}$/;
 const ALLOWED_SCOPES = new Set(["contacts:read", "contacts:write"]);
 const DEFAULT_EXPIRY_DAYS = 90;
 const MAX_EXPIRY_DAYS = 365;
+const MAX_REQUESTS_PER_MINUTE = 60;
 
 function httpError(message, statusCode) {
   const error = new Error(message);
@@ -103,6 +104,25 @@ async function revokeOrganizationApiKey(db, organizationId, keyId, now = Date.no
   return { id: keyId, status: "revoked" };
 }
 
+async function consumeApiRateLimit(db, keyHash, now = Date.now()) {
+  const minute = Math.floor(now / 60000);
+  const ref = db.collection("publicApiRateLimits").doc(`${keyHash}_${minute}`);
+  await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    const count = snapshot.exists ? Number(snapshot.data()?.count || 0) : 0;
+    if (count >= MAX_REQUESTS_PER_MINUTE) {
+      throw httpError("API rate limit exceeded. Try again in the next minute.", 429);
+    }
+    transaction.set(ref, {
+      keyHash,
+      minute,
+      count: count + 1,
+      expiresAt: new Date((minute + 61) * 60000),
+      updatedAt: new Date(now)
+    }, { merge: true });
+  });
+}
+
 async function authenticateOrganizationApiKey(db, authorization, now = Date.now()) {
   if (typeof authorization !== "string" || !authorization.startsWith("Bearer ")) {
     throw httpError("A valid Joy Inbox API key is required.", 401);
@@ -122,6 +142,7 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(data.organizationId || "")) throw httpError("API key workspace is invalid.", 403);
   const organization = await db.collection("organizations").doc(data.organizationId).get();
   if (!organization.exists || organization.data()?.status !== "active") throw httpError("API key workspace is inactive.", 403);
+  await consumeApiRateLimit(db, keyHash, now);
   const lastUsedAt = typeof data.lastUsedAt?.toDate === "function"
     ? data.lastUsedAt.toDate().getTime()
     : data.lastUsedAt instanceof Date ? data.lastUsedAt.getTime() : 0;
@@ -142,6 +163,7 @@ function requireApiScope(authenticatedKey, scope) {
 
 module.exports = {
   ALLOWED_SCOPES,
+  MAX_REQUESTS_PER_MINUTE,
   normalizeApiKeyInput,
   createOrganizationApiKey,
   listOrganizationApiKeys,
