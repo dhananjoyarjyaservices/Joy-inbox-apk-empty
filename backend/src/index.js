@@ -51,6 +51,7 @@ const {
 } = require("./embeddedSignup");
 const { getTenantChatRef, getTenantMessageRef, claimTenantSendRequest, getRetryableTenantTextMessage, resolveTenantReplyContext, getTenantReplyMessageFields, markTenantSendRequestFailed } = require("./tenantMessaging");
 const { listPublicLeads, savePublicLead, deletePublicLead } = require("./publicCrmApi");
+const { listPublicCampaigns } = require("./publicCampaignApi");
 const { importCrmLeads } = require("./crmBulkImport");
 const { buildCrmSalesReport } = require("./crmSalesReport");
 const { recordCrmActivity, listCrmActivity } = require("./crmActivity");
@@ -523,6 +524,18 @@ async function handlePublicApiMessages(event) {
   );
   const { statusCode = 201, ...response } = idempotent;
   return jsonResponse(event, statusCode, response);
+}
+
+async function handlePublicApiCampaigns(event) {
+  const db = getDb();
+  const authenticatedKey = await authenticateOrganizationApiKey(db, getHeader(event, "authorization"));
+  requireApiScope(authenticatedKey, "campaigns:read");
+  if (getMethod(event) !== "GET") return jsonResponse(event, 405, { error: "Method not allowed." });
+  const result = await listPublicCampaigns(db, authenticatedKey.organizationId, {
+    limit: event.queryStringParameters?.limit,
+    cursor: event.queryStringParameters?.cursor
+  });
+  return jsonResponse(event, 200, result);
 }
 
 async function handlePublicApiContacts(event) {
@@ -3798,6 +3811,14 @@ exports.handler = async (event) => {
     catch (error) {
       console.error("Organization API key request failed:", error.statusCode || "API_KEY_REQUEST_FAILED");
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "API key request could not be completed." });
+    }
+  }
+
+  if (method === "GET" && path.endsWith("/public/v1/campaigns")) {
+    try { return await handlePublicApiCampaigns(event); }
+    catch (error) {
+      console.error("Public campaigns API request failed:", error.statusCode || "PUBLIC_API_REQUEST_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Public campaigns API request could not be completed." });
     }
   }
 
