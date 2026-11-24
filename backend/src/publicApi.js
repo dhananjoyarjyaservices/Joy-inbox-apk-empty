@@ -206,7 +206,7 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
   };
 }
 
-async function runIdempotentApiRequest(db, authenticatedKey, idempotencyKey, operation, now = Date.now()) {
+async function runIdempotentApiRequest(db, authenticatedKey, idempotencyKey, request, operation, now = Date.now()) {
   if (idempotencyKey === undefined || idempotencyKey === null || idempotencyKey === "") {
     return { ...(await operation()), replayed: false };
   }
@@ -217,6 +217,7 @@ async function runIdempotentApiRequest(db, authenticatedKey, idempotencyKey, ope
   if (!authenticatedKey?.keyId || !/^[a-f0-9]{64}$/.test(authenticatedKey.keyId)) {
     throw httpError("A valid authenticated API key is required.", 401);
   }
+  const requestHash = crypto.createHash("sha256").update(JSON.stringify(request ?? null)).digest("hex");
   const id = crypto.createHash("sha256").update(authenticatedKey.keyId + ":" + idempotencyKey).digest("hex");
   const ref = db.collection("publicApiIdempotency").doc(id);
   const expiresAt = new Date(now + 24 * 60 * 60 * 1000);
@@ -226,7 +227,9 @@ async function runIdempotentApiRequest(db, authenticatedKey, idempotencyKey, ope
       const existing = snapshot.data() || {};
       const existingExpiry = existing.expiresAt?.toDate ? existing.expiresAt.toDate().getTime() : new Date(existing.expiresAt).getTime();
       if (Number.isFinite(existingExpiry) && existingExpiry > now) {
-        if (existing.keyId !== authenticatedKey.keyId) throw httpError("Idempotency key conflict.", 409);
+        if (existing.keyId !== authenticatedKey.keyId || existing.requestHash !== requestHash) {
+          throw httpError("This Idempotency-Key was already used for a different request.", 409);
+        }
         if (existing.status === "completed") return { replayed: true, result: existing.result, statusCode: existing.statusCode };
         throw httpError("A request with this Idempotency-Key is still processing. Retry shortly.", 409);
       }
@@ -234,6 +237,7 @@ async function runIdempotentApiRequest(db, authenticatedKey, idempotencyKey, ope
     transaction.set(ref, {
       keyId: authenticatedKey.keyId,
       organizationId: authenticatedKey.organizationId,
+      requestHash,
       status: "processing",
       createdAt: new Date(now),
       expiresAt
