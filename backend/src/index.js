@@ -3066,6 +3066,14 @@ exports.slaScheduledHandler = async () => {
   return result;
 };
 
+// EventBridge invokes this handler after the retention worker is deployed and staging-verified.
+exports.historyRetentionScheduledHandler = async () => {
+  const { runScheduledHistoryRetention } = require("./historyRetention");
+  const result = await runScheduledHistoryRetention();
+  console.info("Scheduled history retention completed:", JSON.stringify(result));
+  return result;
+};
+
 // Configure a separate EventBridge schedule for campaign delivery.
 exports.campaignScheduledHandler = async () => {
   const { runScheduledCampaigns } = require("./campaignWorker");
