@@ -235,7 +235,7 @@ export async function saveOrganizationSlaSettings(organizationId: string, settin
   return result.settings;
 }
 
-export interface OrganizationNotification { id: string; type: "assignment" | "status" | "sla"; title: string; body: string; chatId: string; createdAt: string; read: boolean; }
+export interface OrganizationNotification { id: string; type: "assignment" | "status" | "sla" | "crm_follow_up"; title: string; body: string; chatId?: string; leadId?: string; createdAt: string; read: boolean; }
 export async function listOrganizationNotifications(organizationId: string): Promise<OrganizationNotification[]> {
   const result = await request(`/organizations/notifications?organizationId=${encodeURIComponent(organizationId)}`);
   return Array.isArray(result.notifications) ? result.notifications : [];
@@ -248,8 +248,8 @@ export async function markAllOrganizationNotificationsRead(organizationId: strin
   await request("/organizations/notifications", "POST", { organizationId, markAllRead: true });
 }
 
-export interface OrganizationNotificationPreferences { assignment: boolean; status: boolean; sla: boolean; soundEnabled: boolean; desktopEnabled: boolean; }
-export const DEFAULT_NOTIFICATION_PREFERENCES: OrganizationNotificationPreferences = { assignment: true, status: true, sla: true, soundEnabled: true, desktopEnabled: true };
+export interface OrganizationNotificationPreferences { assignment: boolean; status: boolean; sla: boolean; crm: boolean; soundEnabled: boolean; desktopEnabled: boolean; }
+export const DEFAULT_NOTIFICATION_PREFERENCES: OrganizationNotificationPreferences = { assignment: true, status: true, sla: true, crm: true, soundEnabled: true, desktopEnabled: true };
 export async function getOrganizationNotificationPreferences(organizationId: string): Promise<OrganizationNotificationPreferences> {
   const result = await request(`/organizations/notifications/preferences?organizationId=${encodeURIComponent(organizationId)}`);
   return result.preferences || DEFAULT_NOTIFICATION_PREFERENCES;
