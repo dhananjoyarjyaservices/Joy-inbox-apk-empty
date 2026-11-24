@@ -178,6 +178,15 @@ async function completeEmbeddedSignup({
     throw httpError("The selected phone number does not belong to the WhatsApp Business Account shared with Joy Inbox.", 403);
   }
 
+  // Subscribe Joy Inbox's Meta app to the customer's WABA before registration.
+  // If phone registration is rejected, the customer can safely retry signup.
+  await metaRequest(
+    fetchImpl,
+    buildGraphUrl(config.graphApiVersion, `${wabaId}/subscribed_apps`),
+    accessToken,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+
   // Embedded Signup verifies ownership; Cloud API registration and two-step
   // verification are a separate required step. The PIN is generated server-side.
   await metaRequest(
@@ -185,14 +194,6 @@ async function completeEmbeddedSignup({
     buildGraphUrl(config.graphApiVersion, `${phoneNumberId}/register`),
     accessToken,
     { method: "POST", body: JSON.stringify({ messaging_product: "whatsapp", pin: registrationPin }) }
-  );
-
-  // Subscribe Joy Inbox's Meta app to the customer's WABA so webhook events arrive.
-  await metaRequest(
-    fetchImpl,
-    buildGraphUrl(config.graphApiVersion, `${wabaId}/subscribed_apps`),
-    accessToken,
-    { method: "POST", body: JSON.stringify({}) }
   );
 
   return {
