@@ -18,7 +18,7 @@ The raw key is generated from cryptographic random bytes. Joy Inbox stores only 
 GET /public/v1/contacts?limit=50
 Authorization: Bearer YOUR_JOY_API_KEY
 ```
-Required scope: `contacts:read`. Limit is clamped to 1–100.
+Required scope: `contacts:read`. Limit must be an integer from 1–100. The response contains `data` and `pagination`; pass `pagination.nextCursor` as `cursor` to fetch the next page. Cursors are opaque and workspace-bound.
 
 ### Create or update a contact
 ```http
@@ -26,7 +26,7 @@ POST /public/v1/contacts
 Authorization: Bearer YOUR_JOY_API_KEY
 Content-Type: application/json
 ```
-Required scope: `contacts:write`. Contacts are keyed by normalized international phone number; repeated POST requests update the same workspace contact.
+Required scope: `contacts:write`. Contacts are keyed by normalized international phone number; repeated POST requests update the same workspace contact. Send a unique `Idempotency-Key` header (8–128 safe characters) to make retries safe; a completed retry returns the original response without creating another webhook event.
 
 ## Sales CRM leads
 
@@ -35,7 +35,7 @@ Required scope: `contacts:write`. Contacts are keyed by normalized international
 GET /public/v1/leads?limit=50
 Authorization: Bearer YOUR_JOY_API_KEY
 ```
-Required scope: `leads:read`. Results are limited to 1–100 and ordered by most recently updated. Response contains `data` and `pagination`.
+Required scope: `leads:read`. Results are limited to 1–100 and ordered by most recently updated. Response contains `data` and `pagination`; use `pagination.nextCursor` as the `cursor` query parameter to continue.
 
 ### Create a lead
 ```http
@@ -43,7 +43,7 @@ POST /public/v1/leads
 Authorization: Bearer YOUR_JOY_API_KEY
 Content-Type: application/json
 ```
-Required scope: `leads:write`.
+Required scope: `leads:write`. Send a unique `Idempotency-Key` header (8–128 safe characters) on POST, PUT and DELETE requests. The same key and same request returns the original result; reusing a key with a different method or body returns HTTP 409.
 ```json
 {
   "title": "Website enquiry",
@@ -83,8 +83,17 @@ Required scope: `leads:write`. Send `{ "resourceId": "lead-document-id" }`.
 
 - Workspace owners/admins manage API keys; the full key is shown only once.
 - Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`.
-- API rate limit is 60 requests per key per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` before production.
-- Public API keys must remain server-side. Browser CORS allowlists, cursor pagination, idempotency keys, usage analytics and delivery-history/replay UI remain future work.
+- API rate limit is 60 requests per key per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` and `publicApiUsageDaily.expiresAt` before production.
+- Idempotency records are retained for 24 hours. Enable Firestore TTL on `publicApiIdempotency.expiresAt`; use a new key for a distinct logical mutation.
+- Daily usage analytics count accepted requests and rate-limited attempts by API key and UTC date.
+
+### Read API usage analytics
+```http
+GET /organizations/developer/api-usage?organizationId=WORKSPACE_ID&days=30
+Authorization: Bearer FIREBASE_ID_TOKEN
+```
+Requires an authenticated workspace member with API management permission. `days` must be 1–90 (default 30). The response includes totals and per-key daily request/rate-limit counts. API key IDs are hashes, not raw secrets.
+- Public API keys must remain server-side. Configure browser CORS allowlists before exposing any API endpoints to browsers.
 
 
 ## CRM lead webhook events
