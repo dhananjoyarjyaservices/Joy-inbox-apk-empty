@@ -21,7 +21,9 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Enforce a fixed 60-requests-per-minute rate limit per API key using server-only Firestore counters.
 - [ ] Add configurable rate-limit tiers, cursor pagination, idempotency and request-usage analytics.
 - [ ] Add public API scopes and endpoints for leads, messages, campaigns and templates.
-- [ ] Add customer-managed outbound webhook subscriptions, signed delivery, retry/replay and delivery logs.
+- [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact-upsert events.
+- [ ] Wire inbound/outbound message and status events, delivery history UI, manual replay and secret rotation.
+- [ ] Enable Firestore TTL on `webhookDeliveryQueue.expiresAt`; split the delivery worker into its own schedule after staging load tests.
 - [ ] Validate external integration traffic, abuse controls and production CORS strategy before public launch.
 
 ## Product parity audit\n\n- [x] Compare the implemented Joy Inbox code paths against Interakt's current public product categories and document implemented, partial, missing and externally gated capabilities in [docs/INTERAKT-FEATURE-PARITY.md](INTERAKT-FEATURE-PARITY.md).\n- [ ] Implement the missing product capabilities listed in that audit before claiming Interakt feature parity. Instagram, RCS, AI/voice, commerce, forms, sales pipeline and public API/webhook modules are not complete in this branch.\n\n## WhatsApp Embedded Signup onboarding
