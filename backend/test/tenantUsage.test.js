@@ -7,7 +7,8 @@ const {
   getUsageWindow,
   reserveOutboundMessage,
   finishOutboundReservation,
-  recordInboundMessageUsage
+  recordInboundMessageUsage,
+  getTenantMessageUsage
 } = require("../src/tenantUsage");
 
 function fakeDb() {
@@ -101,6 +102,30 @@ test("outbound reservations enforce quota and commit exactly once", async () => 
   const usage = db.docs.get(reservation.usageRef.path);
   assert.equal(usage.messagesUsed, 1);
   assert.equal(usage.messagesReserved, 0);
+});
+
+test("outbound reservation blocks at the hard limit and usage exposes 80/95/100 thresholds", async () => {
+  const db = fakeDb();
+  const org = db.collection("organizations").doc("org_one");
+  await org.collection("billing").doc("subscription").set({
+    status: "active", plan: "lite",
+    currentPeriodStart: new Date("2026-11-01T00:00:00.000Z"),
+    currentPeriodEnd: new Date("2026-12-01T00:00:00.000Z")
+  });
+  const usageRef = org.collection("billingUsage").doc("month_" + new Date("2026-11-01T00:00:00.000Z").getTime());
+  await usageRef.set({ messagesUsed: 9500, messagesReserved: 0 });
+  const summary = await getTenantMessageUsage(db, "org_one", {
+    status: "active", plan: "lite",
+    currentPeriodStart: new Date("2026-11-01T00:00:00.000Z"),
+    currentPeriodEnd: new Date("2026-12-01T00:00:00.000Z")
+  }, new Date("2026-11-24T00:00:00.000Z"));
+  assert.equal(summary.percent, 95);
+  assert.deepEqual(summary.thresholdsReached, [80, 95]);
+  await usageRef.set({ messagesUsed: 10000, messagesReserved: 0 }, { merge: true });
+  await assert.rejects(
+    () => reserveOutboundMessage(db, "org_one", "client-at-limit", new Date("2026-11-24T00:00:00.000Z")),
+    { statusCode: 429, code: "MESSAGE_QUOTA_EXCEEDED" }
+  );
 });
 
 test("failed sends release reserved quota without consuming messages", async () => {
