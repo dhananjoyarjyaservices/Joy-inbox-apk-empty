@@ -59,7 +59,7 @@ Required scope: `campaigns:write`. This endpoint creates a draft only; it never 
 GET /public/v1/campaigns?limit=50
 Authorization: Bearer YOUR_JOY_API_KEY
 ```
-Required scope: `campaigns:read` for reports and `campaigns:write` for draft creation only. The endpoint returns campaign summary fields and delivery counters for campaigns in the API key workspace only. It never returns recipient phone numbers or consent records. Results are ordered by creation time (newest first), with a page size from 1–100. Pass `pagination.nextCursor` as `cursor` to retrieve the next page.
+Required scopes: `campaigns:read` for reports, `campaigns:write` for draft creation, and `campaigns:control` for state changes. The endpoint returns campaign summary fields and delivery counters for campaigns in the API key workspace only. It never returns recipient phone numbers or consent records. Results are ordered by creation time (newest first), with a page size from 1–100. Pass `pagination.nextCursor` as `cursor` to retrieve the next page.
 
 ### Control a campaign
 
