@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, RefreshCw, BriefcaseBusiness, Trash2, Pencil } from "lucide-react";
+import { Plus, RefreshCw, BriefcaseBusiness, Trash2, Pencil, Upload } from "lucide-react";
 import {
-  listCrmFields, listCrmLeads, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead,
+  listCrmFields, listCrmLeads, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead, importCrmLeads,
   type CrmField, type CrmLead, type CrmStage
 } from "../services/crm";
 
@@ -31,6 +31,8 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const [customValues, setCustomValues] = useState<Record<string, string | number | boolean>>({});
   const [editingLeadId, setEditingLeadId] = useState("");
   const [followUpFilter, setFollowUpFilter] = useState<"all" | "overdue" | "today">("all");
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -73,6 +75,54 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     });
   }, [followUpFilter, leads]);
   const grouped = useMemo(() => activeStages.map(stage => ({ stage, leads: visibleLeads.filter(lead => lead.stageId === stage.id) })), [activeStages, visibleLeads]);
+
+  async function importCsvFile(file?: File) {
+    if (!file) return;
+    setImporting(true); setError(""); setImportSummary("");
+    try {
+      const sourceText = (await file.text()).replace(/^\\uFEFF/, "");
+      const rows: string[][] = [];
+      let row: string[] = [], cell = "", quoted = false;
+      for (let index = 0; index < sourceText.length; index += 1) {
+        const char = sourceText[index];
+        if (char === '"' && quoted && sourceText[index + 1] === '"') { cell += '"'; index += 1; }
+        else if (char === '"') quoted = !quoted;
+        else if (char === "," && !quoted) { row.push(cell); cell = ""; }
+        else if ((char === "\\n" || char === "\\r") && !quoted) {
+          if (char === "\\r" && sourceText[index + 1] === "\\n") index += 1;
+          row.push(cell); cell = "";
+          if (row.some(value => value.trim())) rows.push(row);
+          row = [];
+        } else cell += char;
+      }
+      row.push(cell);
+      if (row.some(value => value.trim())) rows.push(row);
+      if (quoted) throw new Error("CSV has an unclosed quoted field.");
+      if (rows.length < 2) throw new Error("CSV must contain a header and at least one lead row.");
+      const headers = rows[0].map(value => value.trim().toLowerCase().replace(/[\\s-]+/g, "_"));
+      if (!headers.includes("title")) throw new Error('CSV needs a "title" column.');
+      const importedRows = rows.slice(1).map(values => {
+        const record: Record<string, string> = {};
+        headers.forEach((header, index) => { record[header] = values[index] || ""; });
+        return {
+          title: record.title || "",
+          stageId: record.stage_id || "new",
+          contactId: record.contact_id || "",
+          ownerUid: record.owner_uid || "",
+          source: record.source || "",
+          value: record.value ? Number(record.value) : null,
+          currency: record.currency || "INR",
+          nextFollowUpAt: record.next_follow_up_at || null,
+          notes: record.notes || "",
+          customFields: {}
+        };
+      });
+      const result = await importCrmLeads(organizationId, importedRows);
+      setImportSummary(`Imported ${result.imported} leads · ${result.failed} rows need attention${result.errors.length ? ` · First error (row ${result.errors[0].row}): ${result.errors[0].error}` : ""}`);
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "CSV import could not be completed."); }
+    finally { setImporting(false); }
+  }
 
   async function submitLead(event: FormEvent) {
     event.preventDefault();
@@ -165,8 +215,13 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="flex items-center gap-2 text-lg font-semibold"><BriefcaseBusiness size={20}/> Sales CRM</h2><p className="text-sm text-gray-500">Track leads through your workspace sales pipeline.</p></div>
         <button type="button" onClick={() => void refresh()} disabled={loading || saving} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs text-[#075e54]"><RefreshCw size={14}/> Refresh</button>
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs text-[#075e54] opacity-100">
+          <Upload size={14}/>{importing ? "Importing..." : "Import CSV"}
+          <input type="file" accept=".csv,text/csv" disabled={importing || saving} className="hidden" onChange={event => { void importCsvFile(event.target.files?.[0]); event.currentTarget.value = ""; }}/>
+        </label>
       </div>
       {error && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {importSummary && <p role="status" className="mb-4 rounded-lg border bg-white p-3 text-xs text-gray-700">{importSummary}</p>}
       <div className="mb-4 grid gap-2 sm:grid-cols-3">
         <button type="button" onClick={() => setFollowUpFilter("all")} aria-pressed={followUpFilter === "all"} className={`rounded-xl border p-3 text-left ${followUpFilter === "all" ? "border-[#075e54] bg-emerald-50" : "bg-white"}`}>
           <span className="block text-[10px] font-medium uppercase tracking-wide text-gray-500">All leads</span><strong className="mt-1 block text-xl">{leads.length}</strong>
