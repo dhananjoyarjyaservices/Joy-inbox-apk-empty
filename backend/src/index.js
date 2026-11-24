@@ -56,7 +56,7 @@ const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule } = requ
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
-const { getTenantMessageUsage, reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
+const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
@@ -75,6 +75,21 @@ async function reserveTenantMessageQuota(db, organizationId, clientMessageId, se
     if (sendRequestRef) await markTenantSendRequestFailed(sendRequestRef, error);
     throw error;
   }
+}
+
+async function reserveTenantMediaQuota(db, organizationId, transferId, bytes, sendRequestRef, messageReservation) {
+  try {
+    return await reserveMediaTransfer(db, organizationId, transferId, bytes);
+  } catch (error) {
+    if (messageReservation) await settleTenantMessageQuota(db, messageReservation, { definitive: true });
+    if (sendRequestRef) await markTenantSendRequestFailed(sendRequestRef, error);
+    throw error;
+  }
+}
+
+async function settleTenantMediaQuota(db, reservation, outcome, actualBytes) {
+  if (!reservation?.enforced) return;
+  await finishMediaTransfer(db, reservation, outcome, actualBytes);
 }
 
 async function settleTenantMessageQuota(db, reservation, error = null) {
