@@ -97,12 +97,12 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-24)
 
-Latest branch head verified:
-- Pull request #1 head: `e42dae234c361088a24eb46b34f8c6516bdcf59f`.
-- The latest head has all three GitHub Actions workflows completed successfully:
-  - Backend tests (run 45350846765): 284 tests passed, zero failures or skips; Firestore emulator suite completed; production-only Lambda ZIP was created and integrity-checked.
-  - Frontend build (run 45350846516): 8 frontend tests passed; TypeScript and Vite production build passed. Largest generated chunk is 400.22 KB (Firestore SDK), and the build emitted no oversized-chunk warning.
-  - Joy Inbox CI (run 45350846545): backend unit tests and frontend TypeScript/tests/build both passed.
-- The Cloudflare Pages preview must still be checked independently for this exact head before treating the preview as current. A successful Vite build does not prove Firebase/API runtime connectivity.
+Latest validated application source revision:
+- `1009c710514a6618341a7eadb52f050917af201b` (release-readiness documentation update; no runtime source files changed).
+- All three GitHub Actions workflows for this revision completed successfully:
+  - Backend tests (run 45354680346): 284 tests passed, zero failures or skips; Firestore emulator suite completed; production-only Lambda ZIP was created and integrity-checked.
+  - Frontend build (run 45354680278): 8 frontend tests passed; TypeScript and Vite production build passed. Largest generated chunk is 400.22 KB (Firestore SDK), and the build emitted no oversized-chunk warning.
+  - Joy Inbox CI (run 45354680285): backend unit tests and frontend TypeScript/tests/build both passed.
+- Cloudflare Pages preview for this revision deployed successfully: `https://658edcf8.joy-inbox-apk-empty.pages.dev`. Branch preview: `https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev`. A successful build/preview does not prove Firebase/API runtime connectivity.
 
 The Lambda ZIP is a validation artifact only; no AWS Lambda was deployed. These checks do not prove that a live Firebase project, Meta account, Stripe account, email provider or customer device is correctly configured. Keep the PR draft until all external staging, security, backup/restore, accessibility and operational launch gates pass.
