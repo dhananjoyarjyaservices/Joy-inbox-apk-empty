@@ -81,7 +81,7 @@ async function listLeadForms(organization) {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
-async function saveLeadForm(organization, actorUid, input, formId = "") {
+async function saveLeadForm(db, organization, actorUid, input, formId = "") {
   const form = normalizeLeadForm(input);
   if (formId && !FORM_ID_PATTERN.test(formId)) throw formError("A valid form ID is required.");
   const collection = organization.ref.collection("leadForms");
@@ -91,28 +91,31 @@ async function saveLeadForm(organization, actorUid, input, formId = "") {
   const now = new Date();
   const item = { ...form, createdAt: existing?.data()?.createdAt || now, updatedAt: now, createdBy: existing?.data()?.createdBy || actorUid, updatedBy: actorUid };
   await ref.set(item);
+  await db.collection("publicLeadForms").doc(ref.id).set({ organizationId: organization.id, enabled: item.enabled, updatedAt: now });
   return { id: ref.id, ...item };
 }
 
-async function deleteLeadForm(organization, formId) {
+async function deleteLeadForm(db, organization, formId) {
   if (!FORM_ID_PATTERN.test(formId || "")) throw formError("A valid form ID is required.");
   const ref = organization.ref.collection("leadForms").doc(formId);
   const snapshot = await ref.get();
   if (!snapshot.exists) throw formError("Lead form was not found.", 404);
-  await ref.set({ enabled: false, deletedAt: new Date(), updatedAt: new Date() }, { merge: true });
+  const now = new Date();
+  await ref.set({ enabled: false, deletedAt: now, updatedAt: now }, { merge: true });
+  await db.collection("publicLeadForms").doc(formId).set({ organizationId: organization.id, enabled: false, updatedAt: now }, { merge: true });
   return { id: formId, enabled: false };
 }
 
 async function getPublicLeadForm(db, formId) {
   if (!FORM_ID_PATTERN.test(formId || "")) throw formError("A valid form ID is required.");
-  const organizations = await db.collection("organizations").get();
-  for (const organizationDoc of organizations.docs) {
-    const snapshot = await organizationDoc.ref.collection("leadForms").doc(formId).get();
-    if (snapshot.exists && snapshot.data()?.enabled !== false && !snapshot.data()?.deletedAt) {
-      return { organizationId: organizationDoc.id, organizationRef: organizationDoc.ref, form: safePublicForm(formId, snapshot.data()) };
-    }
-  }
-  throw formError("This form is unavailable.", 404);
+  const index = await db.collection("publicLeadForms").doc(formId).get();
+  if (!index.exists || index.data()?.enabled === false) throw formError("This form is unavailable.", 404);
+  const organizationId = String(index.data()?.organizationId || "");
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId)) throw formError("This form is unavailable.", 404);
+  const organizationRef = db.collection("organizations").doc(organizationId);
+  const snapshot = await organizationRef.collection("leadForms").doc(formId).get();
+  if (!snapshot.exists || snapshot.data()?.enabled === false || snapshot.data()?.deletedAt) throw formError("This form is unavailable.", 404);
+  return { organizationId, organizationRef, form: safePublicForm(formId, snapshot.data()) };
 }
 
 async function submitPublicLeadForm(db, formId, input, options = {}) {
