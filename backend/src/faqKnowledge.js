@@ -19,11 +19,19 @@ function normalizeFaqEntry(input) {
     throw httpError("FAQ answer must be 1–1024 characters.");
   }
   if (!Array.isArray(input.keywords) || input.keywords.length < 1 || input.keywords.length > 8 ||
-      input.keywords.some((item) => typeof item !== "string" || !item.trim() || item.trim().length > 60)) {
-    throw httpError("Add between 1 and 8 FAQ keywords, each up to 60 characters.");
+      input.keywords.some((item) => typeof item !== "string" || !item.trim() || item.trim().length > 60 ||
+        [...normalizeFaqText(item)].length < 2)) {
+    throw httpError("Add between 1 and 8 FAQ keywords, each 2–60 meaningful characters.");
   }
-  const keywords = input.keywords.map((item) => item.trim()).filter((item, index, all) =>
-    all.findIndex((other) => other.toLocaleLowerCase() === item.toLocaleLowerCase()) === index);
+  // Deduplicate using the same normalized form used by the matcher, so punctuation
+  // and Unicode compatibility variants cannot create duplicate FAQ triggers.
+  const seenKeywords = new Set();
+  const keywords = input.keywords.map((item) => item.trim()).filter((item) => {
+    const normalized = normalizeFaqText(item);
+    if (seenKeywords.has(normalized)) return false;
+    seenKeywords.add(normalized);
+    return true;
+  });
   if (!keywords.length) throw httpError("At least one FAQ keyword is required.");
   if (input.matchMode !== undefined && !["all", "any"].includes(input.matchMode)) throw httpError("FAQ match mode must be all or any.");
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw httpError("FAQ enabled must be a boolean.");
