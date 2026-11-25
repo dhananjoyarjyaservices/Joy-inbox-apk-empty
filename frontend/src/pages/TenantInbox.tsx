@@ -923,6 +923,54 @@ export default function TenantInbox() {
     finally { setCampaignSaving(false); }
   }
 
+  function resetFaqForm() {
+    setFaqEditingId(""); setFaqQuestion(""); setFaqAnswer(""); setFaqKeywords("");
+    setFaqMatchMode("any"); setFaqPriority(100); setFaqEnabled(true);
+  }
+  function editFaqEntry(entry: OrganizationFaqEntry) {
+    setFaqEditingId(entry.id); setFaqQuestion(entry.question); setFaqAnswer(entry.answer);
+    setFaqKeywords(entry.keywords.join(", ")); setFaqMatchMode(entry.matchMode);
+    setFaqPriority(entry.priority); setFaqEnabled(entry.enabled);
+  }
+  async function submitFaqEntry(event: FormEvent) {
+    event.preventDefault();
+    if (!organization || faqSaving) return;
+    const keywords = faqKeywords.split(",").map(value => value.trim()).filter(Boolean);
+    if (!keywords.length || keywords.length > 8) { setError("Add between 1 and 8 comma-separated FAQ keywords."); return; }
+    setFaqSaving(true); setError("");
+    try {
+      const saved = await saveOrganizationFaqEntry(organization.id, {
+        question: faqQuestion.trim(), answer: faqAnswer.trim(), keywords,
+        matchMode: faqMatchMode, priority: faqPriority, enabled: faqEnabled
+      }, faqEditingId || undefined);
+      setFaqEntries(current => faqEditingId ? current.map(item => item.id === saved.id ? saved : item) : [...current, saved].sort((a, b) => a.priority - b.priority));
+      resetFaqForm();
+    } catch (error) { setError(error instanceof Error ? error.message : "FAQ entry could not be saved."); }
+    finally { setFaqSaving(false); }
+  }
+  async function toggleFaqEntry(entry: OrganizationFaqEntry) {
+    if (!organization || faqSaving) return;
+    setFaqSaving(true);
+    try {
+      const saved = await saveOrganizationFaqEntry(organization.id, {
+        question: entry.question, answer: entry.answer, keywords: entry.keywords,
+        matchMode: entry.matchMode, priority: entry.priority, enabled: !entry.enabled
+      }, entry.id);
+      setFaqEntries(current => current.map(item => item.id === entry.id ? saved : item));
+    } catch (error) { setError(error instanceof Error ? error.message : "FAQ entry could not be updated."); }
+    finally { setFaqSaving(false); }
+  }
+  async function removeFaqEntry(entry: OrganizationFaqEntry) {
+    if (!organization || faqSaving || !window.confirm(`Delete FAQ “${entry.question}”?`)) return;
+    setFaqSaving(true);
+    try {
+      await deleteOrganizationFaqEntry(organization.id, entry.id);
+      setFaqEntries(current => current.filter(item => item.id !== entry.id));
+      if (faqEditingId === entry.id) resetFaqForm();
+    } catch (error) { setError(error instanceof Error ? error.message : "FAQ entry could not be deleted."); }
+    finally { setFaqSaving(false); }
+  }
+
   async function submitAutomationRule(event: FormEvent) {
     event.preventDefault();
     if (!organization || automationSaving) return;
