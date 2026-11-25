@@ -216,7 +216,23 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
           currency: record.currency || "INR",
           nextFollowUpAt: record.next_follow_up_at || null,
           notes: record.notes || "",
-          customFields: {}
+          customFields: Object.fromEntries(fields
+            .filter(field => field.active)
+            .flatMap(field => {
+              const raw = record[field.key] ?? record[`custom_${field.key}`] ?? "";
+              if (raw === "") return [];
+              if (field.type === "number") return [[field.key, Number(raw)]];
+              if (field.type === "boolean") {
+                const normalized = raw.trim().toLowerCase();
+                const parsed = normalized === "true" || normalized === "yes" || normalized === "1"
+                  ? true
+                  : normalized === "false" || normalized === "no" || normalized === "0"
+                    ? false
+                    : raw;
+                return [[field.key, parsed]];
+              }
+              return [[field.key, raw]];
+            })
         };
       });
       const result = await importCrmLeads(organizationId, importedRows);
