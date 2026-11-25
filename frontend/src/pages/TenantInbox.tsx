@@ -6,7 +6,7 @@ import { LogOut, MessageCircle, Send, Settings, RefreshCw, Paperclip, FileText, 
 import { useAuth } from "../context/AuthContext";
 import { logout } from "../services/auth";
 import { getActiveOrganizationId, setActiveOrganizationId } from "../services/activeOrganization";
-import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, checkTenantSlaAlerts, listWhatsAppTemplates, sendTenantTemplate, sendTenantText, retryTenantFailedText, retryTenantFailedTemplate, getOrganizationSlaSettings, saveOrganizationSlaSettings, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult, type WhatsAppTemplate, listOrganizationNotifications, listOrganizationAutomationRules, listOrganizationAutomationRuns, getOrganizationAutomationQueueHealth, type OrganizationAutomationQueueHealth, saveOrganizationAutomationRule, deleteOrganizationAutomationRule, type OrganizationAutomationRule, type OrganizationAutomationRun, markOrganizationNotificationRead, markAllOrganizationNotificationsRead, getOrganizationNotificationPreferences, saveOrganizationNotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, type OrganizationNotificationPreferences, type OrganizationNotification, listOrganizationCampaigns, createOrganizationCampaign, updateOrganizationCampaign, type OrganizationCampaign, type OrganizationCampaignAction, getOrganizationCampaignReportRecipients, type OrganizationCampaignReportRecipient, getOrganizationBilling, createOrganizationBillingCheckout, openOrganizationBillingPortal, type OrganizationBillingState } from "../services/organizations";
+import { listOrganizations, listWhatsAppConnections, checkWhatsAppConnectionHealth, checkTenantSlaAlerts, listWhatsAppTemplates, sendTenantTemplate, sendTenantText, retryTenantFailedText, retryTenantFailedTemplate, getOrganizationSlaSettings, saveOrganizationSlaSettings, type Organization, type WhatsAppConnection, type WhatsAppConnectionHealthResult, type WhatsAppTemplate, listOrganizationNotifications, listOrganizationAutomationRules, listOrganizationAutomationRuns, getOrganizationAutomationQueueHealth, type OrganizationAutomationQueueHealth, saveOrganizationAutomationRule, deleteOrganizationAutomationRule, type OrganizationAutomationRule, type OrganizationAutomationRun, markOrganizationNotificationRead, markAllOrganizationNotificationsRead, getOrganizationNotificationPreferences, saveOrganizationNotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, type OrganizationNotificationPreferences, type OrganizationNotification, listOrganizationCampaigns, createOrganizationCampaign, updateOrganizationCampaign, type OrganizationCampaign, type OrganizationCampaignAction, getOrganizationCampaignReportRecipients, type OrganizationCampaignReportRecipient, getOrganizationBilling, createOrganizationBillingCheckout, openOrganizationBillingPortal, type OrganizationBillingState, listOrganizationFaqEntries, saveOrganizationFaqEntry, deleteOrganizationFaqEntry, type OrganizationFaqEntry } from "../services/organizations";
 import OrganizationMembers from "../components/OrganizationMembers";
 import CrmPanel from "../components/CrmPanel";
 import { listCrmLeads, type CrmLead } from "../services/crm";
@@ -223,6 +223,15 @@ export default function TenantInbox() {
   const [campaignVariables, setCampaignVariables] = useState("");
   const [campaignRecipientsCsv, setCampaignRecipientsCsv] = useState("");
   const [automationRules, setAutomationRules] = useState<OrganizationAutomationRule[]>([]);
+  const [faqEntries, setFaqEntries] = useState<OrganizationFaqEntry[]>([]);
+  const [faqQuestion, setFaqQuestion] = useState("");
+  const [faqAnswer, setFaqAnswer] = useState("");
+  const [faqKeywords, setFaqKeywords] = useState("");
+  const [faqMatchMode, setFaqMatchMode] = useState<"all" | "any">("any");
+  const [faqPriority, setFaqPriority] = useState(100);
+  const [faqEnabled, setFaqEnabled] = useState(true);
+  const [faqEditingId, setFaqEditingId] = useState("");
+  const [faqSaving, setFaqSaving] = useState(false);
   const [automationRuns, setAutomationRuns] = useState<OrganizationAutomationRun[]>([]);
   const [automationQueueHealth, setAutomationQueueHealth] = useState<OrganizationAutomationQueueHealth | null>(null);
   const [automationLoading, setAutomationLoading] = useState(false);
@@ -363,12 +372,14 @@ export default function TenantInbox() {
     setAutomationLoading(true);
     Promise.all([
       listOrganizationAutomationRules(organization.id),
+      listOrganizationFaqEntries(organization.id),
       listOrganizationAutomationRuns(organization.id),
       getOrganizationAutomationQueueHealth(organization.id)
     ])
-      .then(([rules, runs, queueHealth]) => {
+      .then(([rules, faqs, runs, queueHealth]) => {
         if (!active) return;
         setAutomationRules(rules);
+        setFaqEntries(faqs);
         setAutomationRuns(runs);
         setAutomationQueueHealth(queueHealth);
       })
