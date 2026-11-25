@@ -59,7 +59,7 @@ function normalizeSubmission(form, input) {
     const raw = input[field.key];
     const value = raw === undefined || raw === null ? "" : String(raw).trim();
     if (field.required && !value) throw formError(`${field.label} is required.`);
-    if (value.length > (field.type === "textarea" ? 2000 : 500)) throw formError(`${field.label} is too long.`);
+    const maxLength = field.type === "textarea" ? 2000 : field.type === "email" ? 254 : field.type === "phone" ? 16 : 500;\n    if (value.length > maxLength) throw formError(`${field.label} is too long.`);
     if (field.type === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw formError(`${field.label} must be a valid email address.`);
     if (field.type === "phone" && value && !/^\+[1-9][0-9]{7,14}$/.test(value)) throw formError(`${field.label} must be an international phone number starting with +.`);
     if (field.type === "select" && value && !field.options.includes(value)) throw formError(`Choose a valid option for ${field.label}.`);
@@ -148,15 +148,19 @@ async function submitPublicLeadForm(db, formId, input, options = {}) {
   const emailField = form.fields.find(field => field.type === "email");
   const title = String(values[nameField?.key] || values[emailField?.key] || form.name).slice(0, 120);
   const stageRef = organizationRef.collection("crmStages").doc("new");
+  const phoneField = form.fields.find(field => field.type === "phone");
+  const phone = phoneField ? String(values[phoneField.key] || "") : "";
+  const contactRef = shouldCreateLead && phone ? organizationRef.collection("contacts").doc(phone.replace(/^\\+/, "")) : null;
   const leadRef = shouldCreateLead ? organizationRef.collection("crmLeads").doc() : null;
   const response = {
     accepted: true, successMessage: form.successMessage, submissionId: submissionRef.id,
     leadId: leadRef?.id || null
   };
   return db.runTransaction(async transaction => {
-    const [rateSnapshot, idempotencySnapshot, stageSnapshot] = await Promise.all([
+    const [rateSnapshot, idempotencySnapshot, stageSnapshot, contactSnapshot] = await Promise.all([
       transaction.get(rateRef), transaction.get(idempotencyRef),
-      shouldCreateLead ? transaction.get(stageRef) : Promise.resolve(null)
+      shouldCreateLead ? transaction.get(stageRef) : Promise.resolve(null),
+      contactRef ? transaction.get(contactRef) : Promise.resolve(null)
     ]);
     if (idempotencySnapshot.exists) {
       const prior = idempotencySnapshot.data()?.response;
@@ -173,10 +177,25 @@ async function submitPublicLeadForm(db, formId, input, options = {}) {
       consentAt, submittedAt: now, ipHash: rateKey, status: shouldCreateLead ? "converted" : "new",
       ...(leadRef ? { leadId: leadRef.id } : {})
     });
+    let contactId = "";
+    if (contactRef) {
+      const contactName = String(values[nameField?.key] || values[emailField?.key] || form.name).slice(0, 100);
+      const email = emailField ? String(values[emailField.key] || "").slice(0, 254) : "";
+      const messageField = form.fields.find(field => field.type === "textarea");
+      const contactNotes = messageField ? String(values[messageField.key] || "").slice(0, 1000) : "";
+      const previous = contactSnapshot?.data() || {};
+      const tags = [...new Set([...(Array.isArray(previous.tags) ? previous.tags : []), "Lead form"])].slice(0, 20);
+      transaction.set(contactRef, {
+        name: contactName, phone, phoneId: contactRef.id, email: email || String(previous.email || ""),
+        notes: contactNotes || String(previous.notes || ""), source: previous.source || "local",
+        tags, createdAt: previous.createdAt || now, updatedAt: now
+      }, { merge: true });
+      contactId = contactRef.id;
+    }
     if (leadRef) {
       const stageName = stageSnapshot?.exists ? String(stageSnapshot.data()?.name || "New") : "New";
       transaction.create(leadRef, {
-        title: `${form.name}: ${title}`.slice(0, 120), contactId: "", stageId: "new", stageName,
+        title: `${form.name}: ${title}`.slice(0, 120), contactId, stageId: "new", stageName,
         ownerUid: "", source: `lead_form:${formId}`, value: null, currency: "INR",
         notes: Object.entries(values).map(([key, value]) => `${key}: ${value}`).join("\n").slice(0, 2000),
         customFields: {}, organizationId, createdAt: now, updatedAt: now,
