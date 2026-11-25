@@ -159,11 +159,11 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-25)
 
-Latest checked development commit: `32c5dc1dcafd44c661e950312650efe7634e1d75`.
-- Backend tests (run 45547964880): **passed**, including Firestore emulator tests and production Lambda package verification.
-- Frontend build (run 45547964821): **passed**.
-- Joy Inbox CI (run 45547964932): **passed**.
-- Cloudflare Pages preview workflow (run 45547959942): **passed**; frontend build succeeded, while the actual Cloudflare deploy step was **skipped** because repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are not configured.
+Latest checked development commit: `a4829aae487ac6249b0e42501013eccb5f0f15b5`.
+- Backend tests (run 45572134772): **passed**, including Firestore emulator tests and production Lambda package verification.
+- Frontend build (run 45572134755): **passed**.
+- Joy Inbox CI (run 45572134749): **passed**.
+- Cloudflare Pages preview workflow (run 45572126125): **passed**; frontend build succeeded, while the actual Cloudflare deploy step was **skipped** because repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are not configured.
 - These checks cover repository tests/build and the static preview build only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
 
 PR #1 remains open and unmerged. Keep it unmerged until external staging and launch gates pass and the owner explicitly approves.
