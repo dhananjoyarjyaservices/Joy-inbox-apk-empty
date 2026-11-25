@@ -32,14 +32,14 @@ function normalizeAutomationRule(input) {
     if (!value || value.length > 80 || [...value].some((character) => character.charCodeAt(0) < 32)) {
       throw httpError("Each condition keyword is required (maximum 80 characters).", 400);
     }
-    if (!["contains", "exact", "starts_with"].includes(matchType)) {
+    if (!["contains", "exact", "starts_with", "ends_with", "not_contains", "not_exact"].includes(matchType)) {
       throw httpError("Condition match type must be contains, exact or starts_with.", 400);
     }
     return { keyword: value, matchType };
   }) : null;
   const keyword = hasConditions ? conditions[0].keyword :
     (typeof input.keyword === "string" ? input.keyword.trim().slice(0, 80) : "");
-  if (!hasConditions && input.matchType !== undefined && !["contains", "exact", "starts_with"].includes(input.matchType)) {
+  if (!hasConditions && input.matchType !== undefined && !["contains", "exact", "starts_with", "ends_with", "not_contains", "not_exact"].includes(input.matchType)) {
     throw httpError("Match type must be contains, exact or starts_with.", 400);
   }
   const matchType = hasConditions ? conditions[0].matchType : (input.matchType || "contains");
@@ -88,6 +88,9 @@ function matchesKeyword(message, keyword, matchType) {
   if (!message || !normalizedKeyword) return false;
   if (matchType === "exact") return message === normalizedKeyword;
   if (matchType === "starts_with") return message.startsWith(normalizedKeyword);
+  if (matchType === "ends_with") return message.endsWith(normalizedKeyword);
+  if (matchType === "not_contains") return !message.includes(normalizedKeyword);
+  if (matchType === "not_exact") return message !== normalizedKeyword;
   return message.includes(normalizedKeyword);
 }
 
