@@ -334,10 +334,14 @@ async function handleOrganizationWebhookDeliveries(event) {
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "api:manage");
   if (method === "GET") {
-    const rawLimit = Number(event.queryStringParameters?.limit || 50);
-    const limit = Number.isInteger(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 50;
-    const deliveries = await listOrganizationWebhookDeliveries(getDb(), organization.id, limit);
-    return jsonResponse(event, 200, { deliveries });
+    const query = event.queryStringParameters || {};
+    const result = await listOrganizationWebhookDeliveries(getDb(), organization.id, {
+      limit: query.limit === undefined ? 50 : Number(query.limit),
+      status: query.status || "",
+      event: query.event || "",
+      cursor: query.cursor || ""
+    });
+    return jsonResponse(event, 200, result);
   }
   const result = await replayOrganizationWebhookDelivery(getDb(), organization.id, String(body.deliveryId || ""));
   return jsonResponse(event, 200, result);
