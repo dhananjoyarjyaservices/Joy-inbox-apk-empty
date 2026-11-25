@@ -117,7 +117,7 @@ export default function LeadFormsPanel({ organizationId }: Props) {
         </div>)}
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <button type="button" disabled={fields.length >= 10} onClick={() => setFields(current => [...current, { key: `custom_${current.length + 1}`, label: "New field", type: "text", required: false, options: [] }])} className="flex items-center gap-1 rounded-md border bg-white px-2 py-1.5 text-xs text-[#075e54] disabled:opacity-40"><Plus size={13}/> Add field</button>
+        <button type="button" disabled={fields.length >= 10} onClick={() => setFields(current => [...current, { key: `field_${Date.now()}`, label: "New field", type: "text", required: false, options: [] }])} className="flex items-center gap-1 rounded-md border bg-white px-2 py-1.5 text-xs text-[#075e54] disabled:opacity-40"><Plus size={13}/> Add field</button>
         <button type="submit" disabled={saving || !name.trim() || fields.length < 1} className="rounded-md bg-[#075e54] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Create form"}</button>
       </div>
       <p className="mt-2 text-[10px] text-gray-500">Consent is required by default. Form submissions are rate-limited and stored in your workspace; CRM lead creation is enabled.</p>
