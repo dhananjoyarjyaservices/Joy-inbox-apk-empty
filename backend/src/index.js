@@ -580,7 +580,7 @@ async function handlePublicApiMessages(event) {
           const approved = (Array.isArray(templatePayload.data) ? templatePayload.data : []).find(item => item.name === normalizedTemplate.templateName && item.language === normalizedTemplate.language && item.status === "APPROVED");
           if (!approved) { const error = new Error("This WhatsApp template is not approved for the selected language."); error.statusCode = 400; error.definitive = true; throw error; }
           const definitions = Array.isArray(approved.components) ? approved.components : [];
-          const placeholderCount = value => { const indexes = [...String(value || "").matchAll(/\\{\\{\\s*(\\d+)\\s*\\}\\}/g)].map(match => Number(match[1])); return indexes.length ? Math.max(...indexes) : 0; };
+          const placeholderCount = value => { const indexes = [...String(value || "").matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1])); return indexes.length ? Math.max(...indexes) : 0; };
           const bodyCount = placeholderCount(definitions.find(item => item.type === "BODY")?.text);
           const header = definitions.find(item => item.type === "HEADER");
           const headerCount = header?.format === "TEXT" ? placeholderCount(header.text) : 0;
