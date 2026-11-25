@@ -16,7 +16,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 
 - [x] Initial tenant-scoped CRM foundation: pipeline stages, typed custom field definitions/validation, lead records, contact and owner pickers, lead editing/stage changes, follow-up dates, agent-only assigned-lead access and Sales CRM UI.
 - [x] Automated CRM follow-up reminders: scheduled scan, transactional deduplication, active-owner validation, in-app notification, push delivery, member opt-out and retry after failure. Notification Center routes CRM alerts to Sales CRM. See `docs/CRM-FOUNDATION.md`.
-- [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.
+- [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.\n- [x] Workspace lead capture forms: validated 1–10-field builder, public hosted form page, consent evidence, server-side validation, honeypot, per-IP rate limiting, transactional idempotent submissions, optional CRM lead creation and tenant-scoped response history. See `docs/LEAD-FORMS.md`.\n- [ ] Enable Firestore TTL on `publicFormRateLimits.expiresAt` and `publicFormIdempotency.expiresAt`; configure production `CORS_ORIGINS` and verify public form flows in staging.
 - [x] CRM sales performance report: pipeline totals, won revenue, conversion rate, stage, owner and source breakdowns with agent-scoped visibility and a 1,000-lead sample cap.
 - [x] CRM lead activity timeline: append-only actor-attributed create/update/delete events, tracked-field before/after snapshots, agent assignment checks and on-demand pipeline-card history.
 - [x] Probability-weighted CRM pipeline forecast using configurable stage win probabilities; expected open value is calculated separately per currency.
@@ -53,7 +53,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 ## Product parity audit
 
 - [x] Compare the implemented Joy Inbox code paths against Interakt's current public product categories and document implemented, partial, missing and externally gated capabilities in [docs/INTERAKT-FEATURE-PARITY.md](INTERAKT-FEATURE-PARITY.md).
-- [ ] Implement remaining missing/partial product capabilities listed in `docs/INTERAKT-FEATURE-PARITY.md` before claiming Interakt feature parity. CRM activity timeline and weighted forecasting are implemented; validate them with real workspace data. Public text-send, template-read, campaign reporting/draft/control and signed webhook operations have initial implementations. Still missing or partial: Instagram, RCS, AI/voice, commerce, forms, CTWA ads, visual automation canvas/branching/schedule nodes (the rule builder now supports ALL/ANY conditions and six keyword operators), advanced CRM segments/conversion attribution, catalog/order/payment workflows, and public template management/media-header template sends.
+- [ ] Implement remaining missing/partial product capabilities listed in `docs/INTERAKT-FEATURE-PARITY.md` before claiming Interakt feature parity. CRM activity timeline and weighted forecasting are implemented; validate them with real workspace data. Public text-send, template-read, campaign reporting/draft/control and signed webhook operations have initial implementations. Still missing or partial: Instagram, RCS, AI/voice, commerce, CTWA ads, visual automation canvas/branching/schedule nodes (the rule builder now supports ALL/ANY conditions and six keyword operators), advanced CRM segments/conversion attribution, catalog/order/payment workflows, and public template management/media-header template sends.
 
 ## WhatsApp Embedded Signup onboarding
 
@@ -81,7 +81,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Inbox assignment and agent-performance views page through the complete organization member list instead of silently stopping at the first 100 members.
 - [x] Assignment/state management, SLA checks and team notifications.
 - [x] Automation rules with up to five ALL/ANY keyword conditions (`contains`, `exact`, `starts_with`, `ends_with`, `not_contains`, `not_exact`), priority ordering, up to five delayed reply steps, leased queue processing, execution history/health and uncertain-delivery protection. Visual branching, schedules/timezone windows, API/action nodes and FAQ knowledge-base automation remain product gaps.
-- [x] Campaign drafts, approved-template checks, consent evidence validation, STOP suppression, explicit START re-subscription, send worker, pause/cancel and recipient reports.
+- [x] Campaign drafts, approved-template checks, consent evidence validation, STOP suppression, explicit START re-subscription, send worker, pause/cancel and recipient reports.\n- [x] Public lead capture forms with consent capture, abuse controls and CRM lead conversion; staging, TTL and retention verification remain open.
 - [x] Internal conversation notes served through authenticated tenant APIs.
 - [x] Interactive WhatsApp button and list messages.
 - [x] Interactive WhatsApp media carousel composer and server payload validation for 2–10 image cards with HTTPS image and CTA links; card images are referenced by public URL rather than stored in Joy Inbox. Real Meta delivery still requires staging verification.
