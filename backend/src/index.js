@@ -95,6 +95,7 @@ const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserv
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmSavedFilter, canAccessCrmLead, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
+const { buildPublicTemplateComponents } = require("./publicTemplateMessages");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const {
   getDeviceDocument,
@@ -579,19 +580,7 @@ async function handlePublicApiMessages(event) {
           if (!templateResponse.ok) { const error = new Error(templatePayload.error?.message || "Meta could not verify this template."); error.statusCode = 502; error.definitive = templateResponse.status >= 400 && templateResponse.status < 500 && templateResponse.status !== 408; throw error; }
           const approved = (Array.isArray(templatePayload.data) ? templatePayload.data : []).find(item => item.name === normalizedTemplate.templateName && item.language === normalizedTemplate.language && item.status === "APPROVED");
           if (!approved) { const error = new Error("This WhatsApp template is not approved for the selected language."); error.statusCode = 400; error.definitive = true; throw error; }
-          const definitions = Array.isArray(approved.components) ? approved.components : [];
-          const placeholderCount = value => { const indexes = [...String(value || "").matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1])); return indexes.length ? Math.max(...indexes) : 0; };
-          const bodyCount = placeholderCount(definitions.find(item => item.type === "BODY")?.text);
-          const header = definitions.find(item => item.type === "HEADER");
-          const headerCount = header?.format === "TEXT" ? placeholderCount(header.text) : 0;
-          const urlButtons = definitions.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button, index) => ({ ...button, index })) : []).filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
-          if (["IMAGE", "VIDEO", "DOCUMENT"].includes(header?.format) || normalizedTemplate.variables.length !== bodyCount || normalizedTemplate.headerVariables.length !== headerCount || normalizedTemplate.buttonVariables.length !== urlButtons.length) {
-            const error = new Error(`Template variables do not match the approved definition (body ${bodyCount}, header ${headerCount}, URL buttons ${urlButtons.length}). Media-header templates must use the media message flow.`); error.statusCode = 400; error.definitive = true; throw error;
-          }
-          const components = [];
-          if (normalizedTemplate.headerVariables.length) components.push({ type: "header", parameters: normalizedTemplate.headerVariables.map(value => ({ type: "text", text: value.trim() })) });
-          if (normalizedTemplate.variables.length) components.push({ type: "body", parameters: normalizedTemplate.variables.map(value => ({ type: "text", text: value.trim() })) });
-          normalizedTemplate.buttonVariables.forEach((value, index) => components.push({ type: "button", sub_type: "url", index: String(urlButtons[index].index), parameters: [{ type: "text", text: value.trim() }] }));
+          const components = buildPublicTemplateComponents(approved, normalizedTemplate);
           const response = await fetch(`https://graph.facebook.com/${version}/${encodeURIComponent(credentials.phoneNumberId)}/messages`, {
             method: "POST", headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" },
             body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to, type: "template", template: { name: normalizedTemplate.templateName, language: { code: normalizedTemplate.language }, ...(components.length ? { components } : {}) } })
