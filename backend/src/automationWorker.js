@@ -182,6 +182,14 @@ async function markExpiredQueueJobUncertain(db, stale, now) {
     const current = await transaction.get(stale.ref);
     if (!current.exists || current.data().status !== "sending" ||
         timestampMillis(current.data().leaseUntil) > now.getTime()) return false;
+    const runSnapshot = await transaction.get(runRef);
+    const run = runSnapshot.exists ? runSnapshot.data() : {};
+    const stepResults = Array.isArray(run.stepResults) ? [...run.stepResults] : [];
+    stepResults[Number(data.stepIndex || 0)] = {
+      step: Number(data.stepIndex || 0) + 1, status: "uncertain",
+      delaySeconds: Number(data.delaySeconds || 0),
+      error: "Worker lease expired; delivery outcome needs manual review."
+    };
     transaction.update(stale.ref, {
       status: "uncertain",
       leaseUntil: null,
@@ -190,6 +198,7 @@ async function markExpiredQueueJobUncertain(db, stale, now) {
     });
     transaction.set(runRef, {
       status: "partially_failed",
+      stepResults,
       error: "A queued step has an uncertain delivery outcome and needs manual review.",
       failedStep: Number(data.stepIndex || 0) + 1,
       updatedAt: now
