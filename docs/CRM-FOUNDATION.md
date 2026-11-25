@@ -7,7 +7,7 @@ This repository now includes an initial tenant-scoped sales CRM module. It is a 
 - Workspace-scoped sales pipeline with five initial stages: New, Qualified, Proposal, Won and Lost.
 - Up to 20 pipeline stages per workspace.
 - Stage order, active state, and Won/Lost outcome markers.
-- Up to 30 custom CRM field definitions per workspace.
+- Up to 30 custom CRM field definitions per workspace, shared by leads and customer profiles.
 - Custom field types: text, number, date, boolean and select.
 - Required-field validation, option validation, type validation and inactive-field protection.
 - Tenant-scoped leads with title, stage, source, value/currency, owner UID, optional linked contact ID, follow-up timestamp, notes and custom field values.
@@ -38,7 +38,7 @@ All routes are internal authenticated application APIs. They are not public API-
 
 - organizations/{organizationId}/crmFields/{fieldKey}
 - organizations/{organizationId}/crmStages/{stageId}
-- organizations/{organizationId}/crmLeads/{leadId}
+- organizations/{organizationId}/crmLeads/{leadId}\n- Customer profile custom field values are stored on organizations/{organizationId}/contacts/{contactId}.customFields; definitions remain centralized in crmFields.
 
 No cross-organization queries are used. The backend verifies linked contact and owner membership before writing a lead.
 
@@ -49,7 +49,7 @@ The Tenant Inbox now has a Sales CRM workspace view with:
 - Edit leads and move them between pipeline columns.
 - Set follow-up dates and visually flag overdue follow-ups on lead cards.
 - Link leads to existing workspace contacts and assign them to active workspace members.
-- Add custom field definitions and capture values when creating leads.
+- Add custom field definitions and capture values when creating leads.\n- Select a workspace customer and save typed custom field values directly on their contact profile; values are validated server-side against the workspace field schema.
 - Add pipeline stages.
 - Delete leads.
 
@@ -57,7 +57,7 @@ The Tenant Inbox now has a Sales CRM workspace view with:
 
 The initial CRM slice now includes scheduled follow-up reminders, validated CSV lead import (up to 200 rows per upload), sales reporting, lead activity history and probability-weighted pipeline forecasts. Remaining product work is:
 
-- Contact-profile integration for typed custom fields and richer lead/contact deduplication across imports.
+- Richer lead/contact deduplication across imports, saved filters, reusable segments, custom events and conversion attribution.
 - Saved filters, reusable segments, custom events and conversion attribution.
 - CRM-specific permission roles beyond the current owner/admin/agent model.
 - Full browser-level workflow tests and real-workspace validation of forecast probabilities and report accuracy.
