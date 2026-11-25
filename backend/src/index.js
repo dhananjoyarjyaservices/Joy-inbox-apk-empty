@@ -97,6 +97,7 @@ const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineS
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { normalizeTemplateConsent, buildPublicTemplateComponents } = require("./publicTemplateMessages");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
+const { listLeadForms, saveLeadForm, deleteLeadForm, getPublicLeadForm, submitPublicLeadForm } = require("./leadForms");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -1265,6 +1266,44 @@ async function handleTenantCrmSavedFilters(event) {
     return jsonResponse(event, 200, { success: true });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+async function handleTenantLeadForms(event) {
+  const method = getMethod(event);
+  const decoded = await authenticateUser(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "contacts:manage");
+  if (method === "GET") return jsonResponse(event, 200, { items: await listLeadForms(organization) });
+  if (method === "POST" || method === "PUT") {
+    const item = await saveLeadForm(getDb(), organization, decoded.uid, body.data, method === "PUT" ? String(body.resourceId || "") : "");
+    return jsonResponse(event, method === "POST" ? 201 : 200, { item });
+  }
+  if (method === "DELETE") {
+    const result = await deleteLeadForm(getDb(), organization, String(body.resourceId || ""));
+    return jsonResponse(event, 200, result);
+  }
+  return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+async function handlePublicLeadForm(event, formId, submit) {
+  if (getMethod(event) === "GET" && !submit) {
+    const result = await getPublicLeadForm(getDb(), formId);
+    return jsonResponse(event, 200, { form: result.form });
+  }
+  if (getMethod(event) !== "POST" || !submit) return jsonResponse(event, 405, { error: "Method not allowed." });
+  let body;
+  try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  const forwarded = getHeader(event, "x-forwarded-for");
+  const ip = String(forwarded || event.requestContext?.http?.sourceIp || event.requestContext?.identity?.sourceIp || "unknown").split(",")[0].trim();
+  const result = await submitPublicLeadForm(getDb(), formId, body.values, {
+    consent: body.consent === true, honeypot: body.website || "", ip
+  });
+  return jsonResponse(event, 202, result);
 }
 
 async function handleTenantCrm(event, resource) {
