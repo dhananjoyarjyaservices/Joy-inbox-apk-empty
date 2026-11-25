@@ -6,7 +6,7 @@ const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
-const { findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason, selectAutomationBranch, isWithinAutomationSchedule } = require("./automationRules");
+const { findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason, selectAutomationBranch, selectWorkspaceOutOfOfficeRule } = require("./automationRules");
 const { findMatchingFaqEntry } = require("./faqKnowledge");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
@@ -159,16 +159,8 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   if (!regularRule) {
     const globalSettingsSnapshot = await organization.ref.collection("settings").doc("outOfOffice").get();
     const globalSettings = globalSettingsSnapshot.exists ? globalSettingsSnapshot.data() || {} : {};
-    if (globalSettings.enabled === true && typeof globalSettings.message === "string" &&
-        globalSettings.message.trim() && globalSettings.schedule &&
-        !isWithinAutomationSchedule({ schedule: globalSettings.schedule }, scheduleInstant)) {
-      outOfOfficeRule = {
-        id: "workspace_out_of_office", name: "Workspace out-of-office",
-        outOfOfficeMessage: globalSettings.message.trim(), enabled: true
-      };
-    } else {
-      outOfOfficeRule = findMatchingOutOfOfficeRule(rules, body, scheduleInstant);
-    }
+    outOfOfficeRule = selectWorkspaceOutOfOfficeRule(globalSettings, scheduleInstant) ||
+      findMatchingOutOfOfficeRule(rules, body, scheduleInstant);
   }
   let faqEntry = null;
   if (!regularRule && !outOfOfficeRule) {
