@@ -155,6 +155,52 @@ async function saveTenantResource(db, organizationId, resource, input, resourceI
   return { id: ref.id, ...data };
 }
 
+async function mergeTenantContacts(db, organizationId, sourceId, targetId) {
+  if (!ID_PATTERN.test(sourceId || "") || !ID_PATTERN.test(targetId || "") || sourceId === targetId) {
+    throw httpError("Choose two different valid contacts to merge.", 400);
+  }
+  const contacts = getTenantResourceCollection(db, organizationId, "contacts");
+  const sourceRef = contacts.doc(sourceId);
+  const targetRef = contacts.doc(targetId);
+  const leads = db.collection("organizations").doc(organizationId).collection("crmLeads");
+  const linkedLeads = await leads.where("contactId", "==", sourceId).get();
+  if (linkedLeads.docs.length > 400) throw httpError("This contact has more than 400 linked leads. Reassign some leads before merging.", 409);
+  const leadRefs = linkedLeads.docs.map(document => leads.doc(document.id));
+  let mergedContact;
+  await db.runTransaction(async transaction => {
+    const [sourceSnapshot, targetSnapshot, ...leadSnapshots] = await Promise.all([
+      transaction.get(sourceRef), transaction.get(targetRef), ...leadRefs.map(ref => transaction.get(ref))
+    ]);
+    if (!sourceSnapshot.exists) throw httpError("Source contact was not found.", 404);
+    if (!targetSnapshot.exists) throw httpError("Target contact was not found.", 404);
+    const source = sourceSnapshot.data() || {};
+    const target = targetSnapshot.data() || {};
+    const tags = [...(target.tags || []), ...(source.tags || [])]
+      .filter((tag, index, all) => typeof tag === "string" && all.findIndex(item => typeof item === "string" && item.toLowerCase() === tag.toLowerCase()) === index);
+    const mergedCustomFields = { ...(source.customFields || {}), ...(target.customFields || {}) };
+    mergedContact = {
+      ...source, ...target,
+      name: target.name || source.name,
+      email: target.email || source.email || "",
+      notes: [target.notes, source.notes].filter((value, index, all) => typeof value === "string" && value.trim() && all.indexOf(value) === index).join("\n\n").slice(0, 1000),
+      tags,
+      customFields: mergedCustomFields,
+      source: target.source === "whatsapp" || source.source === "whatsapp" ? "whatsapp" : (target.source || source.source || "local"),
+      mergedContactCount: (Number(target.mergedContactCount) || 0) + (Number(source.mergedContactCount) || 0) + 1,
+      lastMergedAt: new Date(),
+      updatedAt: new Date()
+    };
+    transaction.set(targetRef, mergedContact, { merge: true });
+    transaction.delete(sourceRef);
+    leadSnapshots.forEach((snapshot, index) => {
+      if (snapshot.exists && snapshot.data()?.contactId === sourceId) {
+        transaction.set(leadRefs[index], { contactId: targetId, updatedAt: new Date() }, { merge: true });
+      }
+    });
+  });
+  return { item: { id: targetId, ...mergedContact }, mergedLeadCount: linkedLeads.docs.length };
+}
+
 async function deleteTenantResource(db, organizationId, resource, resourceId) {
   if (!ID_PATTERN.test(resourceId || "")) throw httpError("A valid resource ID is required.", 400);
   const ref = getTenantResourceCollection(db, organizationId, resource).doc(resourceId);
@@ -163,4 +209,4 @@ async function deleteTenantResource(db, organizationId, resource, resourceId) {
   await ref.delete();
 }
 
-module.exports = { contactInput, quickReplyInput, getTenantResourceCollection, listTenantResource, listPublicContacts, normalizeContactPageSize, encodeContactCursor, decodeContactCursor, saveTenantResource, deleteTenantResource };
+module.exports = { contactInput, quickReplyInput, getTenantResourceCollection, listTenantResource, listPublicContacts, normalizeContactPageSize, encodeContactCursor, decodeContactCursor, saveTenantResource, mergeTenantContacts, deleteTenantResource };
