@@ -123,6 +123,7 @@ async function saveTenantResource(db, organizationId, resource, input, resourceI
         }
         const sourceData = sourceSnapshot.data() || {};
         transaction.set(targetRef, {
+          ...sourceData,
           ...data,
           createdAt: sourceData.createdAt || now,
           updatedAt: now
