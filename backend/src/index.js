@@ -95,7 +95,7 @@ const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserv
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmSavedFilter, canAccessCrmLead, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
-const { buildPublicTemplateComponents } = require("./publicTemplateMessages");
+const { normalizeTemplateConsent, buildPublicTemplateComponents } = require("./publicTemplateMessages");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const {
   getDeviceDocument,
@@ -511,13 +511,10 @@ async function handlePublicApiMessages(event) {
     if (!/^[a-z0-9_]{1,512}$/.test(templateName) || !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(language) || !validVariables(variables) || !validVariables(headerVariables) || !validVariables(buttonVariables)) {
       return jsonResponse(event, 400, { error: "Template name, language or template variables are invalid." });
     }
-    const consent = body.consent;
-    const consentAt = typeof consent?.consentAt === "string" ? new Date(consent.consentAt) : null;
-    const consentSource = typeof consent?.consentSource === "string" ? consent.consentSource.trim() : "";
-    if (!consent || consent.optedIn !== true || !consentAt || Number.isNaN(consentAt.getTime()) || consentAt.getTime() > Date.now() || consentSource.length < 2 || consentSource.length > 120) {
-      return jsonResponse(event, 400, { error: "Template sends require explicit opt-in evidence: optedIn=true, a past ISO consentAt timestamp and a consentSource (2–120 characters)." });
-    }
-    normalizedTemplate = { templateName, language, variables, headerVariables, buttonVariables, consent: { optedIn: true, consentAt: consentAt.toISOString(), consentSource } };
+    let consent;
+    try { consent = normalizeTemplateConsent(body.consent); }
+    catch (error) { return jsonResponse(event, error.statusCode || 400, { error: error.message }); }
+    normalizedTemplate = { templateName, language, variables, headerVariables, buttonVariables, consent };
     previewText = `Template: ${templateName} (${language})`;
   } else if (type === "text") {
     previewText = typeof body.text === "string" ? body.text.trim() : "";
