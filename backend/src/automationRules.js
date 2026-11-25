@@ -83,7 +83,7 @@ function normalizeAutomationRule(input) {
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw httpError("Enabled must be true or false.", 400);
   return {
     name, keyword, matchType, ...(conditions ? { conditions, conditionMode: input.conditionMode || "all" } : {}),
-    response: steps[0].message, steps, enabled: input.enabled !== false, priority
+    response: steps[0].message, steps, enabled: input.enabled !== false, priority, ...(schedule ? { schedule } : {})
   };
 }
 
@@ -128,9 +128,34 @@ function matchesAutomationRule(rule, messageText) {
   return matchesKeyword(message, rule.keyword, rule.matchType);
 }
 
-function findMatchingAutomationRule(rules, messageText) {
+function isWithinAutomationSchedule(rule, instant = new Date()) {
+  if (!rule?.schedule) return true;
+  const schedule = rule.schedule;
+  const date = instant instanceof Date ? instant : new Date(instant);
+  if (Number.isNaN(date.getTime())) return false;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: schedule.timezone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    const weekdays = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const day = weekdays[values.weekday];
+    const current = values.hour + ":" + values.minute;
+    return Array.isArray(schedule.days) && schedule.days.includes(day) &&
+      current >= schedule.startTime && current < schedule.endTime;
+  } catch {
+    return false;
+  }
+}
+
+function findMatchingAutomationRule(rules, messageText, instant = new Date()) {
   return sortAutomationRules(rules).find(rule =>
-    rule.enabled === true && matchesAutomationRule(rule, messageText)
+    rule.enabled === true && matchesAutomationRule(rule, messageText) &&
+    isWithinAutomationSchedule(rule, instant)
   ) || null;
 }
 
@@ -140,5 +165,6 @@ module.exports = {
   sortAutomationRules,
   normalizeAutomationMatchText,
   matchesAutomationRule,
-  findMatchingAutomationRule
+  findMatchingAutomationRule,
+  isWithinAutomationSchedule
 };
