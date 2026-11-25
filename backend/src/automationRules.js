@@ -8,7 +8,7 @@ function httpError(message, statusCode) {
 
 function normalizeAutomationRule(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Automation rule details are required.", 400);
-  const allowed = ["name", "keyword", "matchType", "conditions", "conditionMode", "response", "steps", "enabled", "priority"];
+  const allowed = ["name", "keyword", "matchType", "conditions", "conditionMode", "response", "steps", "enabled", "priority", "schedule"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Automation rule contains unsupported fields.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const hasConditions = input.conditions !== undefined;
@@ -58,6 +58,28 @@ function normalizeAutomationRule(input) {
   if (steps.some((step) => !step.message || step.message.length > 1024)) throw httpError("Each reply step is required and must be 1,024 characters or fewer.", 400);
   if (!name || name.length > 80) throw httpError("Rule name is required (maximum 80 characters).", 400);
   if (!hasConditions && (!keyword || keyword.length > 80 || [...keyword].some((character) => character.charCodeAt(0) < 32))) throw httpError("Keyword is required (maximum 80 characters).", 400);
+  let schedule;
+  if (input.schedule !== undefined && input.schedule !== null) {
+    const value = input.schedule;
+    if (!value || typeof value !== "object" || Array.isArray(value) ||
+        Object.keys(value).some((key) => !["timezone", "days", "startTime", "endTime"].includes(key))) {
+      throw httpError("Schedule may only contain timezone, days, startTime and endTime.", 400);
+    }
+    const timezone = typeof value.timezone === "string" ? value.timezone.trim() : "";
+    try { new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date()); }
+    catch { throw httpError("Schedule timezone must be a valid IANA timezone.", 400); }
+    const days = value.days;
+    if (!Array.isArray(days) || days.length < 1 || days.length > 7 ||
+        days.some((day) => !Number.isInteger(day) || day < 0 || day > 6) ||
+        new Set(days).size !== days.length) {
+      throw httpError("Schedule days must be unique weekday numbers from 0 (Sunday) to 6 (Saturday).", 400);
+    }
+    const validTime = (time) => typeof time === "string" && /^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(time);
+    if (!validTime(value.startTime) || !validTime(value.endTime) || value.startTime >= value.endTime) {
+      throw httpError("Schedule startTime and endTime must be valid 24-hour times, with startTime before endTime.", 400);
+    }
+    schedule = { timezone, days: [...days].sort((a, b) => a - b), startTime: value.startTime, endTime: value.endTime };
+  }
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw httpError("Enabled must be true or false.", 400);
   return {
     name, keyword, matchType, ...(conditions ? { conditions, conditionMode: input.conditionMode || "all" } : {}),
