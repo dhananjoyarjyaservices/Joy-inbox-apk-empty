@@ -61,10 +61,11 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
 
   let sendAttempted = false;
   let quotaReservation = null;
+  let run = {};
   try {
     const runSnapshot = await runRef.get();
     if (!runSnapshot.exists) throw Object.assign(new Error("Automation run was not found."), { definitive: true });
-    const run = runSnapshot.data();
+    run = runSnapshot.data();
     const ruleRef = organizationRef.collection("automationRules").doc(String(job.ruleId || ""));
     const ruleSnapshot = await ruleRef.get();
     if (!automationRuleAllowsQueue(ruleSnapshot)) {
