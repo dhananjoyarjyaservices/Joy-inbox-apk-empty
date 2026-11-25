@@ -7,6 +7,7 @@ const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./te
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
 const { findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason, selectAutomationBranch } = require("./automationRules");
+const { findMatchingFaqEntry } = require("./faqKnowledge");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 
@@ -155,9 +156,18 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   const scheduleInstant = new Date();
   const regularRule = findMatchingAutomationRule(rules, body, scheduleInstant);
   const outOfOfficeRule = regularRule ? null : findMatchingOutOfOfficeRule(rules, body, scheduleInstant);
-  const rule = regularRule || outOfOfficeRule;
+  let faqEntry = null;
+  if (!regularRule && !outOfOfficeRule) {
+    const faqSnapshot = await organization.ref.collection("faqEntries").limit(100).get();
+    faqEntry = findMatchingFaqEntry(faqSnapshot.docs.map((document) => ({ id: document.id, ...document.data() })), body);
+  }
+  const rule = regularRule || outOfOfficeRule || (faqEntry ? {
+    id: `faq_${faqEntry.id}`, name: `FAQ: ${faqEntry.question}`, response: faqEntry.answer,
+    steps: [{ message: faqEntry.answer, delaySeconds: 0 }], enabled: true, priority: faqEntry.priority
+  } : null);
   if (!rule) return;
   const isOutOfOffice = Boolean(outOfOfficeRule);
+  const isFaq = Boolean(faqEntry);
 
   const inboundTimestamp = Number(inboundMessage.timestamp)
     ? new Date(Number(inboundMessage.timestamp) * 1000) : new Date();
@@ -198,7 +208,8 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       ruleName: String(rule.name || "Automation").slice(0, 80),
       branchName: selectedBranch.branchName,
       branchIndex: selectedBranch.branchIndex,
-      mode: isOutOfOffice ? "out_of_office" : "standard",
+      mode: isOutOfOffice ? "out_of_office" : isFaq ? "faq" : "standard",
+      ...(isFaq ? { faqEntryId: faqEntry.id } : {}),
       inboundMessageId: String(inboundMessage.id || "").slice(0, 256),
       customerPhone: phone,
       status: skipReason ? "skipped" : "sending",
@@ -256,7 +267,8 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       messageBatch.set(chatRef.collection("messages").doc(result.messageId), {
         messageId: result.messageId, chatId: phone, organizationId: organization.id,
         direction: "outgoing", type: "text", text: replyText, timestamp: sentAt, status: "sent",
-        source: "automation", automationRuleId: rule.id, automationStep: index + 1,
+        source: isFaq ? "faq" : "automation", automationRuleId: isFaq ? null : rule.id,
+        ...(isFaq ? { faqEntryId: faqEntry.id } : {}), automationStep: index + 1,
         phoneNumberId: credentials.phoneNumberId || null, sender: "system"
       });
       messageBatch.set(chatRef, {
