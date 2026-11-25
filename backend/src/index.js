@@ -4214,6 +4214,15 @@ exports.handler = async (event) => {
     }
   }
 
+  const publicFormMatch = path.match(/\\/public\\/v1\\/forms\\/([A-Za-z0-9_-]{12,64})(\\/submissions)?$/);
+  if (publicFormMatch && ((method === "GET" && !publicFormMatch[2]) || (method === "POST" && publicFormMatch[2]))) {
+    try { return await handlePublicLeadForm(event, publicFormMatch[1], Boolean(publicFormMatch[2])); }
+    catch (error) {
+      console.error("Public lead form request failed:", error.statusCode || "PUBLIC_FORM_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Lead form request could not be completed." });
+    }
+  }
+
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/public/v1/leads")) {
     try { return await handlePublicApiLeads(event); }
     catch (error) {
@@ -4437,6 +4446,14 @@ exports.handler = async (event) => {
     try { return await handleTenantCrmSavedFilters(event); }
     catch (error) { return jsonResponse(event, error.statusCode || 500, { error: error.message || "CRM saved filters could not be loaded." }); }
   }
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/crm/forms")) {
+    try { return await handleTenantLeadForms(event); }
+    catch (error) {
+      console.error("Tenant lead form request failed:", error.statusCode || "LEAD_FORM_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Lead form request could not be completed." });
+    }
+  }
+
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && ["/organizations/crm/fields", "/organizations/crm/stages", "/organizations/crm/leads"].some(suffix => path.endsWith(suffix))) {
     const resource = path.endsWith("/fields") ? "fields" : path.endsWith("/stages") ? "stages" : "leads";
     try { return await handleTenantCrm(event, resource); }
