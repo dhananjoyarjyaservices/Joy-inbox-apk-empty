@@ -97,7 +97,7 @@ const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineS
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { normalizeTemplateConsent, buildPublicTemplateComponents } = require("./publicTemplateMessages");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
-const { listLeadForms, saveLeadForm, deleteLeadForm, getPublicLeadForm, submitPublicLeadForm } = require("./leadForms");
+const { listLeadForms, saveLeadForm, deleteLeadForm, listLeadFormSubmissions, getPublicLeadForm, submitPublicLeadForm } = require("./leadForms");
 const {
   getDeviceDocument,
   getTenantDeviceDocument,
@@ -1266,6 +1266,16 @@ async function handleTenantCrmSavedFilters(event) {
     return jsonResponse(event, 200, { success: true });
   }
   return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+async function handleTenantLeadFormSubmissions(event) {
+  if (getMethod(event) !== "GET") return jsonResponse(event, 405, { error: "Method not allowed." });
+  const decoded = await authenticateUser(event);
+  const params = event.queryStringParameters || {};
+  const organization = await requireOrganization(getDb(), decoded, params.organizationId);
+  requirePermission(organization, "contacts:manage");
+  const submissions = await listLeadFormSubmissions(organization, String(params.formId || ""), Number(params.limit || 50));
+  return jsonResponse(event, 200, { submissions });
 }
 
 async function handleTenantLeadForms(event) {
@@ -4447,6 +4457,14 @@ exports.handler = async (event) => {
     try { return await handleTenantCrmSavedFilters(event); }
     catch (error) { return jsonResponse(event, error.statusCode || 500, { error: error.message || "CRM saved filters could not be loaded." }); }
   }
+  if (method === "GET" && path.endsWith("/organizations/crm/forms/submissions")) {
+    try { return await handleTenantLeadFormSubmissions(event); }
+    catch (error) {
+      console.error("Tenant lead form submissions failed:", error.statusCode || "LEAD_FORM_SUBMISSIONS_FAILED");
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Form submissions could not be loaded." });
+    }
+  }
+
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/crm/forms")) {
     try { return await handleTenantLeadForms(event); }
     catch (error) {
