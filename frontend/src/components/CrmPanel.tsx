@@ -8,6 +8,7 @@ import {
 
 import { mergeTenantContacts, saveTenantContact, type TenantContact } from "../services/tenantResources";
 import type { OrganizationMember } from "../services/organizationMembers";
+import LeadFormsPanel from "./LeadFormsPanel";
 
 type Props = { organizationId: string; contacts: TenantContact[]; members: OrganizationMember[]; canManageSchema: boolean; initialContactId?: string; initialContactName?: string };
 
@@ -361,7 +362,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   }
 
   return <section className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto max-w-7xl">\n      <LeadFormsPanel organizationId={organizationId} />
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="flex items-center gap-2 text-lg font-semibold"><BriefcaseBusiness size={20}/> Sales CRM</h2><p className="text-sm text-gray-500">Track leads through your workspace sales pipeline.</p></div>
         <button type="button" onClick={() => void refresh()} disabled={loading || saving} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs text-[#075e54]"><RefreshCw size={14}/> Refresh</button>
