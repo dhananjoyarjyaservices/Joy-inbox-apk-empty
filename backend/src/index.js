@@ -1289,7 +1289,10 @@ async function handleTenantResource(event, resource) {
     return jsonResponse(event, 200, { items });
   }
   if (method === "POST") {
-    const item = await saveTenantResource(getDb(), organization.id, resource, body.data);
+    const fieldSnapshot = resource === "contacts" && body.data?.customFields !== undefined
+      ? await organization.ref.collection("crmFields").get() : null;
+    const fieldDefinitions = fieldSnapshot ? fieldSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) : [];
+    const item = await saveTenantResource(getDb(), organization.id, resource, body.data, undefined, fieldDefinitions);
     if (resource === "contacts") {
       await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted", `app:${item.id}:${crypto.randomUUID()}`,
         { id: item.id, name: item.name, phone: item.phone, email: item.email, tags: item.tags, source: item.source }
@@ -1298,7 +1301,10 @@ async function handleTenantResource(event, resource) {
     return jsonResponse(event, 201, { item });
   }
   if (method === "PUT") {
-    const item = await saveTenantResource(getDb(), organization.id, resource, body.data, body.resourceId);
+    const fieldSnapshot = resource === "contacts" && body.data?.customFields !== undefined
+      ? await organization.ref.collection("crmFields").get() : null;
+    const fieldDefinitions = fieldSnapshot ? fieldSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) : [];
+    const item = await saveTenantResource(getDb(), organization.id, resource, body.data, body.resourceId, fieldDefinitions);
     if (resource === "contacts") {
       await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted", `app:${item.id}:${crypto.randomUUID()}`,
         { id: item.id, name: item.name, phone: item.phone, email: item.email, tags: item.tags, source: item.source }
