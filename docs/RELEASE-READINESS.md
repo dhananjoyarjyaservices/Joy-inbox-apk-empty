@@ -162,13 +162,14 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-25)
 
-Latest verified development PR head: `ac89bf4158e988110efad88228c558b654732ac3`.
-- Backend tests (run 45575657460): **passed**.
-- Frontend build (run 45575657317): **passed**.
-- Joy Inbox CI (run 45575657492): **passed**.
-- Cloudflare Pages branch preview: Cloudflare deployment bot reported **successful deployment** for commit `ac89bf4`. Preview URL: https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev
-- The earlier CI run `45575466353` had skipped its own deploy step because Cloudflare credentials were not available to that workflow invocation; the later Cloudflare Pages deployment confirmation supersedes that older skipped result.
-- These checks verify repository tests/build and a Cloudflare Pages preview deployment only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
+Latest verified development PR head: `dd7c3d22b4887e03a737b8becec2937cf4365be8`.
+- Backend unit tests: **passed** (latest run 45583330725).
+- Frontend TypeScript and production build: **passed** (latest run 45583330725).
+- CI build and test jobs: **passed** (runs 45583330571 and 45583330589).
+- Cloudflare Pages branch preview: **successful** for commit `dd7c3d2` (Cloudflare check run 139098775777). Preview URL: https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev
+- A TypeScript inference error in CRM CSV custom-field parsing was fixed in commit `dd7c3d2`; the replacement workflow completed successfully.
+
+These checks verify repository tests/build and a Cloudflare Pages preview deployment only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
 
 PR #1 remains open, draft and unmerged. Keep it unmerged until external staging and launch gates pass and the owner explicitly approves.
 
