@@ -37,7 +37,7 @@ const {
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
-const { listTenantResource, listPublicContacts, saveTenantResource, deleteTenantResource } = require("./tenantResources");
+const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
 const { updateTenantChatAssignment } = require("./tenantChatAssignment");
 const { requireOrganization, requirePermission, encryptSecret, resolvePhoneNumberOrganization, saveWhatsAppConnection, disconnectWhatsAppConnection, getWhatsAppCredentials, listWhatsAppConnections } = require("./tenancy");
@@ -1314,6 +1314,21 @@ async function handleTenantCrm(event, resource) {
     { id: ref.id, ...item }
   ).catch(error => console.error("CRM lead webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
   return jsonResponse(event, method === "POST" ? 201 : 200, { item: { id: ref.id, ...item } });
+}
+
+async function handleTenantContactMerge(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); }
+  catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "contacts:manage");
+  const result = await mergeTenantContacts(getDb(), organization.id, body.sourceId, body.targetId);
+  await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted",
+    `contact-merge:${result.item.id}:${crypto.randomUUID()}`,
+    { id: result.item.id, name: result.item.name, phone: result.item.phone, email: result.item.email, tags: result.item.tags, source: result.item.source }
+  ).catch(error => console.error("Merged contact webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
+  return jsonResponse(event, 200, { ...result });
 }
 
 async function handleTenantResource(event, resource) {
