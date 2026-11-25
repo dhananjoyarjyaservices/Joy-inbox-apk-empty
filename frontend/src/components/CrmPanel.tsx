@@ -328,7 +328,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     setSaving(true); setError("");
     try {
       const result = await mergeTenantContacts(organizationId, mergeSourceId, mergeTargetId);
-      setImportSummary(`Contacts merged. ${result.mergedLeadCount} linked CRM lead(s) reassigned to ${result.item.name}.`);
+      window.alert(`Contacts merged. ${result.mergedLeadCount} linked CRM lead(s) reassigned to ${result.item.name}.`);
       window.location.reload();
     } catch (e) { setError(e instanceof Error ? e.message : "Duplicate contacts could not be merged."); }
     finally { setSaving(false); }
