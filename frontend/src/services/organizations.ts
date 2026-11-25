@@ -275,8 +275,8 @@ export interface OrganizationAutomationRule {
   id: string;
   name: string;
   keyword?: string;
-  matchType?: "contains" | "exact" | "starts_with";
-  conditions?: { keyword: string; matchType: "contains" | "exact" | "starts_with" }[];
+  matchType?: "contains" | "exact" | "starts_with" | "ends_with" | "not_contains" | "not_exact";
+  conditions?: { keyword: string; matchType: "contains" | "exact" | "starts_with" | "ends_with" | "not_contains" | "not_exact" }[];
   conditionMode?: "all" | "any";
   response: string;
   steps: { message: string; delaySeconds: number }[];
