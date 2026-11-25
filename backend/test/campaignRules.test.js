@@ -66,3 +66,16 @@ test("campaign state transitions prevent resuming terminal campaigns", () => {
   assert.equal(canTransitionCampaign("cancelled", "sending"), false);
   assert.equal(canTransitionCampaign("unknown", "queued"), false);
 });
+
+
+test("recipient phone parsing accepts common formatting but rejects embedded text and malformed plus signs", () => {
+  const consent = { optedIn: true, consentAt: "2026-11-20T10:00:00.000Z", consentSource: "website form" };
+  const result = normalizeCampaignRecipients([
+    { ...consent, phone: "+91 (98765) 43210" },
+    { ...consent, phone: "call 919876543211" },
+    { ...consent, phone: "91+9876543212" },
+    { ...consent, phone: "++919876543213" }
+  ]);
+  assert.deepEqual(result.recipients.map(item => item.phone), ["919876543210"]);
+  assert.equal(result.skipped, 3);
+});
