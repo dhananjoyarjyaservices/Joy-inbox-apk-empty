@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-25  
 **Audited branch:** `feature/saas-foundation`  
-**Audited code head:** `9816479d74b752fee98fbfd377de1521bbd0f7bc`  
+**Audited code head:** `9d4303b2c5dc3d761d7a9be099b55a20fdbc2fd8`  
 **Scope:** Repository code and automated-test evidence only. This is not a live-provider acceptance test.
 
 ## Executive finding
