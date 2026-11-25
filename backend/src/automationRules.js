@@ -237,6 +237,25 @@ function findMatchingAutomationRule(rules, messageText, instant = new Date()) {
   ) || null;
 }
 
+function getOutOfOfficeSkipReason(chat = {}, instant = new Date()) {
+  const now = instant instanceof Date ? instant.getTime() : new Date(instant).getTime();
+  if (!Number.isFinite(now)) return "invalid_instant";
+  const toTimestamp = (value) => {
+    const date = value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value || 0);
+    return date.getTime();
+  };
+  const lastSentAt = toTimestamp(chat.outOfOfficeSentAt);
+  if (Number.isFinite(lastSentAt) && now - lastSentAt >= 0 && now - lastSentAt < 24 * 60 * 60 * 1000) {
+    return "out_of_office_cooldown";
+  }
+  const claimedAt = toTimestamp(chat.outOfOfficeClaimedAt);
+  if (chat.outOfOfficeClaimedFor && Number.isFinite(claimedAt) &&
+      now - claimedAt >= 0 && now - claimedAt < 2 * 60 * 1000) {
+    return "out_of_office_send_in_progress";
+  }
+  return null;
+}
+
 function findMatchingOutOfOfficeRule(rules, messageText, instant = new Date()) {
   return sortAutomationRules(rules).find(rule =>
     rule.enabled === true && typeof rule.outOfOfficeMessage === "string" && rule.outOfOfficeMessage.trim() &&
@@ -253,6 +272,7 @@ module.exports = {
   matchesAutomationRule,
   findMatchingAutomationRule,
   findMatchingOutOfOfficeRule,
+  getOutOfOfficeSkipReason,
   isWithinAutomationSchedule,
   selectAutomationSteps,
   selectAutomationBranch
