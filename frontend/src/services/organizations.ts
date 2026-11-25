@@ -282,6 +282,13 @@ export interface OrganizationAutomationRule {
   steps: { message: string; delaySeconds: number }[];
   enabled: boolean;
   priority: number;
+  schedule?: { timezone: string; days: number[]; startTime: string; endTime: string };
+  branches?: {
+    name: string;
+    conditions: { keyword: string; matchType: "contains" | "exact" | "starts_with" | "ends_with" | "not_contains" | "not_exact" }[];
+    conditionMode: "all" | "any";
+    steps: { message: string; delaySeconds: number }[];
+  }[];
   createdAt?: string | null;
   updatedAt?: string | null;
 }
