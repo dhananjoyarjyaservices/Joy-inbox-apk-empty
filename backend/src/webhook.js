@@ -174,9 +174,30 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
     : [{ message: String(rule.response || "").trim(), delaySeconds: 0 }].filter((step) => step.message);
   const runId = crypto.createHash("sha256").update(String(inboundMessage.id || "") + ":" + rule.id + (isOutOfOffice ? ":ooo" : "")).digest("hex");
   const runRef = organization.ref.collection("automationRuns").doc(runId);
+  const chatRef = organization.ref.collection("chats").doc(phone);
   const claimed = await db.runTransaction(async (transaction) => {
     const existing = await transaction.get(runRef);
     if (existing.exists) return false;
+    const now = new Date();
+    let skipReason = withinWindow ? null : "outside_whatsapp_service_window";
+    if (isOutOfOffice && withinWindow) {
+      const chatSnapshot = await transaction.get(chatRef);
+      const chat = chatSnapshot.exists ? chatSnapshot.data() || {} : {};
+      const toDate = (value) => value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value || 0);
+      const lastSentAt = toDate(chat.outOfOfficeSentAt);
+      const claimedAt = toDate(chat.outOfOfficeClaimedAt);
+      if (!Number.isNaN(lastSentAt.getTime()) && now.getTime() - lastSentAt.getTime() < 24 * 60 * 60 * 1000) {
+        skipReason = "out_of_office_cooldown";
+      } else if (chat.outOfOfficeClaimedFor && !Number.isNaN(claimedAt.getTime()) &&
+          now.getTime() - claimedAt.getTime() < 2 * 60 * 1000) {
+        skipReason = "out_of_office_send_in_progress";
+      } else {
+        transaction.set(chatRef, {
+          outOfOfficeClaimedFor: runId,
+          outOfOfficeClaimedAt: now
+        }, { merge: true });
+      }
+    }
     transaction.create(runRef, {
       ruleId: rule.id,
       ruleName: String(rule.name || "Automation").slice(0, 80),
@@ -185,20 +206,19 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       mode: isOutOfOffice ? "out_of_office" : "standard",
       inboundMessageId: String(inboundMessage.id || "").slice(0, 256),
       customerPhone: phone,
-      status: withinWindow ? "sending" : "skipped",
+      status: skipReason ? "skipped" : "sending",
       totalSteps: steps.length,
       completedSteps: 0,
-      stepResults: steps.map((step, index) => ({ step: index + 1, status: withinWindow ? "queued" : "skipped", delaySeconds: step.delaySeconds })),
-      reason: withinWindow ? null : "outside_whatsapp_service_window",
-      createdAt: new Date(),
-      updatedAt: new Date()
+      stepResults: steps.map((step, index) => ({ step: index + 1, status: skipReason ? "skipped" : "queued", delaySeconds: step.delaySeconds })),
+      reason: skipReason,
+      createdAt: now,
+      updatedAt: now
     });
-    return true;
+    return !skipReason;
   });
   if (!claimed || !withinWindow) return;
 
   const responseMessageIds = [];
-  const chatRef = organization.ref.collection("chats").doc(phone);
   const firstDelayedIndex = steps.findIndex((step, index) => index > 0 && step.delaySeconds > 0);
   const immediateCount = firstDelayedIndex < 0 ? steps.length : firstDelayedIndex;
   const timestamp = new Date();
@@ -246,6 +266,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       });
       messageBatch.set(chatRef, {
         lastMessage: replyText, lastMessageAt: sentAt, lastMessageDirection: "outgoing",
+        ...(isOutOfOffice ? { outOfOfficeSentAt: sentAt, outOfOfficeClaimedFor: null, outOfOfficeClaimedAt: null } : {}),
         ...(credentials.phoneNumberId ? { phoneNumberId: credentials.phoneNumberId } : {}), updatedAt: sentAt
       }, { merge: true });
       messageBatch.set(runRef, {
@@ -260,6 +281,14 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       await messageBatch.commit();
     }
   } catch (error) {
+    if (isOutOfOffice) {
+      await db.runTransaction(async (transaction) => {
+        const chatSnapshot = await transaction.get(chatRef);
+        if (chatSnapshot.data()?.outOfOfficeClaimedFor === runId) {
+          transaction.set(chatRef, { outOfOfficeClaimedFor: null, outOfOfficeClaimedAt: null }, { merge: true });
+        }
+      });
+    }
     await runRef.set({
       status: responseMessageIds.length ? "partially_failed" : "failed",
       responseMessageIds, completedSteps: responseMessageIds.length, totalSteps: steps.length,
