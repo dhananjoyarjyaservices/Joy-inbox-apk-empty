@@ -4214,7 +4214,7 @@ exports.handler = async (event) => {
     }
   }
 
-  const publicFormMatch = path.match(/\\/public\\/v1\\/forms\\/([A-Za-z0-9_-]{12,64})(\\/submissions)?$/);
+  const publicFormMatch = path.match(/\/public\/v1\/forms\/([A-Za-z0-9_-]{12,64})(\/submissions)?$/);
   if (publicFormMatch && ((method === "GET" && !publicFormMatch[2]) || (method === "POST" && publicFormMatch[2]))) {
     try { return await handlePublicLeadForm(event, publicFormMatch[1], Boolean(publicFormMatch[2])); }
     catch (error) {
