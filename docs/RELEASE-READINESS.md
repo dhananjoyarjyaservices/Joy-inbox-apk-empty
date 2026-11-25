@@ -35,11 +35,11 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add a workspace Developer panel to create/revoke keys and view API examples.
 - [x] Deny client-side Firestore access to API key and rate-limit records.
 - [ ] Enable Firestore TTL on `publicApiRateLimits.expiresAt` in the staging/production project.
-- [x] Enforce a fixed 60-requests-per-minute rate limit per API key using server-only Firestore counters.
+- [x] Enforce per-key 60/120/300-requests-per-minute rate limits using server-only Firestore counters.
 - [x] Add cursor pagination for contacts and CRM leads, 24-hour idempotency for public API mutations, and daily per-key request/rate-limit usage analytics.
-- [ ] Add configurable rate-limit tiers.
+- [x] Add configurable per-key rate-limit tiers (60/120/300 requests per minute), persist the selected tier with the hashed API-key record, enforce it in server-side Firestore counters, and expose the selected tier in the Developer panel.
 - [x] Add public API `leads:read` and `leads:write` scopes with workspace-derived list/create/update/delete endpoints and CRM stage/contact/owner/custom-field validation; add unit coverage and explicitly classify the API-key route in the HTTP route-security inventory.
-- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Public campaign draft creation and campaign state controls are implemented with separate scopes, idempotency and transactional state transitions. Remaining public API gaps: template sending/management, media and interactive sends, configurable rate-limit tiers, richer webhook delivery filters/pagination and full staging verification.
+- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Public campaign draft creation and campaign state controls are implemented with separate scopes, idempotency and transactional state transitions. Remaining public API gaps: template sending/management, media and interactive sends, richer webhook delivery filters/pagination and full staging verification.
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact/message/CRM lead lifecycle events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
 - [x] Add workspace-scoped webhook delivery history API/UI and manual replay for failed deliveries.
