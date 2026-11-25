@@ -152,7 +152,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
   const rules = rulesSnapshot.docs
     .map((document) => ({ id: document.id, ...document.data() }))
     .filter((rule) => typeof rule.keyword === "string" && (typeof rule.response === "string" || (Array.isArray(rule.steps) && rule.steps.length > 0)));
-  const rule = findMatchingAutomationRule(rules, body);
+  const scheduleInstant = Number(inboundMessage.timestamp) > 0\n    ? new Date(Number(inboundMessage.timestamp) * 1000) : new Date();\n  const rule = findMatchingAutomationRule(rules, body, scheduleInstant);
   if (!rule) return;
 
   const inboundTimestamp = Number(inboundMessage.timestamp)
