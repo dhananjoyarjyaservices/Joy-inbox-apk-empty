@@ -1149,6 +1149,7 @@ async function handleTenantAutomationRules(event) {
       priority: Number.isInteger(document.data().priority) ? document.data().priority : 100,
       ...(Array.isArray(document.data().branches) ? { branches: document.data().branches } : {}),
       ...(document.data().schedule ? { schedule: document.data().schedule } : {}),
+      ...(typeof document.data().outOfOfficeMessage === "string" ? { outOfOfficeMessage: document.data().outOfOfficeMessage } : {}),
       createdAt: document.data().createdAt?.toDate ? document.data().createdAt.toDate().toISOString() : null,
       updatedAt: document.data().updatedAt?.toDate ? document.data().updatedAt.toDate().toISOString() : null
     })));
