@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeAutomationRule, matchesAutomationRule } = require("../src/automationRules");
+const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch } = require("../src/automationRules");
 
 test("normalizes valid keyword automation rules and defaults", () => {
   assert.deepEqual(normalizeAutomationRule({
@@ -285,4 +285,24 @@ test("rejects malformed or unsafe automation branch definitions", () => {
   assert.throws(() => normalizeAutomationRule({ ...base, branches: [
     { name: "unsafe step", conditions: [{ keyword: "a" }], steps: [{ message: "A", action: "send" }] }
   ] }), { statusCode: 400 });
+});
+
+
+test("selects the first matching branch and exposes branch metadata", () => {
+  const rule = {
+    steps: [{ message: "Default reply", delaySeconds: 0 }],
+    branches: [
+      { name: "Pricing", conditionMode: "all", conditions: [{ keyword: "price", matchType: "contains" }, { keyword: "monthly", matchType: "contains" }], steps: [{ message: "Monthly pricing", delaySeconds: 30 }] },
+      { name: "Support", conditionMode: "any", conditions: [{ keyword: "help", matchType: "contains" }], steps: [{ message: "Support reply", delaySeconds: 0 }] }
+    ]
+  };
+  assert.deepEqual(selectAutomationBranch(rule, "What is the monthly price?"), {
+    branchName: "Pricing", branchIndex: 0, steps: [{ message: "Monthly pricing", delaySeconds: 30 }]
+  });
+  assert.deepEqual(selectAutomationBranch(rule, "I need help"), {
+    branchName: "Support", branchIndex: 1, steps: [{ message: "Support reply", delaySeconds: 0 }]
+  });
+  assert.deepEqual(selectAutomationBranch(rule, "Hello"), {
+    branchName: null, branchIndex: null, steps: [{ message: "Default reply", delaySeconds: 0 }]
+  });
 });
