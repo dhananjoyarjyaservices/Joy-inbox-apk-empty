@@ -182,7 +182,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       status: withinWindow ? "sending" : "skipped",
       totalSteps: steps.length,
       completedSteps: 0,
-      stepResults: steps.map((step, index) => ({ step: index + 1, status: "queued", delaySeconds: step.delaySeconds })),
+      stepResults: steps.map((step, index) => ({ step: index + 1, status: withinWindow ? "queued" : "skipped", delaySeconds: step.delaySeconds })),
       reason: withinWindow ? null : "outside_whatsapp_service_window",
       createdAt: new Date(),
       updatedAt: new Date()
