@@ -15,7 +15,7 @@ export type CrmLead = {
   customFields: Record<string, string | number | boolean>; createdAt?: unknown; updatedAt?: unknown;
 };
 
-async function request<T>(resource: "fields" | "stages" | "leads" | "leads/import", organizationId: string, method = "GET", data?: unknown, resourceId?: string): Promise<T> {
+async function request<T>(resource: "fields" | "stages" | "leads" | "leads/import" | "forms", organizationId: string, method = "GET", data?: unknown, resourceId?: string): Promise<T> {
   if (!API_URL) throw new Error("AWS API URL is not configured.");
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in again.");
@@ -135,4 +135,19 @@ export async function getCrmSalesReport(organizationId: string): Promise<CrmSale
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || "CRM sales report could not be loaded.");
   return result.report as CrmSalesReport;
+}
+
+export type CrmLeadFormField = { key: string; label: string; type: "text" | "email" | "phone" | "textarea" | "select"; required: boolean; options: string[] };
+export type CrmLeadForm = {
+  id: string; name: string; description: string; fields: CrmLeadFormField[]; submitButton: string;
+  successMessage: string; consentRequired: boolean; consentText: string; createLead: boolean; enabled: boolean;
+};
+export async function listCrmLeadForms(organizationId: string): Promise<CrmLeadForm[]> {
+  return (await request<{ items: CrmLeadForm[] }>("forms", organizationId)).items;
+}
+export async function saveCrmLeadForm(organizationId: string, form: Omit<CrmLeadForm, "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy">, id?: string): Promise<CrmLeadForm> {
+  return (await request<{ item: CrmLeadForm }>("forms", organizationId, id ? "PUT" : "POST", form, id)).item;
+}
+export async function deleteCrmLeadForm(organizationId: string, id: string): Promise<void> {
+  await request<{ success: boolean }>("forms", organizationId, "DELETE", undefined, id);
 }
