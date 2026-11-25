@@ -1,4 +1,5 @@
-const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;\nconst { normalizeCrmFieldValues } = require("./crm");
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const { normalizeCrmFieldValues } = require("./crm");
 
 function httpError(message, statusCode) {
   const error = new Error(message);
