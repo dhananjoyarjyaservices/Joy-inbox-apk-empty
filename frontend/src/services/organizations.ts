@@ -283,6 +283,7 @@ export interface OrganizationAutomationRule {
   enabled: boolean;
   priority: number;
   schedule?: { timezone: string; days: number[]; startTime: string; endTime: string };
+  outOfOfficeMessage?: string;
   branches?: {
     name: string;
     conditions: { keyword: string; matchType: "contains" | "exact" | "starts_with" | "ends_with" | "not_contains" | "not_exact" }[];
