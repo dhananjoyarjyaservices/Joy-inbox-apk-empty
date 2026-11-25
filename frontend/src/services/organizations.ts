@@ -153,6 +153,7 @@ export interface OrganizationApiKey {
   name: string;
   keyPrefix: string;
   scopes: string[];
+  rateLimitPerMinute?: 60 | 120 | 300;
   status: "active" | "revoked";
   createdAt?: unknown;
   expiresAt?: unknown;
@@ -168,6 +169,7 @@ export async function createOrganizationApiKey(input: {
   name: string;
   scopes: string[];
   expiryDays: number;
+  rateLimitPerMinute: 60 | 120 | 300;
 }): Promise<{ apiKey: OrganizationApiKey & { apiKey: string } }> {
   return request("/organizations/developer/api-keys", "POST", input);
 }
