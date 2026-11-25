@@ -295,14 +295,14 @@ test("merges duplicate contacts atomically and reassigns linked CRM leads", asyn
     },
     "organizations/org_a/crmLeads/lead_1": { title: "Deal one", contactId: sourceId },
     "organizations/org_a/crmLeads/lead_2": { title: "Deal two", contactId: targetId },
-    "organizations/org_b/contacts/" + sourceId: { name: "Other tenant", phone: "+919876543210" }
+    ["organizations/org_b/contacts/" + sourceId]: { name: "Other tenant", phone: "+919876543210" }
   });
   const result = await mergeTenantContacts(db, "org_a", sourceId, targetId);
   assert.equal(db.records.has(`organizations/org_a/contacts/${sourceId}`), false);
   const merged = db.records.get(`organizations/org_a/contacts/${targetId}`);
   assert.equal(merged.name, "Alex");
   assert.equal(merged.email, "alex@example.com");
-  assert.equal(merged.notes, "Current note\\n\\nOld note");
+  assert.equal(merged.notes, "Current note\n\nOld note");
   assert.deepEqual(merged.tags, ["vip", "Customer", "Referral"]);
   assert.deepEqual(merged.customFields, { city: "Delhi", tier: "Silver" });
   assert.equal(db.records.get("organizations/org_a/crmLeads/lead_1").contactId, targetId);
