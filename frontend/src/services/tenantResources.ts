@@ -27,6 +27,10 @@ export async function saveTenantContact(org: string, data: Omit<TenantContact, "
   const result = await call("/organizations/contacts", resourceId ? "PUT" : "POST", { organizationId: org, data, ...(resourceId ? { resourceId } : {}) });
   return result.item as TenantContact;
 }
+export async function mergeTenantContacts(org: string, sourceId: string, targetId: string): Promise<{ item: TenantContact; mergedLeadCount: number }> {
+  const result = await call("/organizations/contacts/merge", "POST", { organizationId: org, sourceId, targetId });
+  return result as { item: TenantContact; mergedLeadCount: number };
+}
 export async function deleteTenantContact(org: string, resourceId: string) {
   return call("/organizations/contacts", "DELETE", { organizationId: org, resourceId });
 }
