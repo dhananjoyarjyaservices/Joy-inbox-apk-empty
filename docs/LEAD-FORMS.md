@@ -43,7 +43,7 @@ The website field is a hidden honeypot. A non-empty honeypot is accepted as a no
 - The backend validates every field, rejects unknown keys, limits text length and validates email, international phone and select values.
 - Consent is required by default. The exact consent text, acceptance state and timestamp are stored with the submission.
 - Each source IP is represented by a SHA-256 hash; the raw IP address is not persisted.
-- A transaction-backed limit allows at most five submissions per form/IP per minute.
+- A transaction-backed limit allows at most five submissions per form/IP per minute.\n- When a submitted phone number is present and CRM conversion is enabled, the workspace contact is created or updated by normalized phone number, and the CRM lead links to that contact. Existing contact tags and notes are preserved.
 - A required Idempotency-Key makes retries safe. The idempotency record, rate counter, submission and optional CRM lead are committed in one Firestore transaction.
 - Public form configuration exposes only visitor-facing labels and options, not workspace actor metadata.
 - Responses are tenant-scoped under organizations/{organizationId}/leadFormSubmissions; the owner/admin view shows the latest 100 responses and linked CRM lead IDs.
