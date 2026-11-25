@@ -253,3 +253,36 @@ test("matches scheduled automations using the configured local timezone and week
   assert.equal(findMatchingAutomationRule([rule], "help", new Date("2026-11-23T13:00:00.000Z")), null);
   assert.equal(isWithinAutomationSchedule({ keyword: "help" }, new Date("invalid")), true);
 });
+
+
+test("normalizes bounded conditional branches with separate reply paths", () => {
+  const { selectAutomationSteps } = require("../src/automationRules");
+  const rule = normalizeAutomationRule({
+    name: "Product routing", keyword: "details", response: "General help",
+    branches: [
+      { name: "Pricing", conditions: [{ keyword: "price" }], steps: ["Pricing details"] },
+      { name: "Support", conditions: [{ keyword: "help" }, { keyword: "issue" }], conditionMode: "any",
+        steps: [{ message: "Support team", delaySeconds: 60 }] }
+    ]
+  });
+  assert.equal(rule.branches.length, 2);
+  assert.deepEqual(selectAutomationSteps(rule, "What is the PRICE?"), [{ message: "Pricing details", delaySeconds: 0 }]);
+  assert.deepEqual(selectAutomationSteps(rule, "I need help"), [{ message: "Support team", delaySeconds: 60 }]);
+  assert.deepEqual(selectAutomationSteps(rule, "Something else"), rule.steps);
+});
+
+test("rejects malformed or unsafe automation branch definitions", () => {
+  const base = { name: "Branches", keyword: "hello", response: "Fallback" };
+  assert.throws(() => normalizeAutomationRule({ ...base, branches: [] }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({ ...base, branches: [{ name: "x", conditions: [], steps: ["Reply"] }] }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({ ...base, branches: [
+    { name: "same", conditions: [{ keyword: "a" }], steps: ["A"] },
+    { name: "SAME", conditions: [{ keyword: "b" }], steps: ["B"] }
+  ] }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({ ...base, branches: [
+    { name: "unsafe", conditions: [{ keyword: "a", matchType: "regex" }], steps: ["A"] }
+  ] }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({ ...base, branches: [
+    { name: "unsafe step", conditions: [{ keyword: "a" }], steps: [{ message: "A", action: "send" }] }
+  ] }), { statusCode: 400 });
+});
