@@ -70,7 +70,11 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     const ruleSnapshot = await ruleRef.get();
     if (!automationRuleAllowsQueue(ruleSnapshot)) {
       await jobRef.update({ status: "skipped", reason: "automation_rule_disabled_or_deleted", leaseUntil: null, updatedAt: now });
-      await runRef.set({ status: "skipped", reason: "automation_rule_disabled_or_deleted", updatedAt: now }, { merge: true });
+      await runRef.set({
+        status: "skipped", reason: "automation_rule_disabled_or_deleted",
+        stepResults: (Array.isArray(run.stepResults) ? run.stepResults : []).map(step => ({ ...step, status: step.status === "sent" ? "sent" : "skipped" })),
+        updatedAt: now
+      }, { merge: true });
       return "skipped";
     }
     const completedSteps = Number(run.completedSteps || 0);
@@ -80,7 +84,11 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     }
     if (timestampMillis(job.windowExpiresAt) && timestampMillis(job.windowExpiresAt) <= now.getTime()) {
       await jobRef.update({ status: "skipped", reason: "outside_whatsapp_service_window", leaseUntil: null, updatedAt: now });
-      await runRef.set({ status: "skipped", reason: "outside_whatsapp_service_window", updatedAt: now }, { merge: true });
+      await runRef.set({
+        status: "skipped", reason: "outside_whatsapp_service_window",
+        stepResults: (Array.isArray(run.stepResults) ? run.stepResults : []).map(step => ({ ...step, status: step.status === "sent" ? "sent" : "skipped" })),
+        updatedAt: now
+      }, { merge: true });
       return "skipped";
     }
 
