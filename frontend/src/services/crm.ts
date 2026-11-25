@@ -65,7 +65,7 @@ async function savedFilterRequest<T>(organizationId: string, method = "GET", dat
   if (!user) throw new Error("Please sign in again.");
   const token = await user.getIdToken();
   const query = method === "GET" ? `?organizationId=${encodeURIComponent(organizationId)}` : "";
-  const response = await fetch(`${API_URL.replace(/\\/$/, "")}/organizations/crm/saved-filters${query}`, {
+  const response = await fetch(`${API_URL.replace(/\/$/, "")}/organizations/crm/saved-filters${query}`, {
     method, headers: { Authorization: `Bearer ${token}`, ...(method !== "GET" ? { "Content-Type": "application/json" } : {}) },
     ...(method !== "GET" ? { body: JSON.stringify({ organizationId, ...(data !== undefined ? { data } : {}), ...(resourceId ? { resourceId } : {}) }) } : {})
   });
