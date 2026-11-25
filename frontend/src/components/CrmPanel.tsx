@@ -182,7 +182,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     if (!file) return;
     setImporting(true); setError(""); setImportSummary("");
     try {
-      const sourceText = (await file.text()).replace(/^\\uFEFF/, "");
+      const sourceText = (await file.text()).replace(/^\uFEFF/, "");
       const rows: string[][] = [];
       let row: string[] = [], cell = "", quoted = false;
       for (let index = 0; index < sourceText.length; index += 1) {
@@ -190,7 +190,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
         if (char === '"' && quoted && sourceText[index + 1] === '"') { cell += '"'; index += 1; }
         else if (char === '"') quoted = !quoted;
         else if (char === "," && !quoted) { row.push(cell); cell = ""; }
-        else if ((char === "\\n" || char === "\\r") && !quoted) {
+        else if ((char === "\n" || char === "\r") && !quoted) {
           if (char === "\\r" && sourceText[index + 1] === "\\n") index += 1;
           row.push(cell); cell = "";
           if (row.some(value => value.trim())) rows.push(row);
@@ -201,7 +201,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
       if (row.some(value => value.trim())) rows.push(row);
       if (quoted) throw new Error("CSV has an unclosed quoted field.");
       if (rows.length < 2) throw new Error("CSV must contain a header and at least one lead row.");
-      const headers = rows[0].map(value => value.trim().toLowerCase().replace(/[\\s-]+/g, "_"));
+      const headers = rows[0].map(value => value.trim().toLowerCase().replace(/[\s-]+/g, "_"));
       if (!headers.includes("title")) throw new Error('CSV needs a "title" column.');
       const importedRows = rows.slice(1).map(values => {
         const record: Record<string, string> = {};
