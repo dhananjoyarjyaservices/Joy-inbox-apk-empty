@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { countTemplatePlaceholders, buildPublicTemplateComponents } = require("../src/publicTemplateMessages");
+const { normalizeTemplateConsent, countTemplatePlaceholders, buildPublicTemplateComponents } = require("../src/publicTemplateMessages");
 
 const approved = {
   status: "APPROVED",
@@ -50,4 +50,26 @@ test("rejects media-header templates in the text-template endpoint", () => {
 test("rejects malformed template variable values", () => {
   assert.throws(() => buildPublicTemplateComponents(approved, { variables: [""] }), /non-empty strings/);
   assert.throws(() => buildPublicTemplateComponents(approved, { variables: ["x".repeat(1025), "ok"] }), /non-empty strings/);
+});
+
+
+test("requires and normalizes explicit past template opt-in evidence", () => {
+  const now = Date.parse("2026-11-25T08:00:00.000Z");
+  assert.deepEqual(normalizeTemplateConsent({
+    optedIn: true, consentAt: "2026-11-24T10:00:00.000Z", consentSource: "Website checkout"
+  }, now), {
+    optedIn: true, consentAt: "2026-11-24T10:00:00.000Z", consentSource: "Website checkout"
+  });
+  assert.throws(() => normalizeTemplateConsent({
+    optedIn: false, consentAt: "2026-11-24T10:00:00.000Z", consentSource: "Website"
+  }, now), { statusCode: 400 });
+  assert.throws(() => normalizeTemplateConsent({
+    optedIn: true, consentAt: "2026-11-26T10:00:00.000Z", consentSource: "Website"
+  }, now), { statusCode: 400 });
+  assert.throws(() => normalizeTemplateConsent({
+    optedIn: true, consentAt: "not-a-date", consentSource: "Website"
+  }, now), { statusCode: 400 });
+  assert.throws(() => normalizeTemplateConsent({
+    optedIn: true, consentAt: "2026-11-24T10:00:00.000Z", consentSource: "x"
+  }, now), { statusCode: 400 });
 });
