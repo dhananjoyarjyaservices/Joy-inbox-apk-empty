@@ -119,9 +119,15 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
       leaseUntil: null,
       updatedAt: sentAt
     });
+    const stepResults = Array.isArray(run.stepResults) ? [...run.stepResults] : [];
+    stepResults[Number(job.stepIndex || 0)] = {
+      step: Number(job.stepIndex || 0) + 1, status: "sent",
+      delaySeconds: Number(job.delaySeconds || 0), sentAt: sentAt.toISOString()
+    };
     batch.set(runRef, {
       responseMessageIds: [...(Array.isArray(run.responseMessageIds) ? run.responseMessageIds : []), result.messageId],
       completedSteps: Number(job.stepIndex || 0) + 1,
+      stepResults,
       totalSteps: Number(job.totalSteps || 1),
       status: Number(job.stepIndex || 0) + 1 >= Number(job.totalSteps || 1) ? "sent" : "sending",
       updatedAt: sentAt,
@@ -148,8 +154,15 @@ async function processClaimedJob(db, jobRef, job, organizationRef, dependencies 
     }
     await jobRef.update(patch);
     if (disposition !== "queued") {
+      const stepResults = Array.isArray(run.stepResults) ? [...run.stepResults] : [];
+      stepResults[Number(job.stepIndex || 0)] = {
+        step: Number(job.stepIndex || 0) + 1,
+        status: disposition === "uncertain" ? "uncertain" : "failed",
+        delaySeconds: Number(job.delaySeconds || 0), error: patch.error
+      };
       await runRef.set({
         status: "partially_failed",
+        stepResults,
         ...(disposition === "uncertain" ? { uncertainStep: Number(job.stepIndex || 0) + 1 } : { failedStep: Number(job.stepIndex || 0) + 1 }),
         error: patch.error,
         updatedAt: failedAt
