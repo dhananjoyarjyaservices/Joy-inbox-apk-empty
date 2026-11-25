@@ -486,13 +486,26 @@ async function handlePublicApiMessages(event) {
   const type = body.type === undefined ? "text" : String(body.type);
   if (!/^[1-9][0-9]{7,14}$/.test(to)) return jsonResponse(event, 400, { error: "Recipient must be an international phone number in E.164 digits format." });
   if (!/^[0-9]{5,32}$/.test(phoneNumberId)) return jsonResponse(event, 400, { error: "A connected phoneNumberId is required." });
-  if (!["text", "image", "video", "audio", "document", "interactive"].includes(type)) {
-    return jsonResponse(event, 400, { error: "Message type must be text, image, video, audio, document or interactive." });
+  if (!["text", "image", "video", "audio", "document", "interactive", "template"].includes(type)) {
+    return jsonResponse(event, 400, { error: "Message type must be text, image, video, audio, document, interactive or template." });
   }
   let normalizedInteractive = null;
+  let normalizedTemplate = null;
   let previewText = "";
   let media = null;
-  if (type === "text") {
+  if (type === "template") {
+    const templateName = typeof body.templateName === "string" ? body.templateName.trim() : "";
+    const language = typeof body.language === "string" ? body.language.trim() : "";
+    const variables = body.variables === undefined ? [] : body.variables;
+    const headerVariables = body.headerVariables === undefined ? [] : body.headerVariables;
+    const buttonVariables = body.buttonVariables === undefined ? [] : body.buttonVariables;
+    const validVariables = values => Array.isArray(values) && values.length <= 100 && values.every(value => typeof value === "string" && value.trim() && value.length <= 1024);
+    if (!/^[a-z0-9_]{1,512}$/.test(templateName) || !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(language) || !validVariables(variables) || !validVariables(headerVariables) || !validVariables(buttonVariables)) {
+      return jsonResponse(event, 400, { error: "Template name, language or template variables are invalid." });
+    }
+    normalizedTemplate = { templateName, language, variables, headerVariables, buttonVariables };
+    previewText = `Template: ${templateName} (${language})`;
+  } else if (type === "text") {
     previewText = typeof body.text === "string" ? body.text.trim() : "";
     if (!previewText || previewText.length > 4096) return jsonResponse(event, 400, { error: "Text must contain 1–4096 characters." });
   } else if (type === "interactive") {
@@ -538,6 +551,7 @@ async function handlePublicApiMessages(event) {
       to, phoneNumberId, type,
       ...(type === "text" ? { text: previewText } : {}),
       ...(type === "interactive" ? { interactive: normalizedInteractive } : {}),
+      ...(type === "template" ? { template: normalizedTemplate } : {}),
       ...(media ? { media: { base64: media.base64, mimeType: media.mimeType, filename: media.filename, caption: media.caption } } : {})
     } },
     async () => {
@@ -551,6 +565,40 @@ async function handlePublicApiMessages(event) {
           result = await sendWhatsAppText(to, previewText, undefined, credentials);
         } else if (type === "interactive") {
           result = await sendWhatsAppInteractive(buildWhatsAppInteractivePayload(to, normalizedInteractive), credentials);
+        } else if (type === "template") {
+          if (!credentials.wabaId || !/^[0-9]{5,32}$/.test(String(credentials.wabaId))) {
+            const error = new Error("The connected WhatsApp number is missing its Business Account link."); error.statusCode = 409; error.definitive = true; throw error;
+          }
+          const version = process.env.GRAPH_API_VERSION || "v26.0";
+          const templateUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(credentials.wabaId)}/message_templates`);
+          templateUrl.searchParams.set("fields", "name,status,language,components");
+          templateUrl.searchParams.set("name", normalizedTemplate.templateName);
+          templateUrl.searchParams.set("limit", "100");
+          const templateResponse = await fetch(templateUrl.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
+          const templatePayload = await templateResponse.json().catch(() => ({}));
+          if (!templateResponse.ok) { const error = new Error(templatePayload.error?.message || "Meta could not verify this template."); error.statusCode = 502; error.definitive = templateResponse.status >= 400 && templateResponse.status < 500 && templateResponse.status !== 408; throw error; }
+          const approved = (Array.isArray(templatePayload.data) ? templatePayload.data : []).find(item => item.name === normalizedTemplate.templateName && item.language === normalizedTemplate.language && item.status === "APPROVED");
+          if (!approved) { const error = new Error("This WhatsApp template is not approved for the selected language."); error.statusCode = 400; error.definitive = true; throw error; }
+          const definitions = Array.isArray(approved.components) ? approved.components : [];
+          const placeholderCount = value => { const indexes = [...String(value || "").matchAll(/\\{\\{\\s*(\\d+)\\s*\\}\\}/g)].map(match => Number(match[1])); return indexes.length ? Math.max(...indexes) : 0; };
+          const bodyCount = placeholderCount(definitions.find(item => item.type === "BODY")?.text);
+          const header = definitions.find(item => item.type === "HEADER");
+          const headerCount = header?.format === "TEXT" ? placeholderCount(header.text) : 0;
+          const urlButtons = definitions.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button, index) => ({ ...button, index })) : []).filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
+          if (["IMAGE", "VIDEO", "DOCUMENT"].includes(header?.format) || normalizedTemplate.variables.length !== bodyCount || normalizedTemplate.headerVariables.length !== headerCount || normalizedTemplate.buttonVariables.length !== urlButtons.length) {
+            const error = new Error(`Template variables do not match the approved definition (body ${bodyCount}, header ${headerCount}, URL buttons ${urlButtons.length}). Media-header templates must use the media message flow.`); error.statusCode = 400; error.definitive = true; throw error;
+          }
+          const components = [];
+          if (normalizedTemplate.headerVariables.length) components.push({ type: "header", parameters: normalizedTemplate.headerVariables.map(value => ({ type: "text", text: value.trim() })) });
+          if (normalizedTemplate.variables.length) components.push({ type: "body", parameters: normalizedTemplate.variables.map(value => ({ type: "text", text: value.trim() })) });
+          normalizedTemplate.buttonVariables.forEach((value, index) => components.push({ type: "button", sub_type: "url", index: String(urlButtons[index].index), parameters: [{ type: "text", text: value.trim() }] }));
+          const response = await fetch(`https://graph.facebook.com/${version}/${encodeURIComponent(credentials.phoneNumberId)}/messages`, {
+            method: "POST", headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to, type: "template", template: { name: normalizedTemplate.templateName, language: { code: normalizedTemplate.language }, ...(components.length ? { components } : {}) } })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.messages?.[0]?.id) { const error = new Error(payload.error?.message || "Meta did not confirm template delivery."); error.statusCode = 502; error.definitive = !response.ok && response.status >= 400 && response.status < 500 && response.status !== 408; error.retryable = false; throw error; }
+          result = { messageId: payload.messages[0].id };
         } else {
           mediaReservation = await reserveTenantMediaQuota(db, authenticatedKey.organizationId,
             `public_api_${crypto.randomUUID()}`, media.buffer.length);
@@ -579,6 +627,7 @@ async function handlePublicApiMessages(event) {
         status: "sent", source: "public_api", sender: "api"
       };
       if (type === "interactive") messageData.interactive = normalizedInteractive;
+      if (type === "template") Object.assign(messageData, { templateName: normalizedTemplate.templateName, language: normalizedTemplate.language, templateVariables: normalizedTemplate.variables, templateHeaderVariables: normalizedTemplate.headerVariables, templateButtonVariables: normalizedTemplate.buttonVariables });
       if (media) Object.assign(messageData, {
         mediaId: uploadedMediaId, mimeType: media.mimeType, filename: media.filename || null,
         caption: media.caption || null, mediaStorage: "meta"
