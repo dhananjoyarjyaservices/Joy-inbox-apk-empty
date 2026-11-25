@@ -57,6 +57,13 @@ function tenantResourceDb(seed = {}) {
   function collection(path) {
     return {
       doc(id) { return reference(path + "/" + (id || "generated_" + (++generatedId))); },
+      where(field, operator, value) {
+        if (operator !== "==") throw new Error("Fake query only supports equality.");
+        const prefix = path + "/";
+        const docs = [...records.entries()].filter(([key, data]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/") && data?.[field] === value)
+          .map(([key, data]) => ({ id: key.slice(prefix.length), data: () => data }));
+        return { async get() { return { docs }; } };
+      },
       orderBy() {
         const read = async () => {
           const prefix = path + "/";
@@ -270,4 +277,46 @@ test("changing a contact phone preserves existing CRM custom field values", asyn
   });
   await saveTenantResource(db, "org_a", "contacts", { name: "Alex", phone: "+919876543211" }, oldId);
   assert.deepEqual(db.records.get(`organizations/org_a/contacts/${newId}`).customFields, customFields);
+});
+
+
+test("merges duplicate contacts atomically and reassigns linked CRM leads", async () => {
+  const { mergeTenantContacts } = require("../src/tenantResources");
+  const sourceId = "919876543210";
+  const targetId = "919876543211";
+  const db = tenantResourceDb({
+    [`organizations/org_a/contacts/${sourceId}`]: {
+      name: "Alex old", phone: "+919876543210", email: "alex@example.com", notes: "Old note",
+      tags: ["VIP", "Referral"], source: "whatsapp", customFields: { city: "Delhi", tier: "Gold" }
+    },
+    [`organizations/org_a/contacts/${targetId}`]: {
+      name: "Alex", phone: "+919876543211", email: "", notes: "Current note",
+      tags: ["vip", "Customer"], source: "local", customFields: { tier: "Silver" }
+    },
+    "organizations/org_a/crmLeads/lead_1": { title: "Deal one", contactId: sourceId },
+    "organizations/org_a/crmLeads/lead_2": { title: "Deal two", contactId: targetId },
+    "organizations/org_b/contacts/" + sourceId: { name: "Other tenant", phone: "+919876543210" }
+  });
+  const result = await mergeTenantContacts(db, "org_a", sourceId, targetId);
+  assert.equal(db.records.has(`organizations/org_a/contacts/${sourceId}`), false);
+  const merged = db.records.get(`organizations/org_a/contacts/${targetId}`);
+  assert.equal(merged.name, "Alex");
+  assert.equal(merged.email, "alex@example.com");
+  assert.equal(merged.notes, "Current note\\n\\nOld note");
+  assert.deepEqual(merged.tags, ["vip", "Customer", "Referral"]);
+  assert.deepEqual(merged.customFields, { city: "Delhi", tier: "Silver" });
+  assert.equal(db.records.get("organizations/org_a/crmLeads/lead_1").contactId, targetId);
+  assert.equal(db.records.get("organizations/org_a/crmLeads/lead_2").contactId, targetId);
+  assert.equal(db.records.get("organizations/org_b/contacts/" + sourceId).name, "Other tenant");
+  assert.equal(result.mergedLeadCount, 1);
+});
+
+test("contact merge rejects same, missing and cross-workspace contact references", async () => {
+  const { mergeTenantContacts } = require("../src/tenantResources");
+  const db = tenantResourceDb({
+    "organizations/org_a/contacts/919876543210": { name: "A", phone: "+919876543210" }
+  });
+  await assert.rejects(() => mergeTenantContacts(db, "org_a", "919876543210", "919876543210"), { statusCode: 400 });
+  await assert.rejects(() => mergeTenantContacts(db, "org_a", "919876543210", "919876543211"), { statusCode: 404 });
+  await assert.rejects(() => mergeTenantContacts(db, "org_a", "919876543212", "919876543210"), { statusCode: 404 });
 });
