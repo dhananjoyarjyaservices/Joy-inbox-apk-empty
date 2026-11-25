@@ -8,6 +8,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Setup = lazy(() => import("./pages/Setup"));
 const TenantInbox = lazy(() => import("./pages/TenantInbox"));
+const PublicLeadForm = lazy(() => import("./pages/PublicLeadForm"));
 
 function RouteLoadingFallback() {
   return (
@@ -43,6 +44,7 @@ export default function App() {
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/form/:formId" element={<PublicLeadForm />} />
             <Route element={<ProtectedRoute allowNonOwner />}>
               <Route path="/setup" element={<Setup />} />
               <Route path="/inbox" element={<TenantInbox />} />
