@@ -123,44 +123,61 @@ async function submitPublicLeadForm(db, formId, input, options = {}) {
   if (typeof options.honeypot === "string" && options.honeypot.trim()) return { accepted: true, successMessage: form.successMessage, spam: true };
   const values = normalizeSubmission(form, input);
   if (form.consentRequired && options.consent !== true) throw formError("Please accept the consent statement before submitting.", 400);
+  const idempotencyKey = String(options.idempotencyKey || "");
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) throw formError("A valid Idempotency-Key header is required.", 400);
   const now = options.now instanceof Date ? options.now : new Date();
   const ip = String(options.ip || "unknown").slice(0, 128);
   const rateKey = crypto.createHash("sha256").update(`${formId}:${ip}`).digest("hex");
+  const idempotencyHash = crypto.createHash("sha256").update(`${formId}:${idempotencyKey}`).digest("hex");
   const bucket = Math.floor(now.getTime() / 60000);
   const rateRef = db.collection("publicFormRateLimits").doc(`${rateKey}_${bucket}`);
-  await db.runTransaction(async transaction => {
-    const snapshot = await transaction.get(rateRef);
-    const count = Number(snapshot.data()?.count || 0);
-    if (count >= MAX_SUBMISSIONS_PER_MINUTE) throw formError("Too many submissions. Please try again in a minute.", 429);
-    transaction.set(rateRef, { formId, count: count + 1, updatedAt: now, expiresAt: new Date(now.getTime() + 2 * 60000) }, { merge: true });
-  });
+  const idempotencyRef = db.collection("publicFormIdempotency").doc(idempotencyHash);
   const submissionRef = organizationRef.collection("leadFormSubmissions").doc();
-  const consentAt = form.consentRequired ? now : null;
-  const submission = {
-    formId, values, consentAccepted: form.consentRequired ? true : options.consent === true,
-    consentText: form.consentRequired ? form.consentText : "",
-    consentAt, submittedAt: now, ipHash: rateKey, status: "new"
+  const shouldCreateLead = form.createLead;
+  const nameField = form.fields.find(field => /name/i.test(field.key));
+  const emailField = form.fields.find(field => field.type === "email");
+  const title = String(values[nameField?.key] || values[emailField?.key] || form.name).slice(0, 120);
+  const stageRef = organizationRef.collection("crmStages").doc("new");
+  const leadRef = shouldCreateLead ? organizationRef.collection("crmLeads").doc() : null;
+  const response = {
+    accepted: true, successMessage: form.successMessage, submissionId: submissionRef.id,
+    leadId: leadRef?.id || null
   };
-  await submissionRef.create(submission);
-  let leadId = null;
-  if (form.createLead) {
-    const nameField = form.fields.find(field => /name/i.test(field.key));
-    const emailField = form.fields.find(field => field.type === "email");
-    const title = String(values[nameField?.key] || values[emailField?.key] || form.name).slice(0, 120);
-    const stages = await organizationRef.collection("crmStages").doc("new").get();
-    const stageName = stages.exists ? String(stages.data()?.name || "New") : "New";
-    const leadRef = organizationRef.collection("crmLeads").doc();
-    await leadRef.set({
-      title: `${form.name}: ${title}`.slice(0, 120), contactId: "", stageId: "new", stageName,
-      ownerUid: "", source: `lead_form:${formId}`, value: null, currency: "INR",
-      notes: Object.entries(values).map(([key, value]) => `${key}: ${value}`).join("\n").slice(0, 2000),
-      customFields: {}, organizationId, createdAt: now, updatedAt: now, createdBy: "lead_form", updatedBy: "lead_form",
-      formSubmissionId: submissionRef.id
+  return db.runTransaction(async transaction => {
+    const [rateSnapshot, idempotencySnapshot, stageSnapshot] = await Promise.all([
+      transaction.get(rateRef), transaction.get(idempotencyRef),
+      shouldCreateLead ? transaction.get(stageRef) : Promise.resolve(null)
+    ]);
+    if (idempotencySnapshot.exists) {
+      const prior = idempotencySnapshot.data()?.response;
+      if (prior) return prior;
+      throw formError("This submission is already being processed. Please wait before retrying.", 409);
+    }
+    const count = Number(rateSnapshot.data()?.count || 0);
+    if (count >= MAX_SUBMISSIONS_PER_MINUTE) throw formError("Too many submissions. Please try again in a minute.", 429);
+    const consentAt = form.consentRequired ? now : null;
+    transaction.set(rateRef, { formId, count: count + 1, updatedAt: now, expiresAt: new Date(now.getTime() + 2 * 60000) }, { merge: true });
+    transaction.create(submissionRef, {
+      formId, values, consentAccepted: form.consentRequired ? true : options.consent === true,
+      consentText: form.consentRequired ? form.consentText : "",
+      consentAt, submittedAt: now, ipHash: rateKey, status: shouldCreateLead ? "converted" : "new",
+      ...(leadRef ? { leadId: leadRef.id } : {})
     });
-    leadId = leadRef.id;
-    await submissionRef.set({ leadId, status: "converted" }, { merge: true });
-  }
-  return { accepted: true, successMessage: form.successMessage, submissionId: submissionRef.id, leadId };
+    if (leadRef) {
+      const stageName = stageSnapshot?.exists ? String(stageSnapshot.data()?.name || "New") : "New";
+      transaction.create(leadRef, {
+        title: `${form.name}: ${title}`.slice(0, 120), contactId: "", stageId: "new", stageName,
+        ownerUid: "", source: `lead_form:${formId}`, value: null, currency: "INR",
+        notes: Object.entries(values).map(([key, value]) => `${key}: ${value}`).join("\\n").slice(0, 2000),
+        customFields: {}, organizationId, createdAt: now, updatedAt: now,
+        createdBy: "lead_form", updatedBy: "lead_form", formSubmissionId: submissionRef.id
+      });
+    }
+    transaction.create(idempotencyRef, {
+      formId, response, createdAt: now, expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    });
+    return response;
+  });
 }
 
 module.exports = {
