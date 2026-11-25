@@ -42,18 +42,40 @@ function fakeDb() {
     return {
       doc(id) { return doc(path + "/" + (id || "generated_" + (++generated))); },
       where(field, operator, value) {
+        const filters = [{ field, operator, value }];
+        const orders = [];
+        let pageLimit = Infinity;
+        let cursorValues = null;
         const query = {
-          orderBy() { return query; },
-          limit() { return query; },
+          where(nextField, nextOperator, nextValue) { filters.push({ field: nextField, operator: nextOperator, value: nextValue }); return query; },
+          orderBy(orderField, direction = "asc") { orders.push({ field: orderField, direction }); return query; },
+          startAfter(...values) { cursorValues = values; return query; },
+          limit(value) { pageLimit = value; return query; },
           async get() {
             const prefix = path + "/";
-            const docs = [...records.entries()].filter(([key, data]) => {
-              if (!key.startsWith(prefix) || key.slice(prefix.length).includes("/")) return false;
-              if (operator === "==") return data[field] === value;
-              if (operator === "in") return value.includes(data[field]);
-              return false;
-            }).map(([key, data]) => ({ id: key.slice(prefix.length), data: () => data }));
-            return { docs };
+            let entries = [...records.entries()].filter(([key, data]) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/") &&
+              filters.every(filter => filter.operator === "==" ? data[filter.field] === filter.value :
+                filter.operator === "in" ? filter.value.includes(data[filter.field]) : false))
+              .map(([key, data]) => ({ id: key.slice(prefix.length), data: () => data }));
+            const valueOf = (item, field) => field === "__name__" ? item.id : item.data()?.[field];
+            entries.sort((a, b) => {
+              for (const order of orders) {
+                const av = valueOf(a, order.field), bv = valueOf(b, order.field);
+                const aa = av instanceof Date ? av.getTime() : String(av ?? "");
+                const bb = bv instanceof Date ? bv.getTime() : String(bv ?? "");
+                if (aa !== bb) return (aa < bb ? -1 : 1) * (order.direction === "desc" ? -1 : 1);
+              }
+              return 0;
+            });
+            if (cursorValues) {
+              const [createdAt, id] = cursorValues;
+              const timestamp = createdAt instanceof Date ? createdAt.getTime() : new Date(createdAt).getTime();
+              entries = entries.filter(item => {
+                const itemTime = new Date(item.data()?.createdAt).getTime();
+                return itemTime < timestamp || (itemTime === timestamp && item.id.localeCompare(id) < 0);
+              });
+            }
+            return { docs: entries.slice(0, pageLimit) };
           }
         };
         return query;
@@ -258,10 +280,11 @@ test("lists workspace-scoped webhook delivery history and replays only failed de
     lastError: "Endpoint returned HTTP 503.",
     createdAt: new Date("2026-11-24T10:00:00Z")
   });
-  const listed = await listOrganizationWebhookDeliveries(db, "org_a", 20);
-  assert.equal(listed.length, 1);
-  assert.equal(listed[0].event, "lead.created");
-  assert.equal(listed[0].status, "failed");
+  const listed = await listOrganizationWebhookDeliveries(db, "org_a", { limit: 20 });
+  assert.equal(listed.deliveries.length, 1);
+  assert.equal(listed.deliveries[0].event, "lead.created");
+  assert.equal(listed.deliveries[0].status, "failed");
+  assert.equal(listed.nextCursor, null);
   await assert.rejects(() => replayOrganizationWebhookDelivery(db, "org_b", deliveryId), { statusCode: 404 });
   const replayed = await replayOrganizationWebhookDelivery(db, "org_a", deliveryId, 2000);
   assert.deepEqual(replayed, { id: deliveryId, status: "pending" });
@@ -269,4 +292,35 @@ test("lists workspace-scoped webhook delivery history and replays only failed de
   assert.equal(stored.attempts, 0);
   assert.equal(stored.nextAttemptAt.getTime(), 2000);
   await assert.rejects(() => replayOrganizationWebhookDelivery(db, "org_a", deliveryId), { statusCode: 409 });
+});
+
+
+test("filters webhook deliveries and paginates with a stable cursor", async () => {
+  const { listOrganizationWebhookDeliveries } = require("../src/publicWebhooks");
+  const db = fakeDb();
+  const base = Date.parse("2026-11-25T10:00:00Z");
+  const rows = [
+    ["1".repeat(64), "failed", "lead.created", 0],
+    ["2".repeat(64), "delivered", "lead.created", 1],
+    ["3".repeat(64), "failed", "message.read", 2],
+    ["4".repeat(64), "failed", "lead.created", 3]
+  ];
+  for (const [id, status, event, offset] of rows) {
+    db.records.set("webhookDeliveryQueue/" + id, {
+      organizationId: "org_a", status, event, eventId: id, attempts: 1,
+      createdAt: new Date(base + offset * 1000)
+    });
+  }
+  db.records.set("webhookDeliveryQueue/" + "5".repeat(64), {
+    organizationId: "org_b", status: "failed", event: "lead.created", createdAt: new Date(base + 4000)
+  });
+  const first = await listOrganizationWebhookDeliveries(db, "org_a", { status: "failed", event: "lead.created", limit: 1 });
+  assert.equal(first.deliveries.length, 1);
+  assert.ok(first.nextCursor);
+  const second = await listOrganizationWebhookDeliveries(db, "org_a", { status: "failed", event: "lead.created", limit: 1, cursor: first.nextCursor });
+  assert.equal(second.deliveries.length, 1);
+  assert.notEqual(first.deliveries[0].id, second.deliveries[0].id);
+  assert.equal(second.nextCursor, null);
+  await assert.rejects(() => listOrganizationWebhookDeliveries(db, "org_a", { status: "invalid" }), { statusCode: 400 });
+  await assert.rejects(() => listOrganizationWebhookDeliveries(db, "org_a", { cursor: "not-a-cursor" }), { statusCode: 400 });
 });
