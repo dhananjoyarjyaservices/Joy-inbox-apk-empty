@@ -284,6 +284,7 @@ export interface OrganizationAutomationRule {
   priority: number;
   schedule?: { timezone: string; days: number[]; startTime: string; endTime: string };
   outOfOfficeMessage?: string;
+  outOfOfficeEnabled?: boolean;
   branches?: {
     name: string;
     conditions: { keyword: string; matchType: "contains" | "exact" | "starts_with" | "ends_with" | "not_contains" | "not_exact" }[];
