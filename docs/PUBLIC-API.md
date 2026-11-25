@@ -158,7 +158,7 @@ Every mutation requires a unique `Idempotency-Key`. State transitions are checke
 GET /public/v1/templates?phoneNumberId=PHONE_NUMBER_ID&wabaId=WABA_ID
 Authorization: Bearer YOUR_JOY_API_KEY
 ```
-Required scope: `templates:read`. Both IDs must belong to a connected WhatsApp number in the API key's workspace. The response returns template IDs, names, approval status, language, category and components. Meta pagination is indicated by `hasNext`; this endpoint currently returns the first page (up to 100 templates).
+Required scope: `templates:read`. Both IDs must belong to a connected WhatsApp number in the API key's workspace. The response returns template IDs, names, approval status, language, category and components. Set `limit` from 1–100 (default 50). When `pagination.nextCursor` is present, pass it as `cursor` with the same connected number and WABA ID to fetch the next page. `hasNext` indicates whether Meta reports another page.
 
 ## Sales CRM leads
 
