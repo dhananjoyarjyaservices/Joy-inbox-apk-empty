@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowDown, GitBranch, MessageSquareText, Play, Clock3 } from "lucide-react";
 
 type Condition = { keyword: string; matchType: string };
@@ -22,7 +23,7 @@ const matchLabel: Record<string, string> = {
   ends_with: "ends with", not_contains: "does not contain", not_exact: "does not exactly match"
 };
 
-function Node({ icon, title, subtitle, children }: { icon: React.ReactNode; title: string; subtitle?: string; children?: React.ReactNode }) {
+function Node({ icon, title, subtitle, children }: { icon: ReactNode; title: string; subtitle?: string; children?: ReactNode }) {
   return <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
     <div className="flex items-center gap-2"><span className="rounded-lg bg-[#e6f4f1] p-2 text-[#075e54]">{icon}</span><div className="min-w-0"><p className="text-xs font-semibold text-gray-800">{title}</p>{subtitle && <p className="text-[10px] text-gray-500">{subtitle}</p>}</div></div>
     {children && <div className="mt-2 space-y-1">{children}</div>}
