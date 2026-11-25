@@ -182,14 +182,23 @@ function matchesAutomationRule(rule, messageText) {
   return matchesKeyword(message, rule.keyword, rule.matchType);
 }
 
-function selectAutomationSteps(rule, messageText) {
+function selectAutomationBranch(rule, messageText) {
   const message = normalizeAutomationMatchText(messageText);
-  if (!message || !Array.isArray(rule?.branches)) return Array.isArray(rule?.steps) ? rule.steps : [];
-  const branch = rule.branches.find((item) => {
-    const results = item.conditions.map((condition) => matchesKeyword(message, condition.keyword, condition.matchType));
-    return item.conditionMode === "any" ? results.some(Boolean) : results.every(Boolean);
-  });
-  return branch ? branch.steps : (Array.isArray(rule.steps) ? rule.steps : []);
+  if (message && Array.isArray(rule?.branches)) {
+    const branchIndex = rule.branches.findIndex((item) => {
+      const results = item.conditions.map((condition) => matchesKeyword(message, condition.keyword, condition.matchType));
+      return item.conditionMode === "any" ? results.some(Boolean) : results.every(Boolean);
+    });
+    if (branchIndex >= 0) {
+      const branch = rule.branches[branchIndex];
+      return { branchName: String(branch.name || ""), branchIndex, steps: Array.isArray(branch.steps) ? branch.steps : [] };
+    }
+  }
+  return { branchName: null, branchIndex: null, steps: Array.isArray(rule?.steps) ? rule.steps : [] };
+}
+
+function selectAutomationSteps(rule, messageText) {
+  return selectAutomationBranch(rule, messageText).steps;
 }
 
 function isWithinAutomationSchedule(rule, instant = new Date()) {
@@ -231,5 +240,6 @@ module.exports = {
   matchesAutomationRule,
   findMatchingAutomationRule,
   isWithinAutomationSchedule,
-  selectAutomationSteps
+  selectAutomationSteps,
+  selectAutomationBranch
 };
