@@ -1299,9 +1299,10 @@ async function handlePublicLeadForm(event, formId, submit) {
   let body;
   try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   const forwarded = getHeader(event, "x-forwarded-for");
-  const ip = String(forwarded || event.requestContext?.http?.sourceIp || event.requestContext?.identity?.sourceIp || "unknown").split(",")[0].trim();
+  const ip = String(event.requestContext?.http?.sourceIp || event.requestContext?.identity?.sourceIp || forwarded || "unknown").split(",")[0].trim();
   const result = await submitPublicLeadForm(getDb(), formId, body.values, {
-    consent: body.consent === true, honeypot: body.website || "", ip
+    consent: body.consent === true, honeypot: body.website || "", ip,
+    idempotencyKey: getHeader(event, "idempotency-key")
   });
   return jsonResponse(event, 202, result);
 }
