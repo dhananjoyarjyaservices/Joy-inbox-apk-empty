@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-25  
 **Audited branch:** `feature/saas-foundation`  
-**Audited code head:** `4ec13e09286707eda075901fbb0bd4947644aa3e`  
+**Audited code head:** `57d8aad9d7a7e6d3d41cd5d56625be9d66f8234c`  
 **Scope:** Repository code and automated-test evidence only. This is not a live-provider acceptance test.
 
 ## Executive finding
@@ -39,7 +39,7 @@ Legend:
 | Payment links / WhatsApp Pay / order management | Missing | Stripe is for Joy Inbox subscription billing, not customer checkout or WhatsApp-native commerce. |
 | Greeting / welcome automation | Implemented (code) | Tenant greeting settings and inbound webhook trigger. |
 | Out-of-office, delayed reply and FAQ automation | Partial | Greeting plus keyword-triggered rules exist, with up to five ALL/ANY trigger conditions, six match operators, timezone-aware weekday/time windows, and up to five conditional reply branches with separate reply sequences. The tenant automation screen now exposes schedule and basic branch editing. Full OOO state management, FAQ knowledge base, visual canvas/drag-and-drop builder, and richer delay controls remain incomplete. |
-| Visual no-code chatbot builder, branching, API calls and intent routing | Partial / missing | Backend and tenant automation UI support up to five ALL/ANY keyword trigger conditions (`contains`, `exact`, `starts_with`, `ends_with`, `not_contains`, `not_exact`), priority ordering, timezone-aware weekday/time schedules, and up to five ordered conditional branches, each with its own conditions and up to five delayed reply steps. The UI currently provides form-based branch editing with 1–5 conditions (ALL/ANY) and 1–5 delayed reply steps per branch, not a visual canvas. Execution history records the selected branch and per-step queued/sent/failed/uncertain/skipped outcomes. Still missing: drag-and-drop no-code canvas, API/action nodes, FAQ knowledge base and intent routing. |
+| Visual no-code chatbot builder, branching, API calls and intent routing | Partial / missing | Backend and tenant automation UI support up to five ALL/ANY keyword trigger conditions (`contains`, `exact`, `starts_with`, `ends_with`, `not_contains`, `not_exact`), priority ordering, timezone-aware weekday/time schedules, and up to five ordered conditional branches, each with its own conditions and up to five delayed reply steps. The UI provides form-based branch editing with 1–5 conditions (ALL/ANY) and 1–5 delayed reply steps per branch, plus a synchronized read-only workflow diagram that previews trigger, schedule, branch and reply paths as the form changes. This preview is not a drag-and-drop canvas: nodes cannot be moved, connected or edited directly on the diagram. Execution history records the selected branch and per-step queued/sent/failed/uncertain/skipped outcomes. Still missing: interactive drag-and-drop canvas and graph editing, API/action nodes, FAQ knowledge base and intent routing. |
 | Campaigns/broadcasts and consent safeguards | Implemented (code) | Draft/schedule/pause/cancel, approved-template revalidation, opt-in evidence, STOP/START suppression, delivery reconciliation. Provider acceptance remains pending. |
 | Campaign click/conversion attribution and advanced segmentation | Partial | Delivery/read/failure reporting exists; no complete click/conversion attribution or advanced campaign segmentation found. |
 | SLA monitoring and agent performance | Implemented (code) | SLA settings/worker, notifications and historical agent response metrics. |
