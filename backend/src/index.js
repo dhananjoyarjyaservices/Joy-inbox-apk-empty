@@ -230,7 +230,13 @@ async function handleWhatsAppTemplates(event) {
   const version = process.env.GRAPH_API_VERSION || "v26.0";
   const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
   url.searchParams.set("fields", "id,name,status,language,category,components");
-  url.searchParams.set("limit", "100");
+  const limit = params.limit === undefined ? 50 : Number(params.limit);
+  const cursor = typeof params.cursor === "string" ? params.cursor.trim() : "";
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100 || cursor.length > 512 || (cursor && !/^[A-Za-z0-9_-]+$/.test(cursor))) {
+    return jsonResponse(event, 400, { error: "Template limit must be 1–100 and cursor must be a valid Meta paging cursor." });
+  }
+  url.searchParams.set("limit", String(limit));
+  if (cursor) url.searchParams.set("after", cursor);
   const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -469,6 +475,7 @@ async function handlePublicApiTemplates(event) {
       language: String(item.language || ""), category: String(item.category || ""),
       components: Array.isArray(item.components) ? item.components : []
     })) : [],
+    pagination: { nextCursor: typeof payload.paging?.cursors?.after === "string" && payload.paging?.next ? payload.paging.cursors.after : null },
     hasNext: Boolean(payload.paging?.next)
   });
 }
