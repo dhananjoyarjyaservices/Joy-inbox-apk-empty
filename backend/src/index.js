@@ -1324,6 +1324,7 @@ async function handleTenantContactMerge(event) {
   const organization = await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "contacts:manage");
   const result = await mergeTenantContacts(getDb(), organization.id, body.sourceId, body.targetId);
+  await organization.ref.collection("contactMergeAudit").add({ sourceId: body.sourceId, targetId: body.targetId, targetName: result.item.name, mergedLeadCount: result.mergedLeadCount, actorUid: decoded.uid, createdAt: new Date() });
   await enqueueOrganizationWebhookEvent(getDb(), organization.id, "contact.upserted",
     `contact-merge:${result.item.id}:${crypto.randomUUID()}`,
     { id: result.item.id, name: result.item.name, phone: result.item.phone, email: result.item.email, tags: result.item.tags, source: result.item.source }
