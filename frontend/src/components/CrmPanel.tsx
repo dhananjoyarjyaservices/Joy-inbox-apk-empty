@@ -221,7 +221,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
             .flatMap(field => {
               const raw = record[field.key] ?? record[`custom_${field.key}`] ?? "";
               if (raw === "") return [];
-              if (field.type === "number") return [[field.key, Number(raw)]];
+              if (field.type === "number") { const parsed = Number(raw); return [[field.key, Number.isFinite(parsed) ? parsed : raw]]; }
               if (field.type === "boolean") {
                 const normalized = raw.trim().toLowerCase();
                 const parsed = normalized === "true" || normalized === "yes" || normalized === "1"
