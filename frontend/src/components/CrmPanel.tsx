@@ -19,6 +19,12 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const [savedFilters, setSavedFilters] = useState<CrmSavedFilter[]>([]);
   const [savedFilterName, setSavedFilterName] = useState("");
   const [selectedSavedFilterId, setSelectedSavedFilterId] = useState("");
+  const [filterStageId, setFilterStageId] = useState("");
+  const [filterOwnerUid, setFilterOwnerUid] = useState("");
+  const [filterSource, setFilterSource] = useState("");
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterMinValue, setFilterMinValue] = useState("");
+  const [filterMaxValue, setFilterMaxValue] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -88,16 +94,31 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     };
   }, [leads]);
   const visibleLeads = useMemo(() => {
-    if (followUpFilter === "all") return leads;
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const startOfTomorrow = startOfToday + 24 * 60 * 60 * 1000;
+    const minValue = filterMinValue.trim() ? Number(filterMinValue) : null;
+    const maxValue = filterMaxValue.trim() ? Number(filterMaxValue) : null;
+    const search = filterSearch.trim().toLowerCase();
     return leads.filter(lead => {
-      if (!lead.nextFollowUpAt) return false;
-      const due = new Date(lead.nextFollowUpAt).getTime();
-      return followUpFilter === "overdue" ? due < now.getTime() : due >= now.getTime() && due >= startOfToday && due < startOfTomorrow;
+      if (followUpFilter !== "all") {
+        if (!lead.nextFollowUpAt && followUpFilter !== "none") return false;
+        const due = lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).getTime() : null;
+        if (followUpFilter === "none" && due !== null) return false;
+        if (followUpFilter === "overdue" && (due === null || due >= now.getTime())) return false;
+        if (followUpFilter === "today" && (due === null || due < startOfToday || due >= startOfTomorrow)) return false;
+        if (followUpFilter === "upcoming" && (due === null || due < startOfTomorrow)) return false;
+      }
+      if (filterStageId && lead.stageId !== filterStageId) return false;
+      if (filterOwnerUid === "__unassigned" && lead.ownerUid) return false;
+      if (filterOwnerUid && filterOwnerUid !== "__unassigned" && lead.ownerUid !== filterOwnerUid) return false;
+      if (filterSource && lead.source.toLowerCase() !== filterSource.toLowerCase()) return false;
+      if (minValue !== null && (lead.value === null || lead.value < minValue)) return false;
+      if (maxValue !== null && (lead.value === null || lead.value > maxValue)) return false;
+      if (search && ![lead.title, lead.source, lead.notes].some(value => String(value || "").toLowerCase().includes(search))) return false;
+      return true;
     });
-  }, [followUpFilter, leads]);
+  }, [followUpFilter, leads, filterStageId, filterOwnerUid, filterSource, filterSearch, filterMinValue, filterMaxValue]);
   const grouped = useMemo(() => activeStages.map(stage => ({ stage, leads: visibleLeads.filter(lead => lead.stageId === stage.id) })), [activeStages, visibleLeads]);
 
   async function saveCurrentFilter(event: FormEvent) {
@@ -106,8 +127,9 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     setSaving(true); setError("");
     try {
       const item = await saveCrmSavedFilter(organizationId, {
-        name: savedFilterName.trim(), stageId: "", ownerUid: "", source: "",
-        followUp: followUpFilter, minValue: null, maxValue: null, search: "", shared: false
+        name: savedFilterName.trim(), stageId: filterStageId, ownerUid: filterOwnerUid, source: filterSource,
+        followUp: followUpFilter, minValue: filterMinValue.trim() ? Number(filterMinValue) : null,
+        maxValue: filterMaxValue.trim() ? Number(filterMaxValue) : null, search: filterSearch, shared: false
       });
       setSavedFilters(current => [item, ...current]);
       setSelectedSavedFilterId(item.id);
@@ -129,7 +151,15 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   function applySavedFilter(id: string) {
     setSelectedSavedFilterId(id);
     const filter = savedFilters.find(item => item.id === id);
-    if (filter) setFollowUpFilter(filter.followUp === "all" ? "all" : filter.followUp === "overdue" ? "overdue" : filter.followUp === "today" ? "today" : "all");
+    if (filter) {
+      setFollowUpFilter(filter.followUp);
+      setFilterStageId(filter.stageId || "");
+      setFilterOwnerUid(filter.ownerUid || "");
+      setFilterSource(filter.source || "");
+      setFilterSearch(filter.search || "");
+      setFilterMinValue(filter.minValue === null ? "" : String(filter.minValue));
+      setFilterMaxValue(filter.maxValue === null ? "" : String(filter.maxValue));
+    }
   }
 
   async function importCsvFile(file?: File) {
@@ -339,10 +369,20 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
           <span className="block text-[10px] font-medium uppercase tracking-wide text-amber-700">Due later today</span><strong className="mt-1 block text-xl text-amber-800">{followUpCounts.today}</strong>
         </button>
       </div>
-      <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border bg-white p-3">
-        <label className="min-w-0 flex-1 text-xs text-gray-600">Saved CRM views<select value={selectedSavedFilterId} onChange={event => applySavedFilter(event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm"><option value="">Choose saved view</option>{savedFilters.map(filter => <option key={filter.id} value={filter.id}>{filter.name}{filter.shared ? " · Shared" : ""}</option>)}</select></label>
-        <form onSubmit={saveCurrentFilter} className="flex min-w-0 flex-1 gap-2"><input aria-label="Saved view name" value={savedFilterName} onChange={event => setSavedFilterName(event.target.value)} maxLength={60} placeholder="Name current view" className="min-w-0 flex-1 rounded-lg border p-2 text-xs"/><button disabled={saving || !savedFilterName.trim()} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Save view</button></form>
-        {selectedSavedFilterId && <button type="button" onClick={() => void removeSavedFilter(selectedSavedFilterId)} disabled={saving} className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 disabled:opacity-50">Delete view</button>}
+      <div className="mb-3 space-y-2 rounded-xl border bg-white p-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="min-w-0 flex-1 text-xs text-gray-600">Saved CRM views<select value={selectedSavedFilterId} onChange={event => applySavedFilter(event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm"><option value="">Choose saved view</option>{savedFilters.map(filter => <option key={filter.id} value={filter.id}>{filter.name}{filter.shared ? " · Shared" : ""}</option>)}</select></label>
+          <form onSubmit={saveCurrentFilter} className="flex min-w-0 flex-1 gap-2"><input aria-label="Saved view name" value={savedFilterName} onChange={event => setSavedFilterName(event.target.value)} maxLength={60} placeholder="Name current view" className="min-w-0 flex-1 rounded-lg border p-2 text-xs"/><button disabled={saving || !savedFilterName.trim()} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Save view</button></form>
+          {selectedSavedFilterId && <button type="button" onClick={() => void removeSavedFilter(selectedSavedFilterId)} disabled={saving} className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 disabled:opacity-50">Delete view</button>}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <input aria-label="Search leads" value={filterSearch} onChange={event => setFilterSearch(event.target.value)} placeholder="Search title, source, notes" className="rounded-lg border p-2 text-xs"/>
+          <select aria-label="Filter by stage" value={filterStageId} onChange={event => setFilterStageId(event.target.value)} className="rounded-lg border bg-white p-2 text-xs"><option value="">All stages</option>{activeStages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}</select>
+          <select aria-label="Filter by owner" value={filterOwnerUid} onChange={event => setFilterOwnerUid(event.target.value)} className="rounded-lg border bg-white p-2 text-xs"><option value="">All owners</option><option value="__unassigned">Unassigned</option>{members.filter(member => member.status === "active").map(member => <option key={member.uid} value={member.uid}>{member.displayName || member.email || member.uid}</option>)}</select>
+          <input aria-label="Filter by source" value={filterSource} onChange={event => setFilterSource(event.target.value)} placeholder="Exact lead source" className="rounded-lg border p-2 text-xs"/>
+          <input aria-label="Minimum deal value" type="number" min="0" value={filterMinValue} onChange={event => setFilterMinValue(event.target.value)} placeholder="Min deal value" className="rounded-lg border p-2 text-xs"/>
+          <input aria-label="Maximum deal value" type="number" min="0" value={filterMaxValue} onChange={event => setFilterMaxValue(event.target.value)} placeholder="Max deal value" className="rounded-lg border p-2 text-xs"/>
+        </div>
       </div>
       {followUpFilter !== "all" && <div className="mb-3 flex items-center justify-between text-xs text-gray-500"><span>Showing {followUpFilter === "overdue" ? "overdue follow-ups" : "follow-ups due later today"}</span><button type="button" onClick={() => setFollowUpFilter("all")} className="font-semibold text-[#075e54]">Show all leads</button></div>}
       <form onSubmit={submitLead} className="mb-5 grid gap-2 rounded-xl border bg-white p-4 sm:grid-cols-4">
