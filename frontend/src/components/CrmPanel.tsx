@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus, RefreshCw, BriefcaseBusiness, Trash2, Pencil, Upload, History } from "lucide-react";
 import {
-  listCrmFields, listCrmLeads, listCrmLeadActivity, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead, importCrmLeads, getCrmSalesReport,
+  listCrmFields, listCrmLeads, listCrmLeadActivity, listCrmStages, saveCrmField, saveCrmLead, saveCrmStage, deleteCrmLead, importCrmLeads, getCrmSalesReport, listCrmSavedFilters, saveCrmSavedFilter, deleteCrmSavedFilter,
   type CrmSalesReport, type CrmLeadActivity,
-  type CrmField, type CrmLead, type CrmStage
+  type CrmField, type CrmLead, type CrmStage, type CrmSavedFilter
 } from "../services/crm";
 
 import { saveTenantContact, type TenantContact } from "../services/tenantResources";
@@ -16,6 +16,9 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const [stages, setStages] = useState<CrmStage[]>([]);
   const [leads, setLeads] = useState<CrmLead[]>([]);
   const [salesReport, setSalesReport] = useState<CrmSalesReport | null>(null);
+  const [savedFilters, setSavedFilters] = useState<CrmSavedFilter[]>([]);
+  const [savedFilterName, setSavedFilterName] = useState("");
+  const [selectedSavedFilterId, setSelectedSavedFilterId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -46,10 +49,10 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const [nextFields, nextStages, nextLeads, nextReport] = await Promise.all([
-        listCrmFields(organizationId), listCrmStages(organizationId), listCrmLeads(organizationId), getCrmSalesReport(organizationId)
+      const [nextFields, nextStages, nextLeads, nextReport, nextSavedFilters] = await Promise.all([
+        listCrmFields(organizationId), listCrmStages(organizationId), listCrmLeads(organizationId), getCrmSalesReport(organizationId), listCrmSavedFilters(organizationId)
       ]);
-      setFields(nextFields); setStages(nextStages); setLeads(nextLeads); setSalesReport(nextReport);
+      setFields(nextFields); setStages(nextStages); setLeads(nextLeads); setSalesReport(nextReport); setSavedFilters(nextSavedFilters);
       setCustomValues(current => {
         const next = { ...current };
         nextFields.filter(field => field.active && field.type === "boolean").forEach(field => { if (next[field.key] === undefined) next[field.key] = false; });
@@ -96,6 +99,38 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     });
   }, [followUpFilter, leads]);
   const grouped = useMemo(() => activeStages.map(stage => ({ stage, leads: visibleLeads.filter(lead => lead.stageId === stage.id) })), [activeStages, visibleLeads]);
+
+  async function saveCurrentFilter(event: FormEvent) {
+    event.preventDefault();
+    if (!savedFilterName.trim()) return;
+    setSaving(true); setError("");
+    try {
+      const item = await saveCrmSavedFilter(organizationId, {
+        name: savedFilterName.trim(), stageId: "", ownerUid: "", source: "",
+        followUp: followUpFilter, minValue: null, maxValue: null, search: "", shared: false
+      });
+      setSavedFilters(current => [item, ...current]);
+      setSelectedSavedFilterId(item.id);
+      setSavedFilterName("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Saved filter could not be saved."); }
+    finally { setSaving(false); }
+  }
+
+  async function removeSavedFilter(id: string) {
+    setSaving(true); setError("");
+    try {
+      await deleteCrmSavedFilter(organizationId, id);
+      setSavedFilters(current => current.filter(filter => filter.id !== id));
+      if (selectedSavedFilterId === id) setSelectedSavedFilterId("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Saved filter could not be deleted."); }
+    finally { setSaving(false); }
+  }
+
+  function applySavedFilter(id: string) {
+    setSelectedSavedFilterId(id);
+    const filter = savedFilters.find(item => item.id === id);
+    if (filter) setFollowUpFilter(filter.followUp === "all" ? "all" : filter.followUp === "overdue" ? "overdue" : filter.followUp === "today" ? "today" : "all");
+  }
 
   async function importCsvFile(file?: File) {
     if (!file) return;
@@ -303,6 +338,11 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
         <button type="button" onClick={() => setFollowUpFilter("today")} aria-pressed={followUpFilter === "today"} className={`rounded-xl border p-3 text-left ${followUpFilter === "today" ? "border-amber-400 bg-amber-50" : "bg-white"}`}>
           <span className="block text-[10px] font-medium uppercase tracking-wide text-amber-700">Due later today</span><strong className="mt-1 block text-xl text-amber-800">{followUpCounts.today}</strong>
         </button>
+      </div>
+      <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border bg-white p-3">
+        <label className="min-w-0 flex-1 text-xs text-gray-600">Saved CRM views<select value={selectedSavedFilterId} onChange={event => applySavedFilter(event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm"><option value="">Choose saved view</option>{savedFilters.map(filter => <option key={filter.id} value={filter.id}>{filter.name}{filter.shared ? " · Shared" : ""}</option>)}</select></label>
+        <form onSubmit={saveCurrentFilter} className="flex min-w-0 flex-1 gap-2"><input aria-label="Saved view name" value={savedFilterName} onChange={event => setSavedFilterName(event.target.value)} maxLength={60} placeholder="Name current view" className="min-w-0 flex-1 rounded-lg border p-2 text-xs"/><button disabled={saving || !savedFilterName.trim()} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Save view</button></form>
+        {selectedSavedFilterId && <button type="button" onClick={() => void removeSavedFilter(selectedSavedFilterId)} disabled={saving} className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 disabled:opacity-50">Delete view</button>}
       </div>
       {followUpFilter !== "all" && <div className="mb-3 flex items-center justify-between text-xs text-gray-500"><span>Showing {followUpFilter === "overdue" ? "overdue follow-ups" : "follow-ups due later today"}</span><button type="button" onClick={() => setFollowUpFilter("all")} className="font-semibold text-[#075e54]">Show all leads</button></div>}
       <form onSubmit={submitLead} className="mb-5 grid gap-2 rounded-xl border bg-white p-4 sm:grid-cols-4">
