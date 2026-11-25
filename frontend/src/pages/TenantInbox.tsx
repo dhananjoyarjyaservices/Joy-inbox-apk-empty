@@ -373,6 +373,29 @@ export default function TenantInbox() {
     return () => { active = false; };
   }, [organization?.id, organization?.role, view]);
 
+  useEffect(() => {
+    if (!organization || view !== "automation" || !["owner", "admin"].includes(organization.role)) return;
+    let active = true;
+    const refreshExecutionStatus = async () => {
+      try {
+        const [runs, queueHealth] = await Promise.all([
+          listOrganizationAutomationRuns(organization.id),
+          getOrganizationAutomationQueueHealth(organization.id)
+        ]);
+        if (!active) return;
+        setAutomationRuns(runs);
+        setAutomationQueueHealth(queueHealth);
+      } catch {
+        // Keep the last known history visible when a background refresh fails.
+      }
+    };
+    const intervalId = window.setInterval(() => { void refreshExecutionStatus(); }, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [organization?.id, organization?.role, view]);
+
 
   useEffect(() => {
     if (!organization) { setPushDevices([]); setNotificationDeliveries([]); return; }
