@@ -1,0 +1,53 @@
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { countTemplatePlaceholders, buildPublicTemplateComponents } = require("../src/publicTemplateMessages");
+
+const approved = {
+  status: "APPROVED",
+  components: [
+    { type: "HEADER", format: "TEXT", text: "Hello {{1}}" },
+    { type: "BODY", text: "Your order {{1}} is ready for {{2}}." },
+    { type: "BUTTONS", buttons: [
+      { type: "URL", url: "https://example.com/orders/{{1}}", text: "Track" },
+      { type: "QUICK_REPLY", text: "Help" }
+    ] }
+  ]
+};
+
+test("counts numbered template placeholders using the highest index", () => {
+  assert.equal(countTemplatePlaceholders("{{1}} and {{3}}"), 3);
+  assert.equal(countTemplatePlaceholders("No variables"), 0);
+});
+
+test("builds approved public template body, header and URL button components", () => {
+  const components = buildPublicTemplateComponents(approved, {
+    headerVariables: ["Customer"],
+    variables: ["A-100", "today"],
+    buttonVariables: ["A-100"]
+  });
+  assert.deepEqual(components, [
+    { type: "header", parameters: [{ type: "text", text: "Customer" }] },
+    { type: "body", parameters: [{ type: "text", text: "A-100" }, { type: "text", text: "today" }] },
+    { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "A-100" }] }
+  ]);
+});
+
+test("rejects unapproved templates and mismatched variable counts", () => {
+  assert.throws(() => buildPublicTemplateComponents({ ...approved, status: "PENDING" }), { statusCode: 400 });
+  assert.throws(() => buildPublicTemplateComponents(approved, { variables: ["one"] }), /do not match/);
+  assert.throws(() => buildPublicTemplateComponents(approved, { variables: ["one", "two"], headerVariables: ["header"], buttonVariables: ["x", "y"] }), /do not match/);
+});
+
+test("rejects media-header templates in the text-template endpoint", () => {
+  assert.throws(() => buildPublicTemplateComponents({
+    status: "APPROVED",
+    components: [{ type: "HEADER", format: "IMAGE" }, { type: "BODY", text: "Hello" }]
+  }), /Media-header/);
+});
+
+test("rejects malformed template variable values", () => {
+  assert.throws(() => buildPublicTemplateComponents(approved, { variables: [""] }), /non-empty strings/);
+  assert.throws(() => buildPublicTemplateComponents(approved, { variables: ["x".repeat(1025), "ok"] }), /non-empty strings/);
+});
