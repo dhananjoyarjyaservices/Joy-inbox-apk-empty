@@ -92,7 +92,7 @@ const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
 const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
-const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, canAccessCrmLead, normalizeCrmLead } = require("./crm");
+const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmSavedFilter, canAccessCrmLead, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const {
@@ -1100,6 +1100,46 @@ async function handleTenantCrmActivity(event) {
     return jsonResponse(event, 403, { error: "Agents can only view activity for leads assigned to them." });
   }
   return jsonResponse(event, 200, { activities });
+}
+
+async function handleTenantCrmSavedFilters(event) {
+  const method = getMethod(event);
+  const decoded = await authenticateUser(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "contacts:manage");
+  const collection = organization.ref.collection("crmSavedFilters");
+  if (method === "GET") {
+    const snapshot = await collection.orderBy("updatedAt", "desc").limit(100).get();
+    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(item => item.shared === true || item.createdBy === decoded.uid);
+    return jsonResponse(event, 200, { items });
+  }
+  if (method === "POST") {
+    const definition = normalizeCrmSavedFilter(body.data);
+    const now = new Date();
+    const ref = collection.doc();
+    await ref.create({ ...definition, createdBy: decoded.uid, createdAt: now, updatedAt: now });
+    return jsonResponse(event, 201, { item: { id: ref.id, ...definition, createdBy: decoded.uid, createdAt: now.toISOString(), updatedAt: now.toISOString() } });
+  }
+  if (method === "DELETE") {
+    const id = String(body.resourceId || "");
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return jsonResponse(event, 400, { error: "A valid saved filter ID is required." });
+    const ref = collection.doc(id);
+    const snapshot = await ref.get();
+    if (!snapshot.exists) return jsonResponse(event, 404, { error: "Saved filter was not found." });
+    if (snapshot.data()?.createdBy !== decoded.uid && !["owner", "admin"].includes(organization.role)) {
+      return jsonResponse(event, 403, { error: "Only the creator or a workspace admin can delete this saved filter." });
+    }
+    await ref.delete();
+    return jsonResponse(event, 200, { success: true });
+  }
+  return jsonResponse(event, 405, { error: "Method not allowed." });
 }
 
 async function handleTenantCrm(event, resource) {
@@ -4213,6 +4253,10 @@ exports.handler = async (event) => {
     }
   }
 
+  if (["GET", "POST", "DELETE"].includes(method) && path.endsWith("/organizations/crm/saved-filters")) {
+    try { return await handleTenantCrmSavedFilters(event); }
+    catch (error) { return jsonResponse(event, error.statusCode || 500, { error: error.message || "CRM saved filters could not be loaded." }); }
+  }
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && ["/organizations/crm/fields", "/organizations/crm/stages", "/organizations/crm/leads"].some(suffix => path.endsWith(suffix))) {
     const resource = path.endsWith("/fields") ? "fields" : path.endsWith("/stages") ? "stages" : "leads";
     try { return await handleTenantCrm(event, resource); }
