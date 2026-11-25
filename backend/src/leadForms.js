@@ -125,11 +125,11 @@ async function getPublicLeadForm(db, formId) {
   const organizationRef = db.collection("organizations").doc(organizationId);
   const snapshot = await organizationRef.collection("leadForms").doc(formId).get();
   if (!snapshot.exists || snapshot.data()?.enabled === false || snapshot.data()?.deletedAt) throw formError("This form is unavailable.", 404);
-  return { organizationId, organizationRef, form: safePublicForm(formId, snapshot.data()) };
+  return { organizationId, organizationRef, form: safePublicForm(formId, snapshot.data()), createLead: snapshot.data()?.createLead !== false };
 }
 
 async function submitPublicLeadForm(db, formId, input, options = {}) {
-  const { organizationId, organizationRef, form } = await getPublicLeadForm(db, formId);
+  const { organizationId, organizationRef, form, createLead } = await getPublicLeadForm(db, formId);
   if (typeof options.honeypot === "string" && options.honeypot.trim()) return { accepted: true, successMessage: form.successMessage, spam: true };
   const values = normalizeSubmission(form, input);
   if (form.consentRequired && options.consent !== true) throw formError("Please accept the consent statement before submitting.", 400);
@@ -143,7 +143,7 @@ async function submitPublicLeadForm(db, formId, input, options = {}) {
   const rateRef = db.collection("publicFormRateLimits").doc(`${rateKey}_${bucket}`);
   const idempotencyRef = db.collection("publicFormIdempotency").doc(idempotencyHash);
   const submissionRef = organizationRef.collection("leadFormSubmissions").doc();
-  const shouldCreateLead = form.createLead;
+  const shouldCreateLead = createLead;
   const nameField = form.fields.find(field => /name/i.test(field.key));
   const emailField = form.fields.find(field => field.type === "email");
   const title = String(values[nameField?.key] || values[emailField?.key] || form.name).slice(0, 120);
@@ -178,7 +178,7 @@ async function submitPublicLeadForm(db, formId, input, options = {}) {
       transaction.create(leadRef, {
         title: `${form.name}: ${title}`.slice(0, 120), contactId: "", stageId: "new", stageName,
         ownerUid: "", source: `lead_form:${formId}`, value: null, currency: "INR",
-        notes: Object.entries(values).map(([key, value]) => `${key}: ${value}`).join("\\n").slice(0, 2000),
+        notes: Object.entries(values).map(([key, value]) => `${key}: ${value}`).join("\n").slice(0, 2000),
         customFields: {}, organizationId, createdAt: now, updatedAt: now,
         createdBy: "lead_form", updatedBy: "lead_form", formSubmissionId: submissionRef.id
       });
