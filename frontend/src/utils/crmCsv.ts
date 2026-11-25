@@ -5,7 +5,7 @@ export type CrmCsvLead = {
   contactId: string;
   ownerUid: string;
   source: string;
-  value: number | null;
+  value: number | string | null;
   currency: string;
   nextFollowUpAt: string | null;
   notes: string;
@@ -81,7 +81,7 @@ export function parseCrmCsv(source: string, fields: CrmCsvField[] = []): CrmCsvL
       contactId: record.contact_id || "",
       ownerUid: record.owner_uid || "",
       source: record.source || "",
-      value: record.value ? Number(record.value) : null,
+      value: record.value ? (Number.isFinite(Number(record.value)) ? Number(record.value) : record.value) : null,
       currency: record.currency || "INR",
       nextFollowUpAt: record.next_follow_up_at || null,
       notes: record.notes || "",
