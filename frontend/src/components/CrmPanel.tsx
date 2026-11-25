@@ -203,6 +203,8 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
       if (rows.length < 2) throw new Error("CSV must contain a header and at least one lead row.");
       const headers = rows[0].map(value => value.trim().toLowerCase().replace(/[\s-]+/g, "_"));
       if (!headers.includes("title")) throw new Error('CSV needs a "title" column.');
+      if (new Set(headers).size !== headers.length) throw new Error("CSV contains duplicate column headers.");
+      if (rows.slice(1).some(values => values.length > headers.length)) throw new Error("CSV contains a row with more values than the header columns.");
       const importedRows = rows.slice(1).map(values => {
         const record: Record<string, string> = {};
         headers.forEach((header, index) => { record[header] = values[index] || ""; });
