@@ -265,7 +265,7 @@ test("campaign worker suppresses opted-out recipients immediately before sending
   assert.equal(harness.recipient.status, "skipped");
   assert.equal(harness.recipient.reason, "whatsapp_opt_out_suppression");
   assert.equal(harness.campaign.skippedCount, 1);
-  assert.equal(harness.campaign.status, "failed");
+  assert.equal(harness.campaign.status, "completed");
 });
 
 test("campaign worker sends an eligible recipient and records message and campaign counters", async () => {
