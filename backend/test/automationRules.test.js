@@ -317,6 +317,20 @@ test("validates out-of-office fallback replies and requires a schedule", () => {
   assert.throws(() => normalizeAutomationRule({ ...base, outOfOfficeMessage: 12 }), { statusCode: 400 });
 });
 
+test("allows out-of-office replies to be paused independently from keyword automation", () => {
+  const base = {
+    name: "Support", keyword: "support", response: "A teammate will help.",
+    schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" },
+    outOfOfficeMessage: "We are away."
+  };
+  const enabled = normalizeAutomationRule(base);
+  assert.equal(enabled.outOfOfficeEnabled, true);
+  const paused = normalizeAutomationRule({ ...base, outOfOfficeEnabled: false });
+  assert.equal(paused.outOfOfficeEnabled, false);
+  assert.equal(findMatchingOutOfOfficeRule([{ ...paused, id: "support" }], "I need support", new Date("2026-11-25T15:00:00Z")), null);
+  assert.throws(() => normalizeAutomationRule({ ...base, outOfOfficeEnabled: "no" }), { statusCode: 400 });
+});
+
 test("selects an out-of-office fallback only outside its configured local hours", () => {
   const rule = normalizeAutomationRule({
     name: "Support", keyword: "support", response: "A teammate will help.",
