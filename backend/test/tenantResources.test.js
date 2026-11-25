@@ -256,3 +256,18 @@ test("tenant contact custom fields survive ordinary edits that do not submit cus
   await saveTenantResource(db, "org_a", "contacts", { name: "Alex Updated", phone: "+919876543210" }, id);
   assert.deepEqual(db.records.get(`organizations/org_a/contacts/${id}`).customFields, { company: "Acme" });
 });
+
+
+test("changing a contact phone preserves existing CRM custom field values", async () => {
+  const { saveTenantResource } = require("../src/tenantResources");
+  const oldId = "919876543210";
+  const newId = "919876543211";
+  const customFields = { company: "Acme", vip: true };
+  const db = tenantResourceDb({
+    [`organizations/org_a/contacts/${oldId}`]: {
+      name: "Alex", phone: "+919876543210", customFields, createdAt: new Date("2026-01-01T00:00:00Z")
+    }
+  });
+  await saveTenantResource(db, "org_a", "contacts", { name: "Alex", phone: "+919876543211" }, oldId);
+  assert.deepEqual(db.records.get(`organizations/org_a/contacts/${newId}`).customFields, customFields);
+});
