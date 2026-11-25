@@ -188,7 +188,7 @@ async function submitPublicLeadForm(db, formId, input, options = {}) {
       const tags = [...new Set([...(Array.isArray(previous.tags) ? previous.tags : []), "Lead form"])].slice(0, 20);
       transaction.set(contactRef, {
         name: contactName, phone, phoneId: contactRef.id, email: email || String(previous.email || ""),
-        notes: contactNotes || String(previous.notes || ""), source: previous.source || "local",
+        notes: [String(previous.notes || ""), contactNotes].filter(Boolean).join("\n").slice(-1000), source: previous.source || "local",
         tags, createdAt: previous.createdAt || now, updatedAt: now
       }, { merge: true });
       contactId = contactRef.id;
