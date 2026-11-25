@@ -219,3 +219,40 @@ test("public contacts use stable cursor pagination and reject invalid cursors or
   await assert.rejects(() => listPublicContacts(db, "org_a", 101), { statusCode: 400 });
   await assert.rejects(() => listPublicContacts(db, "org_a", 10, "bad-cursor"), { statusCode: 400 });
 });
+
+
+test("tenant contacts persist typed CRM custom fields without requiring lead-only required fields", () => {
+  const definitions = [
+    { key: "company", label: "Company", type: "text", required: true, active: true },
+    { key: "budget", label: "Budget", type: "number", active: true },
+    { key: "vip", label: "VIP", type: "boolean", active: true },
+    { key: "segment", label: "Segment", type: "select", options: ["Retail", "Wholesale"], active: true }
+  ];
+  const contact = contactInput({
+    name: "Alex", phone: "+919876543210",
+    customFields: { company: "Acme", budget: 12500, vip: true, segment: "Wholesale" }
+  }, definitions);
+  assert.deepEqual(contact.customFields, { company: "Acme", budget: 12500, vip: true, segment: "Wholesale" });
+  assert.deepEqual(contactInput({ name: "Sam", phone: "+919876543211", customFields: {} }, definitions).customFields, {});
+  assert.throws(() => contactInput({
+    name: "Alex", phone: "+919876543210", customFields: { budget: "not-a-number" }
+  }, definitions), { statusCode: 400 });
+  assert.throws(() => contactInput({
+    name: "Alex", phone: "+919876543210", customFields: { segment: "Unknown" }
+  }, definitions), { statusCode: 400 });
+  assert.throws(() => contactInput({
+    name: "Alex", phone: "+919876543210", customFields: { unexpected: "value" }
+  }, definitions), { statusCode: 400 });
+});
+
+test("tenant contact custom fields survive ordinary edits that do not submit custom field values", async () => {
+  const { saveTenantResource } = require("../src/tenantResources");
+  const id = "919876543210";
+  const db = tenantResourceDb({
+    [`organizations/org_a/contacts/${id}`]: {
+      name: "Alex", phone: "+919876543210", customFields: { company: "Acme" }
+    }
+  });
+  await saveTenantResource(db, "org_a", "contacts", { name: "Alex Updated", phone: "+919876543210" }, id);
+  assert.deepEqual(db.records.get(`organizations/org_a/contacts/${id}`).customFields, { company: "Acme" });
+});
