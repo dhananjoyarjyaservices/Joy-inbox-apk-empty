@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { resolveCredentials, sendWhatsAppText, isDefinitiveWhatsAppSendRejection } = require("../src/whatsapp");
+const { resolveCredentials, sendWhatsAppText, sendWhatsAppInteractive, isDefinitiveWhatsAppSendRejection } = require("../src/whatsapp");
 
 test("uses explicitly supplied tenant credentials instead of global environment", () => {
   process.env.WHATSAPP_ACCESS_TOKEN = "EAA-global-token";
@@ -158,4 +158,48 @@ test("Meta send rejection classification treats explicit 4xx errors as definitiv
   }
   assert.equal(isDefinitiveWhatsAppSendRejection(200), false);
   assert.equal(isDefinitiveWhatsAppSendRejection("400"), false);
+});
+
+
+test("interactive sends use workspace credentials and return Meta message IDs", async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = "";
+  let requestBody;
+  let authorization = "";
+  global.fetch = async (url, options) => {
+    requestUrl = String(url);
+    requestBody = JSON.parse(options.body);
+    authorization = options.headers.Authorization;
+    return { ok: true, async json() { return { messages: [{ id: "wamid.interactive-test" }] }; } };
+  };
+  try {
+    const payload = {
+      messaging_product: "whatsapp", recipient_type: "individual",
+      to: "15551234567", type: "interactive",
+      interactive: { type: "button", body: { text: "Choose" }, action: { buttons: [{ type: "reply", reply: { id: "yes", title: "Yes" } }] } }
+    };
+    const result = await sendWhatsAppInteractive(payload, {
+      accessToken: "EAA-tenant-token", phoneNumberId: "123456789012345"
+    });
+    assert.equal(result.messageId, "wamid.interactive-test");
+    assert.match(requestUrl, /123456789012345\\/messages$/);
+    assert.equal(authorization, "Bearer EAA-tenant-token");
+    assert.deepEqual(requestBody, payload);
+  } finally { global.fetch = originalFetch; }
+});
+
+test("interactive send treats Meta 5xx as ambiguous", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: false, status: 503,
+    async json() { return { error: { message: "Temporary failure" } }; }
+  });
+  try {
+    await assert.rejects(
+      sendWhatsAppInteractive({ to: "15551234567", type: "interactive" }, {
+        accessToken: "EAA-test-token", phoneNumberId: "123456789012345"
+      }),
+      error => error.definitive === false && error.retryable === false
+    );
+  } finally { global.fetch = originalFetch; }
 });
