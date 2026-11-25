@@ -56,7 +56,8 @@ export default function LeadFormsPanel({ organizationId }: Props) {
   async function toggle(form: CrmLeadForm) {
     setSaving(true); setError("");
     try {
-      const { id, ...data } = form;\n      const saved = await saveCrmLeadForm(organizationId, { ...data, enabled: !form.enabled }, id);
+      const { id, ...data } = form;
+      const saved = await saveCrmLeadForm(organizationId, { ...data, enabled: !form.enabled }, id);
       setForms(current => current.map(item => item.id === form.id ? saved : item));
     } catch (e) { setError(e instanceof Error ? e.message : "Form could not be updated."); }
     finally { setSaving(false); }
