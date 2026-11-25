@@ -16,7 +16,9 @@ Complete all repository-only implementation, code review, documentation, local/e
 
 - [x] Initial tenant-scoped CRM foundation: pipeline stages, typed custom field definitions/validation, lead records, contact and owner pickers, lead editing/stage changes, follow-up dates, agent-only assigned-lead access and Sales CRM UI.
 - [x] Automated CRM follow-up reminders: scheduled scan, transactional deduplication, active-owner validation, in-app notification, push delivery, member opt-out and retry after failure. Notification Center routes CRM alerts to Sales CRM. See `docs/CRM-FOUNDATION.md`.
-- [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.\n- [x] Workspace lead capture forms: validated 1–10-field builder, public hosted form page, consent evidence, server-side validation, honeypot, per-IP rate limiting, transactional idempotent submissions, optional CRM lead creation and tenant-scoped response history. See `docs/LEAD-FORMS.md`.\n- [ ] Enable Firestore TTL on `publicFormRateLimits.expiresAt` and `publicFormIdempotency.expiresAt`; configure production `CORS_ORIGINS` and verify public form flows in staging.
+- [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.
+- [x] Workspace lead capture forms: validated 1–10-field builder, public hosted form page, consent evidence, server-side validation, honeypot, per-IP rate limiting, transactional idempotent submissions, CRM contact upsert and linked lead creation, and tenant-scoped response history. See docs/LEAD-FORMS.md.
+- [ ] Enable Firestore TTL on publicFormRateLimits.expiresAt and publicFormIdempotency.expiresAt; configure production CORS_ORIGINS and verify public form flows in staging.
 - [x] CRM sales performance report: pipeline totals, won revenue, conversion rate, stage, owner and source breakdowns with agent-scoped visibility and a 1,000-lead sample cap.
 - [x] CRM lead activity timeline: append-only actor-attributed create/update/delete events, tracked-field before/after snapshots, agent assignment checks and on-demand pipeline-card history.
 - [x] Probability-weighted CRM pipeline forecast using configurable stage win probabilities; expected open value is calculated separately per currency.
@@ -81,7 +83,8 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Inbox assignment and agent-performance views page through the complete organization member list instead of silently stopping at the first 100 members.
 - [x] Assignment/state management, SLA checks and team notifications.
 - [x] Automation rules with up to five ALL/ANY keyword conditions (`contains`, `exact`, `starts_with`, `ends_with`, `not_contains`, `not_exact`), priority ordering, up to five delayed reply steps, leased queue processing, execution history/health and uncertain-delivery protection. Visual branching, schedules/timezone windows, API/action nodes and FAQ knowledge-base automation remain product gaps.
-- [x] Campaign drafts, approved-template checks, consent evidence validation, STOP suppression, explicit START re-subscription, send worker, pause/cancel and recipient reports.\n- [x] Public lead capture forms with consent capture, abuse controls and CRM lead conversion; staging, TTL and retention verification remain open.
+- [x] Campaign drafts, approved-template checks, consent evidence validation, STOP suppression, explicit START re-subscription, send worker, pause/cancel and recipient reports.
+- [x] Public lead capture forms with consent capture, abuse controls, CRM contact upsert/lead linking and response history; staging, TTL and retention verification remain open.
 - [x] Internal conversation notes served through authenticated tenant APIs.
 - [x] Interactive WhatsApp button and list messages.
 - [x] Interactive WhatsApp media carousel composer and server payload validation for 2–10 image cards with HTTPS image and CTA links; card images are referenced by public URL rather than stored in Joy Inbox. Real Meta delivery still requires staging verification.
@@ -159,11 +162,11 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-25)
 
-Latest checked development commit: `a4829aae487ac6249b0e42501013eccb5f0f15b5`.
-- Backend tests (run 45572134772): **passed**, including Firestore emulator tests and production Lambda package verification.
-- Frontend build (run 45572134755): **passed**.
-- Joy Inbox CI (run 45572134749): **passed**.
-- Cloudflare Pages preview workflow (run 45572126125): **passed**; frontend build succeeded, while the actual Cloudflare deploy step was **skipped** because repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are not configured.
+Latest checked development commit: `8624557b9288ca42bca6f0b58bd4b5cb1299f257`.
+- Backend tests (run 45574667086): **passed**, including Firestore emulator tests and production Lambda package verification.
+- Frontend build (run 45574667216): **passed**.
+- Joy Inbox CI (run 45574667064): **passed**.
+- Cloudflare Pages preview workflow (run 45574657859): **passed**; frontend build succeeded, while the actual Cloudflare deploy step was **skipped** because repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are not configured.
 - These checks cover repository tests/build and the static preview build only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
 
 PR #1 remains open and unmerged. Keep it unmerged until external staging and launch gates pass and the owner explicitly approves.
