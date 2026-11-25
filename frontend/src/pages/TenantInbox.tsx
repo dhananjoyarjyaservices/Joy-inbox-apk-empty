@@ -14,7 +14,7 @@ import { listAllOrganizationMembers, updateOrganizationChatAssignment, listChatA
 import { listenToTenantChats, listenToTenantMessages, loadOlderTenantMessages } from "../services/tenantChats";
 import { sendTenantMedia, fetchTenantMedia } from "../services/tenantMedia";
 import { enablePushNotifications, syncPushToken, listenForForegroundPush, playNotificationSound, listRegisteredPushDevices, revokePushDevice, listNotificationDeliveries, listTeamNotificationDeliveryAnalytics, getMemberNotificationDeliveryReport, type TeamNotificationDeliveryAnalytics, type MemberNotificationDeliveryReport, type NotificationDelivery, type RegisteredPushDevice } from "../services/pushNotifications";
-import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantStatus, listTenantInternalNotes, addTenantInternalNote, sendTenantInteractiveMessage, type TenantInteractiveMessageInput, type TenantContact, type TenantQuickReply, type TenantInternalNote } from "../services/tenantResources";
+import { listTenantContacts, saveTenantContact, deleteTenantContact, listTenantQuickReplies, saveTenantQuickReply, uploadTenantQuickReplyImage, fetchTenantQuickReplyImage, removeTenantQuickReplyImage, sendTenantQuickReplyImage, deleteTenantQuickReply, updateTenantChatState, updateTenantMessageState, deleteTenantChat, getTenantGreeting, saveTenantGreeting, getTenantOutOfOfficeSettings, saveTenantOutOfOfficeSettings, type TenantOutOfOfficeSettings, getTenantStatus, listTenantInternalNotes, addTenantInternalNote, sendTenantInteractiveMessage, type TenantInteractiveMessageInput, type TenantContact, type TenantQuickReply, type TenantInternalNote } from "../services/tenantResources";
 import DeveloperPanel from "../components/DeveloperPanel";
 import { moveItem } from "../utils/reorder";
 import AutomationFlowPreview from "../components/AutomationFlowPreview";
@@ -267,6 +267,7 @@ export default function TenantInbox() {
   const [slaTargetMinutes, setSlaTargetMinutes] = useState(5);
   const [greetingEnabled, setGreetingEnabled] = useState(false);
   const [greetingText, setGreetingText] = useState("");
+  const [outOfOffice, setOutOfOffice] = useState<TenantOutOfOfficeSettings>({ enabled: false, message: "", schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" } });
   const [connectionStatus, setConnectionStatus] = useState<{ whatsapp?: { connected?: boolean; error?: { message?: string } }; firestore?: { connected?: boolean } } | null>(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [healthChecking, setHealthChecking] = useState(false);
@@ -676,12 +677,21 @@ export default function TenantInbox() {
     if (!organization) return;
     let active = true;
     const greetingRequest = organization.role === "agent" ? Promise.resolve({ enabled: false, text: "", trigger: "first_inbound" }) : getTenantGreeting(organization.id);
+    const outOfOfficeRequest = organization.role === "agent" ? Promise.resolve(outOfOffice) : getTenantOutOfOfficeSettings(organization.id);
     const slaRequest = organization.role === "agent" ? Promise.resolve({ enabled: true, targetMinutes: 5 }) : getOrganizationSlaSettings(organization.id);
     Promise.all([greetingRequest, getTenantStatus(organization.id), slaRequest])
       .then(([greeting, status, sla]) => { if (active) { setGreetingEnabled(greeting.enabled); setGreetingText(greeting.text); setConnectionStatus(status); setSlaEnabled(sla.enabled); setSlaTargetMinutes(sla.targetMinutes); } })
       .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Workspace settings could not load."); });
     return () => { active = false; };
   }, [organization]);
+
+  async function saveOutOfOfficeSettings() {
+    if (!organization || !["owner", "admin"].includes(organization.role)) return;
+    setSettingsSaving(true); setError("");
+    try { setOutOfOffice(await saveTenantOutOfOfficeSettings(organization.id, outOfOffice)); }
+    catch (error) { setError(error instanceof Error ? error.message : "Out-of-office settings could not be saved."); }
+    finally { setSettingsSaving(false); }
+  }
 
   async function saveSlaSettings() {
     if (!organization || !["owner", "admin"].includes(organization.role)) return;
