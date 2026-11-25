@@ -54,7 +54,12 @@ function normalizeCampaignRecipients(input) {
       skipped += 1;
       continue;
     }
-    const phone = String(item.phone || item.to || "").replace(/\D/g, "");
+    const rawPhone = String(item.phone || item.to || "").trim();
+    // Accept common phone formatting, but never silently strip letters or other
+    // arbitrary characters into a different, apparently valid phone number.
+    const phone = /^\+?[0-9\s().-]+$/.test(rawPhone)
+      ? rawPhone.replace(/\D/g, "")
+      : "";
     const consentAt = item.consentAt;
     const consentSource = String(item.consentSource || "").trim().slice(0, 120);
     const consentMillis = typeof consentAt === "string" ? Date.parse(consentAt) : NaN;
