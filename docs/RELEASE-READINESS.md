@@ -28,7 +28,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add API-key authentication that derives the workspace from the key, checks active workspace state and enforces contacts read/write scopes.
 - [x] Add versioned `GET /public/v1/contacts` and `POST /public/v1/contacts` endpoints.
 - [x] Add versioned `GET`, `POST`, `PUT` and `DELETE /public/v1/leads` endpoints with workspace-scoped CRM validation.
-- [x] Add `POST /public/v1/messages` for workspace-connected WhatsApp text sends with `messages:write`, required idempotency keys and server-side quota enforcement.
+- [x] Add `POST /public/v1/messages` for workspace-connected WhatsApp text, media (Meta-hosted upload; no customer media persisted in Firebase) and validated interactive button/list/CTA/carousel sends, with `messages:write`, required idempotency keys, message/media quota enforcement and outbound webhook events.
 - [x] Add `GET /public/v1/templates` for listing the first Meta template page with `templates:read` and workspace phone/WABA ownership checks.
 - [x] Add paginated `GET /public/v1/campaigns` summaries with `campaigns:read`; results expose aggregate delivery counters only and never recipient phone numbers or consent records.
 - [x] Add `POST /public/v1/campaigns` with separate `campaigns:write` scope, mandatory idempotency, connected-number validation, Meta approved-template/language/category verification, body-variable validation and opt-out suppression; this endpoint creates drafts only and cannot schedule or send.
@@ -39,7 +39,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add cursor pagination for contacts and CRM leads, 24-hour idempotency for public API mutations, and daily per-key request/rate-limit usage analytics.
 - [x] Add configurable per-key rate-limit tiers (60/120/300 requests per minute), persist the selected tier with the hashed API-key record, enforce it in server-side Firestore counters, and expose the selected tier in the Developer panel.
 - [x] Add public API `leads:read` and `leads:write` scopes with workspace-derived list/create/update/delete endpoints and CRM stage/contact/owner/custom-field validation; add unit coverage and explicitly classify the API-key route in the HTTP route-security inventory.
-- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Public campaign draft creation and campaign state controls are implemented with separate scopes, idempotency and transactional state transitions. Remaining public API gaps: template sending/management, media and interactive sends, and full staging verification.
+- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Public campaign draft creation and campaign state controls are implemented with separate scopes, idempotency and transactional state transitions. Remaining public API gaps: template sending/management, advanced message management and full staging verification.
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact/message/CRM lead lifecycle events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
 - [x] Add workspace-scoped webhook delivery history API/UI and manual replay for failed deliveries.
