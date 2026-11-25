@@ -100,6 +100,29 @@ function normalizePipelineStage(input) {
   return { id, name, position, isWon, isLost, probability, isDefault: input.isDefault === true, active: input.active !== false };
 }
 
+function normalizeCrmSavedFilter(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw crmError("Saved filter details are required.");
+  const allowed = ["name", "stageId", "ownerUid", "source", "followUp", "minValue", "maxValue", "search", "shared"];
+  if (Object.keys(input).some(key => !allowed.includes(key))) throw crmError("Saved filter contains unsupported properties.");
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const stageId = typeof input.stageId === "string" ? input.stageId.trim() : "";
+  const ownerUid = typeof input.ownerUid === "string" ? input.ownerUid.trim() : "";
+  const source = typeof input.source === "string" ? input.source.trim().slice(0, 80) : "";
+  const followUp = input.followUp || "all";
+  const search = typeof input.search === "string" ? input.search.trim().slice(0, 100) : "";
+  const minValue = input.minValue === undefined || input.minValue === null || input.minValue === "" ? null : Number(input.minValue);
+  const maxValue = input.maxValue === undefined || input.maxValue === null || input.maxValue === "" ? null : Number(input.maxValue);
+  if (!name || name.length > 60) throw crmError("Saved filter name is required (maximum 60 characters).");
+  if (stageId && !DOC_ID_PATTERN.test(stageId)) throw crmError("Saved filter stage is invalid.");
+  if (ownerUid && !/^[A-Za-z0-9:_-]{1,128}$/.test(ownerUid)) throw crmError("Saved filter owner is invalid.");
+  if (!["all", "overdue", "today", "upcoming", "none"].includes(followUp)) throw crmError("Saved filter follow-up condition is invalid.");
+  if (minValue !== null && (!Number.isFinite(minValue) || minValue < 0)) throw crmError("Minimum deal value must be zero or greater.");
+  if (maxValue !== null && (!Number.isFinite(maxValue) || maxValue < 0)) throw crmError("Maximum deal value must be zero or greater.");
+  if (minValue !== null && maxValue !== null && minValue > maxValue) throw crmError("Minimum deal value cannot exceed maximum deal value.");
+  if (input.shared !== undefined && typeof input.shared !== "boolean") throw crmError("Shared must be true or false.");
+  return { name, stageId, ownerUid, source, followUp, minValue, maxValue, search, shared: input.shared === true };
+}
+
 function canAccessCrmLead(role, actorUid, lead) {
   return role !== "agent" || Boolean(actorUid && lead?.ownerUid === actorUid);
 }
@@ -144,6 +167,7 @@ module.exports = {
   normalizeCrmFieldDefinition,
   normalizeCrmFieldValues,
   normalizePipelineStage,
+  normalizeCrmSavedFilter,
   canAccessCrmLead,
   normalizeCrmLead
 };
