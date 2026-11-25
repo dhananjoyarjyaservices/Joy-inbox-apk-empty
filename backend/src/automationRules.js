@@ -74,7 +74,7 @@ function normalizeAutomationRule(input) {
         new Set(days).size !== days.length) {
       throw httpError("Schedule days must be unique weekday numbers from 0 (Sunday) to 6 (Saturday).", 400);
     }
-    const validTime = (time) => typeof time === "string" && /^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(time);
+    const validTime = (time) => typeof time === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time);
     if (!validTime(value.startTime) || !validTime(value.endTime) || value.startTime >= value.endTime) {
       throw httpError("Schedule startTime and endTime must be valid 24-hour times, with startTime before endTime.", 400);
     }
