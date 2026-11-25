@@ -86,6 +86,23 @@ export async function deleteTenantChat(org: string, chatId: string) {
   return call("/organizations/delete-chats", "POST", { organizationId: org, chatIds: [chatId] });
 }
 
+export interface TenantOutOfOfficeSettings {
+  enabled: boolean;
+  message: string;
+  schedule: { timezone: string; days: number[]; startTime: string; endTime: string };
+}
+export async function getTenantOutOfOfficeSettings(org: string): Promise<TenantOutOfOfficeSettings> {
+  const result = await call("/organizations/out-of-office-settings", "GET", undefined, org);
+  return {
+    enabled: Boolean(result.enabled), message: String(result.message || ""),
+    schedule: result.schedule || { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" }
+  };
+}
+export async function saveTenantOutOfOfficeSettings(org: string, data: TenantOutOfOfficeSettings): Promise<TenantOutOfOfficeSettings> {
+  const result = await call("/organizations/out-of-office-settings", "POST", { organizationId: org, data });
+  return { enabled: Boolean(result.enabled), message: String(result.message || ""), schedule: result.schedule };
+}
+
 export async function getTenantGreeting(org: string): Promise<{ enabled: boolean; text: string; trigger: string }> {
   const result = await call("/organizations/greeting-settings", "GET", undefined, org);
   return { enabled: Boolean(result.enabled), text: String(result.text || ""), trigger: String(result.trigger || "first_inbound") };
