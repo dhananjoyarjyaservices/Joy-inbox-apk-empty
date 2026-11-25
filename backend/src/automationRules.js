@@ -290,6 +290,18 @@ function getOutOfOfficeSkipReason(chat = {}, instant = new Date()) {
   return null;
 }
 
+function selectWorkspaceOutOfOfficeRule(settings, instant = new Date()) {
+  if (!settings || settings.enabled !== true || typeof settings.message !== "string" ||
+      !settings.message.trim() || !settings.schedule ||
+      isWithinAutomationSchedule({ schedule: settings.schedule }, instant)) return null;
+  return {
+    id: "workspace_out_of_office",
+    name: "Workspace out-of-office",
+    outOfOfficeMessage: settings.message.trim(),
+    enabled: true
+  };
+}
+
 function findMatchingOutOfOfficeRule(rules, messageText, instant = new Date()) {
   return sortAutomationRules(rules).find(rule =>
     rule.enabled === true && rule.outOfOfficeEnabled !== false && typeof rule.outOfOfficeMessage === "string" && rule.outOfOfficeMessage.trim() &&
