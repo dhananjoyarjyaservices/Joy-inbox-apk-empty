@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-25  
 **Audited branch:** `feature/saas-foundation`  
-**Audited code head:** `9d8cebae792590f04c8320dbbb1579737c6b075e`  
+**Audited code head:** `4ec13e09286707eda075901fbb0bd4947644aa3e`  
 **Scope:** Repository code and automated-test evidence only. This is not a live-provider acceptance test.
 
 ## Executive finding
@@ -38,8 +38,8 @@ Legend:
 | WhatsApp catalog/product messages | Missing | No catalog sync/management or catalog-message workflow found. |
 | Payment links / WhatsApp Pay / order management | Missing | Stripe is for Joy Inbox subscription billing, not customer checkout or WhatsApp-native commerce. |
 | Greeting / welcome automation | Implemented (code) | Tenant greeting settings and inbound webhook trigger. |
-| Out-of-office, delayed reply and FAQ automation | Partial | Greeting plus keyword-triggered rules exist, with up to five ALL/ANY trigger conditions, six match operators, timezone-aware weekday/time windows, and up to five conditional reply branches with separate reply sequences. Full OOO state management, FAQ knowledge base, and richer delay controls remain incomplete. |
-| Visual no-code chatbot builder, branching, API calls and intent routing | Partial / missing | Backend supports up to five ALL/ANY keyword trigger conditions (`contains`, `exact`, `starts_with`, `ends_with`, `not_contains`, `not_exact`), priority ordering, timezone-aware weekday/time schedules, and up to five ordered conditional branches, each with its own conditions and up to five delayed reply steps. Still missing: visual no-code canvas/UI, API/action nodes, FAQ knowledge base and intent routing. |
+| Out-of-office, delayed reply and FAQ automation | Partial | Greeting plus keyword-triggered rules exist, with up to five ALL/ANY trigger conditions, six match operators, timezone-aware weekday/time windows, and up to five conditional reply branches with separate reply sequences. The tenant automation screen now exposes schedule and basic branch editing. Full OOO state management, FAQ knowledge base, visual canvas/drag-and-drop builder, and richer delay controls remain incomplete. |
+| Visual no-code chatbot builder, branching, API calls and intent routing | Partial / missing | Backend and tenant automation UI support up to five ALL/ANY keyword trigger conditions (`contains`, `exact`, `starts_with`, `ends_with`, `not_contains`, `not_exact`), priority ordering, timezone-aware weekday/time schedules, and up to five ordered conditional branches, each with its own conditions and up to five delayed reply steps. The UI currently provides basic form-based branch editing, not a visual canvas. Still missing: drag-and-drop no-code canvas, API/action nodes, FAQ knowledge base and intent routing. |
 | Campaigns/broadcasts and consent safeguards | Implemented (code) | Draft/schedule/pause/cancel, approved-template revalidation, opt-in evidence, STOP/START suppression, delivery reconciliation. Provider acceptance remains pending. |
 | Campaign click/conversion attribution and advanced segmentation | Partial | Delivery/read/failure reporting exists; no complete click/conversion attribution or advanced campaign segmentation found. |
 | SLA monitoring and agent performance | Implemented (code) | SLA settings/worker, notifications and historical agent response metrics. |
