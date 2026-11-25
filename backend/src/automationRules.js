@@ -230,5 +230,6 @@ module.exports = {
   normalizeAutomationMatchText,
   matchesAutomationRule,
   findMatchingAutomationRule,
-  isWithinAutomationSchedule
+  isWithinAutomationSchedule,
+  selectAutomationSteps
 };
