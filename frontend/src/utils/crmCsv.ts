@@ -57,7 +57,7 @@ export function parseCrmCsv(source: string, fields: CrmCsvField[] = []): CrmCsvL
     headers.forEach((header, index) => { record[header] = values[index] || ""; });
     const customFields = Object.fromEntries(fields
       .filter(field => field.active)
-      .flatMap(field => {
+      .flatMap((field): [string, string | number | boolean][] => {
         const raw = record[field.key] ?? record[`custom_${field.key}`] ?? "";
         if (raw === "") return [];
         if (field.type === "number") {
