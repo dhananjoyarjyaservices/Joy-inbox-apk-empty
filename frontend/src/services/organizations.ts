@@ -313,6 +313,36 @@ export async function deleteOrganizationAutomationRule(organizationId: string, r
 }
 
 
+export interface OrganizationFaqEntry {
+  id: string;
+  question: string;
+  answer: string;
+  keywords: string[];
+  matchMode: "all" | "any";
+  enabled: boolean;
+  priority: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+export async function listOrganizationFaqEntries(organizationId: string): Promise<OrganizationFaqEntry[]> {
+  const result = await request(`/organizations/faq-entries?organizationId=${encodeURIComponent(organizationId)}`);
+  return Array.isArray(result.entries) ? result.entries : [];
+}
+export async function saveOrganizationFaqEntry(
+  organizationId: string,
+  data: Omit<OrganizationFaqEntry, "id" | "createdAt" | "updatedAt">,
+  resourceId?: string,
+): Promise<OrganizationFaqEntry> {
+  const result = await request("/organizations/faq-entries", resourceId
+    ? "PUT" : "POST", { organizationId, data, ...(resourceId ? { resourceId } : {}) });
+  if (!result.entry?.id) throw new Error("FAQ entry could not be saved.");
+  return result.entry;
+}
+export async function deleteOrganizationFaqEntry(organizationId: string, resourceId: string): Promise<void> {
+  await request("/organizations/faq-entries", "DELETE", { organizationId, resourceId });
+}
+
+
 export interface OrganizationAutomationRun {
   id: string;
   ruleId: string;
