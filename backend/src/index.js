@@ -1098,8 +1098,16 @@ async function handleTenantAutomationRuns(event) {
       ruleName: String(data.ruleName || "Automation"),
       customerPhone: String(data.customerPhone || ""),
       status: String(data.status || "unknown"),
+      branchName: data.branchName ? String(data.branchName).slice(0, 50) : null,
+      branchIndex: Number.isInteger(data.branchIndex) ? data.branchIndex : null,
       completedSteps: Number(data.completedSteps || 0),
       totalSteps: Number(data.totalSteps || 1),
+      stepResults: Array.isArray(data.stepResults) ? data.stepResults.slice(0, 5).map((step, index) => ({
+        step: index + 1, status: String(step.status || "queued"),
+        delaySeconds: Number(step.delaySeconds || 0),
+        ...(step.sentAt ? { sentAt: step.sentAt?.toDate ? step.sentAt.toDate().toISOString() : String(step.sentAt) } : {}),
+        ...(step.error ? { error: String(step.error).slice(0, 200) } : {})
+      })) : [],
       error: data.error ? String(data.error).slice(0, 300) : "",
       reason: data.reason ? String(data.reason).slice(0, 120) : "",
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
