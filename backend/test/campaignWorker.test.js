@@ -351,7 +351,7 @@ test("scheduled worker alternates queued and sending campaigns to prevent starva
   const { runScheduledCampaigns } = require("../src/campaignWorker");
   const makeDocument = id => ({
     id,
-    ref: { async get() { return { exists: false }; } }
+    ref: { id, async get() { return { exists: false }; } }
   });
   const resultsByStatus = {
     scheduled: [],
