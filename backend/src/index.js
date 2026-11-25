@@ -89,6 +89,7 @@ const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_S
 const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
 const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule, sortAutomationRules } = require("./automationRules");
 const { FAQ_ID_PATTERN, normalizeFaqEntry } = require("./faqKnowledge");
+const { normalizeOutOfOfficeSettings } = require("./automationRules");
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients, suppressionDocumentId } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
@@ -1843,6 +1844,39 @@ async function handleTenantChatAction(event, action) {
   }
   const deletedChatIds = await deleteTenantChats(getDb(), organization.id, actionInput);
   return jsonResponse(event, 200, { success: true, deletedChatIds });
+}
+
+async function getTenantOutOfOfficeSettings(event) {
+  const decoded = await authenticateUser(event);
+  const organizationId = event.queryStringParameters?.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "settings:manage");
+  const snapshot = await organization.ref.collection("settings").doc("outOfOffice").get();
+  const value = snapshot.exists ? snapshot.data() || {} : {};
+  return jsonResponse(event, 200, {
+    enabled: value.enabled === true,
+    message: String(value.message || ""),
+    schedule: value.schedule && typeof value.schedule === "object" ? value.schedule : {
+      timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00"
+    }
+  });
+}
+
+async function saveTenantOutOfOfficeSettings(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); } catch {
+    return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.organizationId !== "string") {
+    return jsonResponse(event, 400, { error: "Organization ID and out-of-office settings are required." });
+  }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "settings:manage");
+  const data = normalizeOutOfOfficeSettings(body.data);
+  const now = new Date();
+  await organization.ref.collection("settings").doc("outOfOffice").set({ ...data, updatedAt: now, updatedBy: decoded.uid }, { merge: true });
+  return jsonResponse(event, 200, { success: true, ...data, updatedAt: now.toISOString() });
 }
 
 async function getTenantGreetingSettings(event) {
@@ -4891,6 +4925,16 @@ exports.handler = async (event) => {
       console.error("Tenant connection diagnostics failed:", error);
       return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Connection diagnostics could not be completed." });
     }
+  }
+
+  if (method === "GET" && path.endsWith("/organizations/out-of-office-settings")) {
+    try { return await getTenantOutOfOfficeSettings(event); }
+    catch (error) { console.error("Tenant out-of-office settings load failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Out-of-office settings could not be loaded." }); }
+  }
+
+  if (method === "POST" && path.endsWith("/organizations/out-of-office-settings")) {
+    try { return await saveTenantOutOfOfficeSettings(event); }
+    catch (error) { console.error("Tenant out-of-office settings save failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Out-of-office settings could not be saved." }); }
   }
 
   if (method === "GET" && path.endsWith("/organizations/greeting-settings")) {
