@@ -151,3 +151,16 @@ export async function saveCrmLeadForm(organizationId: string, form: Omit<CrmLead
 export async function deleteCrmLeadForm(organizationId: string, id: string): Promise<void> {
   await request<{ success: boolean }>("forms", organizationId, "DELETE", undefined, id);
 }
+
+export type CrmLeadFormSubmission = { id: string; formId: string; values: Record<string, string>; consentAccepted: boolean; consentText: string; consentAt: unknown; submittedAt: unknown; status: string; leadId?: string | null };
+export async function listCrmLeadFormSubmissions(organizationId: string, formId: string): Promise<CrmLeadFormSubmission[]> {
+  if (!API_URL) throw new Error("AWS API URL is not configured.");
+  const user = auth.currentUser;
+  if (!user) throw new Error("Please sign in again.");
+  const token = await user.getIdToken();
+  const query = new URLSearchParams({ organizationId, formId, limit: "100" });
+  const response = await fetch(`${API_URL.replace(/\/$/, "")}/organizations/crm/forms/submissions?${query}`, { headers: { Authorization: `Bearer ${token}` } });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Form submissions could not be loaded.");
+  return result.submissions || [];
+}
