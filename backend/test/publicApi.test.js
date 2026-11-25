@@ -363,3 +363,22 @@ test("rejects unsupported API rate-limit tiers", async () => {
     { statusCode: 400 }
   );
 });
+
+
+test("enforces the 300-request high-volume API tier", async () => {
+  const db = fakeDb({ "organizations/org_one": { status: "active" } });
+  const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "High volume integration",
+    scopes: ["contacts:read"],
+    rateLimitPerMinute: 300
+  });
+  assert.equal(created.rateLimitPerMinute, 300);
+  const now = Date.parse("2026-11-25T13:00:00Z");
+  for (let index = 0; index < 300; index += 1) {
+    await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + index);
+  }
+  await assert.rejects(
+    () => authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + 1000),
+    { statusCode: 429 }
+  );
+});
