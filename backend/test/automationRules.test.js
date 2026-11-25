@@ -184,3 +184,31 @@ test("rejects condition mode when no conditions are supplied", () => {
     name: "Orphan mode", keyword: "hello", conditionMode: "any", response: "Welcome"
   }), { statusCode: 400 });
 });
+
+
+test("supports ends_with, not_contains and not_exact conditions", () => {
+  assert.equal(matchesAutomationRule({ keyword: "thanks", matchType: "ends_with" }, "Many thanks"), true);
+  assert.equal(matchesAutomationRule({ keyword: "price", matchType: "not_contains" }, "I need support"), true);
+  assert.equal(matchesAutomationRule({ keyword: "hello", matchType: "not_exact" }, "hello there"), true);
+  assert.equal(matchesAutomationRule({ keyword: "hello", matchType: "not_exact" }, "HELLO"), false);
+  assert.equal(matchesAutomationRule({ keyword: "price", matchType: "not_contains" }, "What is the price?"), false);
+});
+
+test("validates and evaluates expanded operators in all/any condition groups", () => {
+  const rule = normalizeAutomationRule({
+    name: "Support without pricing",
+    conditions: [
+      { keyword: "help", matchType: "starts_with" },
+      { keyword: "price", matchType: "not_contains" }
+    ],
+    conditionMode: "all",
+    response: "How can we help?"
+  });
+  assert.equal(matchesAutomationRule(rule, "Help me with setup"), true);
+  assert.equal(matchesAutomationRule(rule, "Help me with pricing"), false);
+  assert.throws(() => normalizeAutomationRule({
+    name: "Invalid operator",
+    conditions: [{ keyword: "hello", matchType: "regex" }],
+    response: "Welcome"
+  }), { statusCode: 400 });
+});
