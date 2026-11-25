@@ -218,10 +218,19 @@ export async function revokeOrganizationWebhook(organizationId: string, webhookI
 export async function rotateOrganizationWebhookSecret(organizationId: string, webhookId: string): Promise<{ id: string; secret: string; rotatedAt: string }> {
   return request("/organizations/developer/webhooks", "PUT", { organizationId, webhookId });
 }
-export async function listOrganizationWebhookDeliveries(organizationId: string, limit = 50): Promise<OrganizationWebhookDelivery[]> {
-  const query = new URLSearchParams({ organizationId, limit: String(limit) });
+export async function listOrganizationWebhookDeliveries(
+  organizationId: string,
+  options: { limit?: number; status?: string; event?: string; cursor?: string } = {}
+): Promise<{ deliveries: OrganizationWebhookDelivery[]; nextCursor: string | null }> {
+  const query = new URLSearchParams({ organizationId, limit: String(options.limit ?? 50) });
+  if (options.status) query.set("status", options.status);
+  if (options.event) query.set("event", options.event);
+  if (options.cursor) query.set("cursor", options.cursor);
   const result = await request(`/organizations/developer/webhook-deliveries?${query.toString()}`);
-  return Array.isArray(result.deliveries) ? result.deliveries : [];
+  return {
+    deliveries: Array.isArray(result.deliveries) ? result.deliveries : [],
+    nextCursor: typeof result.nextCursor === "string" ? result.nextCursor : null
+  };
 }
 export async function replayOrganizationWebhookDelivery(organizationId: string, deliveryId: string): Promise<void> {
   await request("/organizations/developer/webhook-deliveries", "POST", { organizationId, deliveryId });
