@@ -5,6 +5,7 @@ const {
   normalizeCrmFieldDefinition,
   normalizeCrmFieldValues,
   normalizePipelineStage,
+  normalizeCrmSavedFilter,
   canAccessCrmLead,
   normalizeCrmLead
 } = require("../src/crm");
@@ -91,4 +92,18 @@ test("agent CRM visibility is limited to leads owned by that agent", () => {
   assert.equal(canAccessCrmLead("agent", "agent_a", { ownerUid: "" }), false);
   assert.equal(canAccessCrmLead("admin", "admin_a", { ownerUid: "agent_b" }), true);
   assert.equal(canAccessCrmLead("owner", "owner_a", { ownerUid: "" }), true);
+});
+
+
+test("normalizes CRM saved filters and validates their criteria", () => {
+  assert.deepEqual(normalizeCrmSavedFilter({
+    name: "Overdue high-value deals", stageId: "qualified", followUp: "overdue",
+    minValue: "1000", maxValue: 50000, search: "Acme", shared: true
+  }), {
+    name: "Overdue high-value deals", stageId: "qualified", ownerUid: "", source: "",
+    followUp: "overdue", minValue: 1000, maxValue: 50000, search: "Acme", shared: true
+  });
+  assert.throws(() => normalizeCrmSavedFilter({ name: "Bad", followUp: "whenever" }), { statusCode: 400 });
+  assert.throws(() => normalizeCrmSavedFilter({ name: "Bad", minValue: 500, maxValue: 100 }), { statusCode: 400 });
+  assert.throws(() => normalizeCrmSavedFilter({ name: "Bad", extra: true }), { statusCode: 400 });
 });
