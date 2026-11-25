@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { ArrowDown, GitBranch, MessageSquareText, Play, Clock3 } from "lucide-react";
+import { useState, type ReactNode, type DragEvent } from "react";
+import { ArrowDown, ArrowUp, GitBranch, MessageSquareText, Play, Clock3, GripVertical } from "lucide-react";
 
 type Condition = { keyword: string; matchType: string };
 type ReplyStep = { message: string; delaySeconds: number };
@@ -16,6 +16,9 @@ interface AutomationFlowPreviewProps {
   scheduleDays: number[];
   scheduleStart: string;
   scheduleEnd: string;
+  onMoveBranch: (from: number, to: number) => void;
+  onMoveDefaultStep: (from: number, to: number) => void;
+  onMoveBranchStep: (branchIndex: number, from: number, to: number) => void;
 }
 
 const matchLabel: Record<string, string> = {
@@ -36,6 +39,10 @@ function Connector() {
 
 export default function AutomationFlowPreview(props: AutomationFlowPreviewProps) {
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const [dragging, setDragging] = useState<{kind:"branch"|"step";branchIndex:number;index:number}|null>(null);
+  const allowDrop = (event: DragEvent) => event.preventDefault();
+  const startDrag = (event: DragEvent, item: {kind:"branch"|"step";branchIndex:number;index:number}) => { setDragging(item); event.dataTransfer.effectAllowed="move"; event.dataTransfer.setData("text/plain", item.kind+":"+item.branchIndex+":"+item.index); };
+  const finishDrag = () => setDragging(null);
   const paths = props.branches.length ? props.branches.map(branch => ({ name: branch.name || "Unnamed branch", mode: branch.conditionMode, conditions: branch.conditions, steps: branch.steps })) : [{ name: "Default path", mode: props.conditionMode, conditions: props.conditions, steps: props.steps }];
   return <section aria-label="Automation flow preview" className="mb-5 rounded-xl border border-[#cfe5df] bg-[#f5fbf9] p-4">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-semibold text-gray-900">Workflow preview</h3><p className="text-[11px] text-gray-500">Live diagram · updates as you edit the rule below</p></div><span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-[#075e54]">Preview only</span></div>
@@ -49,15 +56,15 @@ export default function AutomationFlowPreview(props: AutomationFlowPreviewProps)
     </div>
     <div className="my-3 flex items-center justify-center gap-2 text-[11px] font-medium text-gray-500"><GitBranch size={14}/> {props.branches.length ? "First matching branch runs" : "Default reply sequence"}</div>
     <div className={paths.length > 1 ? "grid gap-3 md:grid-cols-2" : "mx-auto max-w-md"}>
-      {paths.map((path, index) => <div key={index} className="min-w-0 rounded-xl border border-dashed border-gray-300 bg-white/70 p-3">
-        <div className="mb-2 flex items-center justify-between gap-2"><span className="text-xs font-semibold text-[#075e54]">{path.name}</span><span className="text-[10px] text-gray-400">{path.mode.toUpperCase()}</span></div>
+      {paths.map((path, index) => <div key={index} onDragOver={allowDrop} onDrop={event=>{event.preventDefault();if(dragging?.kind==="branch"&&props.branches.length)props.onMoveBranch(dragging.index,index);finishDrag();}} onDragEnd={finishDrag} className={"min-w-0 rounded-xl border border-dashed border-gray-300 bg-white/70 p-3 "+(dragging?.kind==="branch"&&dragging.index===index?"opacity-50":"")}>
+        <div className="mb-2 flex items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-1">{props.branches.length>0&&<button type="button" draggable onDragStart={event=>startDrag(event,{kind:"branch",branchIndex:index,index})} onDragEnd={finishDrag} aria-label={"Drag to reorder "+path.name} className="cursor-grab touch-none rounded p-1 text-gray-400"><GripVertical size={15}/></button>}<span className="truncate text-xs font-semibold text-[#075e54]">{path.name}</span></div><div className="flex items-center gap-1">{props.branches.length>0&&<><button type="button" aria-label={"Move "+path.name+" up"} disabled={index===0} onClick={()=>props.onMoveBranch(index,index-1)} className="rounded p-1 text-gray-500 disabled:opacity-25"><ArrowUp size={13}/></button><button type="button" aria-label={"Move "+path.name+" down"} disabled={index===paths.length-1} onClick={()=>props.onMoveBranch(index,index+1)} className="rounded p-1 text-gray-500 disabled:opacity-25"><ArrowDown size={13}/></button></>}<span className="text-[10px] text-gray-400">{path.mode.toUpperCase()}</span></div></div>
         {path.conditions.map((condition, conditionIndex) => <p key={conditionIndex} className="mb-1 break-words rounded-md bg-gray-50 px-2 py-1 text-[10px] text-gray-600">{matchLabel[condition.matchType] || condition.matchType} “{condition.keyword || "keyword not set"}”</p>)}
         <Connector/>
-        {path.steps.map((step, stepIndex) => <div key={stepIndex} className="mb-2 last:mb-0"><Node icon={<MessageSquareText size={14}/>} title={"Send reply " + (stepIndex + 1)} subtitle={step.delaySeconds > 0 ? "Wait " + step.delaySeconds + " seconds first" : "Immediate"}><p className="break-words text-[11px] text-gray-600">{step.message || "Reply text not set"}</p></Node>{stepIndex < path.steps.length - 1 && <Connector/>}</div>)}
+        {path.steps.map((step, stepIndex) => <div key={stepIndex} draggable onDragStart={event=>{event.stopPropagation();startDrag(event,{kind:"step",branchIndex:props.branches.length?index:-1,index:stepIndex});}} onDragOver={allowDrop} onDrop={event=>{event.preventDefault();event.stopPropagation();if(dragging?.kind==="step"){if(dragging.branchIndex===-1)props.onMoveDefaultStep(dragging.index,stepIndex);else if(dragging.branchIndex===index)props.onMoveBranchStep(index,dragging.index,stepIndex);}finishDrag();}} onDragEnd={finishDrag} className={"mb-2 last:mb-0 cursor-grab rounded-lg active:cursor-grabbing "+(dragging?.kind==="step"&&dragging.branchIndex===(props.branches.length?index:-1)&&dragging.index===stepIndex?"opacity-40":"")}><div className="flex items-center justify-between px-1 pb-1"><span className="flex items-center gap-1 text-[10px] text-gray-400"><GripVertical size={12}/> Drag reply to reorder</span><span className="flex gap-1"><button type="button" aria-label={"Move reply "+(stepIndex+1)+" up"} disabled={stepIndex===0} onClick={()=>props.branches.length?props.onMoveBranchStep(index,stepIndex,stepIndex-1):props.onMoveDefaultStep(stepIndex,stepIndex-1)} className="rounded p-1 text-gray-500 disabled:opacity-25"><ArrowUp size={12}/></button><button type="button" aria-label={"Move reply "+(stepIndex+1)+" down"} disabled={stepIndex===path.steps.length-1} onClick={()=>props.branches.length?props.onMoveBranchStep(index,stepIndex,stepIndex+1):props.onMoveDefaultStep(stepIndex,stepIndex+1)} className="rounded p-1 text-gray-500 disabled:opacity-25"><ArrowDown size={12}/></button></span></div><Node icon={<MessageSquareText size={14}/>} title={"Send reply " + (stepIndex + 1)} subtitle={step.delaySeconds > 0 ? "Wait " + step.delaySeconds + " seconds first" : "Immediate"}><p className="break-words text-[11px] text-gray-600">{step.message || "Reply text not set"}</p></Node>{stepIndex < path.steps.length - 1 && <Connector/>}</div>)}
         {path.steps.length === 0 && <p className="text-[11px] text-gray-400">No reply steps configured</p>}
       </div>)}
       {props.branches.length > 0 && <div className="rounded-xl border border-dashed border-gray-300 bg-white/70 p-3 md:col-span-2"><p className="text-xs font-semibold text-gray-600">Fallback · default reply sequence</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{props.steps.map((step, index) => <Node key={index} icon={<MessageSquareText size={14}/>} title={"Reply " + (index + 1)} subtitle={step.delaySeconds > 0 ? "Wait " + step.delaySeconds + " seconds" : "Immediate"}><p className="break-words text-[11px] text-gray-600">{step.message || "Reply text not set"}</p></Node>)}</div></div>}
     </div>
-    <p className="mt-3 text-[10px] text-gray-400">This diagram is a synchronized preview. Drag-and-drop editing and movable workflow nodes are not implemented yet.</p>
+    <p className="mt-3 text-[10px] text-gray-400">Drag branch and reply handles to reorder execution. Arrow controls also work on touch screens. Free-position node placement and custom connector editing are not supported yet.</p>
   </section>;
 }
