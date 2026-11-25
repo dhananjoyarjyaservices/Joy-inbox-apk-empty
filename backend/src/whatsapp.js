@@ -179,6 +179,39 @@ async function sendWhatsAppMedia(to, type, mediaId, caption, filename, contextMe
   return { messageId, response: result };
 }
 
+async function sendWhatsAppInteractive(payload, credentials) {
+  const { accessToken, phoneNumberId } = resolveCredentials(credentials);
+  if (!payload || payload.type !== "interactive" || !payload.to) {
+    throw definitiveError("A valid WhatsApp interactive payload is required.");
+  }
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+  } catch (error) {
+    logWhatsAppLatency(startedAt, "interactive", "network_error");
+    throw error;
+  }
+  const result = await readSendResponse(response, startedAt, "interactive", "WhatsApp interactive message could not be sent.");
+  const messageId = result?.messages?.[0]?.id;
+  if (!messageId) {
+    const error = new Error("WhatsApp did not return a message ID.");
+    error.retryable = true;
+    throw error;
+  }
+  return { messageId, response: result };
+}
+
 async function checkWhatsAppConnection(credentials) {
   let accessToken;
   let phoneNumberId;
@@ -220,5 +253,6 @@ module.exports = {
   resolveCredentials,
   sendWhatsAppText,
   sendWhatsAppMedia,
+  sendWhatsAppInteractive,
   checkWhatsAppConnection
 };
