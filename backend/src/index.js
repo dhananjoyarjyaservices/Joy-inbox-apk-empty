@@ -1130,7 +1130,7 @@ async function handleTenantAutomationRules(event) {
       ...(Array.isArray(document.data().conditions) ? {
         conditions: document.data().conditions.slice(0, 5).map((condition) => ({
           keyword: String(condition?.keyword || "").slice(0, 80),
-          matchType: ["contains", "exact", "starts_with"].includes(condition?.matchType) ? condition.matchType : "contains"
+          matchType: ["contains", "exact", "starts_with", "ends_with", "not_contains", "not_exact"].includes(condition?.matchType) ? condition.matchType : "contains"
         })).filter((condition) => condition.keyword),
         conditionMode: document.data().conditionMode === "any" ? "any" : "all"
       } : {}),
