@@ -319,6 +319,8 @@ module.exports = {
   findMatchingAutomationRule,
   findMatchingOutOfOfficeRule,
   getOutOfOfficeSkipReason,
+  normalizeOutOfOfficeSettings,
+  selectWorkspaceOutOfOfficeRule,
   isWithinAutomationSchedule,
   selectAutomationSteps,
   selectAutomationBranch
