@@ -39,12 +39,12 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add cursor pagination for contacts and CRM leads, 24-hour idempotency for public API mutations, and daily per-key request/rate-limit usage analytics.
 - [x] Add configurable per-key rate-limit tiers (60/120/300 requests per minute), persist the selected tier with the hashed API-key record, enforce it in server-side Firestore counters, and expose the selected tier in the Developer panel.
 - [x] Add public API `leads:read` and `leads:write` scopes with workspace-derived list/create/update/delete endpoints and CRM stage/contact/owner/custom-field validation; add unit coverage and explicitly classify the API-key route in the HTTP route-security inventory.
-- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Public campaign draft creation and campaign state controls are implemented with separate scopes, idempotency and transactional state transitions. Remaining public API gaps: template sending/management, media and interactive sends, richer webhook delivery filters/pagination and full staging verification.
+- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Public campaign draft creation and campaign state controls are implemented with separate scopes, idempotency and transactional state transitions. Remaining public API gaps: template sending/management, media and interactive sends, and full staging verification.
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact/message/CRM lead lifecycle events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
 - [x] Add workspace-scoped webhook delivery history API/UI and manual replay for failed deliveries.
 - [x] Add owner/admin endpoint secret rotation with one-time secret display in the Developer panel.
-- [ ] Add delivery filters/pagination and run webhook delivery/replay/rotation against the isolated staging project.
+- [x] Add workspace-scoped webhook delivery status/event filters, stable cursor pagination, Firestore composite indexes and Developer panel load-more controls. (Code and unit coverage added; isolated staging delivery/replay/rotation verification remains pending.)
 - [ ] Enable Firestore TTL on `webhookDeliveryQueue.expiresAt`; split the delivery worker into its own schedule after staging load tests.
 - [ ] Validate external integration traffic, abuse controls and production CORS strategy before public launch.
 
