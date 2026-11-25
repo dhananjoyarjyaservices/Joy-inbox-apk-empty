@@ -15,6 +15,12 @@ export default function LeadFormsPanel({ organizationId }: Props) {
   const [forms, setForms] = useState<CrmLeadForm[]>([]);
   const [name, setName] = useState("Website enquiry");
   const [description, setDescription] = useState("Tell us how we can help.");
+  const [submitButton, setSubmitButton] = useState("Send enquiry");
+  const [successMessage, setSuccessMessage] = useState("Thanks! Your enquiry has been received.");
+  const [consentText, setConsentText] = useState("I agree to be contacted about my enquiry.");
+  const [consentRequired, setConsentRequired] = useState(true);
+  const [createLead, setCreateLead] = useState(true);
+  const [formEnabled, setFormEnabled] = useState(true);
   const [fields, setFields] = useState<CrmLeadFormField[]>(defaultFields);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,17 +48,17 @@ export default function LeadFormsPanel({ organizationId }: Props) {
     setSaving(true); setError(""); setNotice("");
     try {
       const saved = await saveCrmLeadForm(organizationId, {
-        name, description, fields, submitButton: "Send enquiry",
-        successMessage: "Thanks! Your enquiry has been received.",
-        consentRequired: true, consentText: "I agree to be contacted about my enquiry.",
-        createLead: true, enabled: true
+        name, description, fields, submitButton, successMessage,
+        consentRequired, consentText, createLead, enabled: formEnabled
       }, editingFormId || undefined);
       setForms(current => editingFormId ? current.map(item => item.id === saved.id ? saved : item) : [saved, ...current]);
       setNotice(editingFormId ? "Form updated." : "Form created. Copy its public link to share it.");
       setEditingFormId("");
       setName("Website enquiry");
       setDescription("Tell us how we can help.");
-      setFields(defaultFields);
+      setSubmitButton("Send enquiry"); setSuccessMessage("Thanks! Your enquiry has been received.");
+      setConsentText("I agree to be contacted about my enquiry."); setConsentRequired(true);
+      setCreateLead(true); setFormEnabled(true); setFields(defaultFields);
     } catch (e) { setError(e instanceof Error ? e.message : "Lead form could not be created."); }
     finally { setSaving(false); }
   }
@@ -75,6 +81,9 @@ export default function LeadFormsPanel({ organizationId }: Props) {
   function editForm(form: CrmLeadForm) {
     setEditingFormId(form.id); setName(form.name); setDescription(form.description);
     setFields(form.fields.map(field => ({ ...field, options: [...field.options] })));
+    setSubmitButton(form.submitButton); setSuccessMessage(form.successMessage);
+    setConsentText(form.consentText); setConsentRequired(form.consentRequired);
+    setCreateLead(form.createLead); setFormEnabled(form.enabled);
     setNotice(""); setError("");
   }
   async function viewResponses(form: CrmLeadForm) {
@@ -127,12 +136,22 @@ export default function LeadFormsPanel({ organizationId }: Props) {
           {field.type === "select" && <label className="text-[10px] text-gray-500 sm:col-span-3">Options (comma separated)<input value={field.options.join(", ")} onChange={e => updateField(index, { options: e.target.value.split(",").map(v => v.trim()).filter(Boolean) })} className="mt-1 w-full rounded border p-1.5 text-xs"/></label>}
         </div>)}
       </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="text-[10px] text-gray-500">Submit button label<input value={submitButton} onChange={e => setSubmitButton(e.target.value)} maxLength={30} required className="mt-1 w-full rounded border bg-white p-1.5 text-xs"/></label>
+        <label className="text-[10px] text-gray-500">Success message<input value={successMessage} onChange={e => setSuccessMessage(e.target.value)} maxLength={300} required className="mt-1 w-full rounded border bg-white p-1.5 text-xs"/></label>
+        <label className="text-[10px] text-gray-500 sm:col-span-2">Consent statement<input value={consentText} onChange={e => setConsentText(e.target.value)} maxLength={240} className="mt-1 w-full rounded border bg-white p-1.5 text-xs"/></label>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-4">
+        <label className="flex items-center gap-1.5 text-[10px] text-gray-600"><input type="checkbox" checked={consentRequired} onChange={e => setConsentRequired(e.target.checked)}/> Require consent</label>
+        <label className="flex items-center gap-1.5 text-[10px] text-gray-600"><input type="checkbox" checked={createLead} onChange={e => setCreateLead(e.target.checked)}/> Create CRM lead</label>
+        <label className="flex items-center gap-1.5 text-[10px] text-gray-600"><input type="checkbox" checked={formEnabled} onChange={e => setFormEnabled(e.target.checked)}/> Published</label>
+      </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <button type="button" disabled={fields.length >= 10} onClick={() => setFields(current => [...current, { key: `field_${Date.now()}`, label: "New field", type: "text", required: false, options: [] }])} className="flex items-center gap-1 rounded-md border bg-white px-2 py-1.5 text-xs text-[#075e54] disabled:opacity-40"><Plus size={13}/> Add field</button>
         <button type="submit" disabled={saving || !name.trim() || fields.length < 1} className="rounded-md bg-[#075e54] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : editingFormId ? "Save changes" : "Create form"}</button>
-        {editingFormId && <button type="button" onClick={() => { setEditingFormId(""); setName("Website enquiry"); setDescription("Tell us how we can help."); setFields(defaultFields); }} className="rounded-md border bg-white px-3 py-2 text-xs">Cancel edit</button>}
+        {editingFormId && <button type="button" onClick={() => { setEditingFormId(""); setName("Website enquiry"); setDescription("Tell us how we can help."); setFields(defaultFields); setSubmitButton("Send enquiry"); setSuccessMessage("Thanks! Your enquiry has been received."); setConsentText("I agree to be contacted about my enquiry."); setConsentRequired(true); setCreateLead(true); setFormEnabled(true); }} className="rounded-md border bg-white px-3 py-2 text-xs">Cancel edit</button>}
       </div>
-      <p className="mt-2 text-[10px] text-gray-500">Consent is required by default. Form submissions are rate-limited and stored in your workspace; CRM lead creation is enabled.</p>
+      <p className="mt-2 text-[10px] text-gray-500">Form submissions are validated and rate-limited. Consent and CRM lead creation are configurable.</p>
     </form>
   </section>;
 }
