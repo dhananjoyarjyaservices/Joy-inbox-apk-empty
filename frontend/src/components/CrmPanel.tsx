@@ -18,6 +18,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const [salesReport, setSalesReport] = useState<CrmSalesReport | null>(null);
   const [savedFilters, setSavedFilters] = useState<CrmSavedFilter[]>([]);
   const [savedFilterName, setSavedFilterName] = useState("");
+  const [shareSavedFilter, setShareSavedFilter] = useState(false);
   const [selectedSavedFilterId, setSelectedSavedFilterId] = useState("");
   const [filterStageId, setFilterStageId] = useState("");
   const [filterOwnerUid, setFilterOwnerUid] = useState("");
@@ -129,11 +130,12 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
       const item = await saveCrmSavedFilter(organizationId, {
         name: savedFilterName.trim(), stageId: filterStageId, ownerUid: filterOwnerUid, source: filterSource,
         followUp: followUpFilter, minValue: filterMinValue.trim() ? Number(filterMinValue) : null,
-        maxValue: filterMaxValue.trim() ? Number(filterMaxValue) : null, search: filterSearch, shared: false
+        maxValue: filterMaxValue.trim() ? Number(filterMaxValue) : null, search: filterSearch, shared: shareSavedFilter
       });
       setSavedFilters(current => [item, ...current]);
       setSelectedSavedFilterId(item.id);
       setSavedFilterName("");
+      setShareSavedFilter(false);
     } catch (e) { setError(e instanceof Error ? e.message : "Saved filter could not be saved."); }
     finally { setSaving(false); }
   }
@@ -372,7 +374,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
       <div className="mb-3 space-y-2 rounded-xl border bg-white p-3">
         <div className="flex flex-wrap items-end gap-2">
           <label className="min-w-0 flex-1 text-xs text-gray-600">Saved CRM views<select value={selectedSavedFilterId} onChange={event => applySavedFilter(event.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm"><option value="">Choose saved view</option>{savedFilters.map(filter => <option key={filter.id} value={filter.id}>{filter.name}{filter.shared ? " · Shared" : ""}</option>)}</select></label>
-          <form onSubmit={saveCurrentFilter} className="flex min-w-0 flex-1 gap-2"><input aria-label="Saved view name" value={savedFilterName} onChange={event => setSavedFilterName(event.target.value)} maxLength={60} placeholder="Name current view" className="min-w-0 flex-1 rounded-lg border p-2 text-xs"/><button disabled={saving || !savedFilterName.trim()} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Save view</button></form>
+          <form onSubmit={saveCurrentFilter} className="flex min-w-0 flex-1 flex-wrap gap-2"><input aria-label="Saved view name" value={savedFilterName} onChange={event => setSavedFilterName(event.target.value)} maxLength={60} placeholder="Name current view" className="min-w-0 flex-1 rounded-lg border p-2 text-xs"/><label className="flex items-center gap-1 text-[11px] text-gray-600"><input type="checkbox" checked={shareSavedFilter} onChange={event => setShareSavedFilter(event.target.checked)}/> Share with team</label><button disabled={saving || !savedFilterName.trim()} className="rounded-lg bg-[#075e54] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Save view</button></form>
           {selectedSavedFilterId && <button type="button" onClick={() => void removeSavedFilter(selectedSavedFilterId)} disabled={saving} className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 disabled:opacity-50">Delete view</button>}
         </div>
         <div className="grid gap-2 sm:grid-cols-3">
@@ -380,6 +382,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
           <select aria-label="Filter by stage" value={filterStageId} onChange={event => setFilterStageId(event.target.value)} className="rounded-lg border bg-white p-2 text-xs"><option value="">All stages</option>{activeStages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}</select>
           <select aria-label="Filter by owner" value={filterOwnerUid} onChange={event => setFilterOwnerUid(event.target.value)} className="rounded-lg border bg-white p-2 text-xs"><option value="">All owners</option><option value="__unassigned">Unassigned</option>{members.filter(member => member.status === "active").map(member => <option key={member.uid} value={member.uid}>{member.displayName || member.email || member.uid}</option>)}</select>
           <input aria-label="Filter by source" value={filterSource} onChange={event => setFilterSource(event.target.value)} placeholder="Exact lead source" className="rounded-lg border p-2 text-xs"/>
+          <select aria-label="Filter by follow-up" value={followUpFilter} onChange={event => setFollowUpFilter(event.target.value as typeof followUpFilter)} className="rounded-lg border bg-white p-2 text-xs"><option value="all">Any follow-up</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="upcoming">Upcoming</option><option value="none">No follow-up</option></select>
           <input aria-label="Minimum deal value" type="number" min="0" value={filterMinValue} onChange={event => setFilterMinValue(event.target.value)} placeholder="Min deal value" className="rounded-lg border p-2 text-xs"/>
           <input aria-label="Maximum deal value" type="number" min="0" value={filterMaxValue} onChange={event => setFilterMaxValue(event.target.value)} placeholder="Max deal value" className="rounded-lg border p-2 text-xs"/>
         </div>
