@@ -161,8 +161,9 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
     ? new Date(Number(inboundMessage.timestamp) * 1000) : new Date();
   const withinWindow = inboundTimestamp.getTime() <= Date.now() + 5 * 60 * 1000 &&
     Date.now() - inboundTimestamp.getTime() < 24 * 60 * 60 * 1000;
-  const steps = Array.isArray(rule.steps) && rule.steps.length
-    ? rule.steps.slice(0, 5).map((step) => typeof step === "string"
+  const selectedSteps = selectAutomationSteps(rule, body);
+  const steps = Array.isArray(selectedSteps) && selectedSteps.length
+    ? selectedSteps.slice(0, 5).map((step) => typeof step === "string"
       ? { message: step.trim(), delaySeconds: 0 }
       : { message: String(step?.message || "").trim(), delaySeconds: Number.isInteger(step?.delaySeconds) ? Math.max(0, Math.min(86400, step.delaySeconds)) : 0 }).filter((step) => step.message)
     : [{ message: String(rule.response || "").trim(), delaySeconds: 0 }].filter((step) => step.message);
