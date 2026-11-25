@@ -402,7 +402,14 @@ async function processCampaign(db, campaignRef, dependencies = {}) {
     const latest = await campaignRef.get();
     if (latest.exists && ["queued", "sending"].includes(latest.get("status"))) {
       const value = latest.data();
-      const finalStatus = Number(value.sentCount || 0) > 0 ? "completed" : "failed";
+      // A campaign where every recipient was safely skipped (for example,
+      // because of opt-out suppression) has finished successfully; it is not
+      // a failed delivery campaign merely because it sent zero messages.
+      const hasDeliveryFailures = Number(value.failedCount || 0) > 0 ||
+        Number(value.uncertainCount || 0) > 0;
+      const finalStatus = Number(value.sentCount || 0) > 0 || !hasDeliveryFailures
+        ? "completed"
+        : "failed";
       await campaignRef.set({ status: finalStatus, completedAt: now, updatedAt: now }, { merge: true });
     }
   }
