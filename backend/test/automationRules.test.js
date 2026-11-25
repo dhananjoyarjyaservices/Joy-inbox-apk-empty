@@ -205,7 +205,7 @@ test("validates and evaluates expanded operators in all/any condition groups", (
     response: "How can we help?"
   });
   assert.equal(matchesAutomationRule(rule, "Help me with setup"), true);
-  assert.equal(matchesAutomationRule(rule, "Help me with pricing"), false);
+  assert.equal(matchesAutomationRule(rule, "Help me with price details"), false);
   assert.throws(() => normalizeAutomationRule({
     name: "Invalid operator",
     conditions: [{ keyword: "hello", matchType: "regex" }],
