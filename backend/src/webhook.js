@@ -6,7 +6,7 @@ const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
-const { findMatchingAutomationRule, findMatchingOutOfOfficeRule, selectAutomationBranch } = require("./automationRules");
+const { findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason, selectAutomationBranch } = require("./automationRules");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 
@@ -183,14 +183,9 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
     if (isOutOfOffice && withinWindow) {
       const chatSnapshot = await transaction.get(chatRef);
       const chat = chatSnapshot.exists ? chatSnapshot.data() || {} : {};
-      const toDate = (value) => value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value || 0);
-      const lastSentAt = toDate(chat.outOfOfficeSentAt);
-      const claimedAt = toDate(chat.outOfOfficeClaimedAt);
-      if (!Number.isNaN(lastSentAt.getTime()) && now.getTime() - lastSentAt.getTime() < 24 * 60 * 60 * 1000) {
-        skipReason = "out_of_office_cooldown";
-      } else if (chat.outOfOfficeClaimedFor && !Number.isNaN(claimedAt.getTime()) &&
-          now.getTime() - claimedAt.getTime() < 2 * 60 * 1000) {
-        skipReason = "out_of_office_send_in_progress";
+      const outOfOfficeSkipReason = getOutOfOfficeSkipReason(chat, now);
+      if (outOfOfficeSkipReason) {
+        skipReason = outOfOfficeSkipReason;
       } else {
         transaction.set(chatRef, {
           outOfOfficeClaimedFor: runId,
