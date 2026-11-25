@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch } = require("../src/automationRules");
+const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch, findMatchingAutomationRule, findMatchingOutOfOfficeRule } = require("../src/automationRules");
 
 test("normalizes valid keyword automation rules and defaults", () => {
   assert.deepEqual(normalizeAutomationRule({
@@ -305,4 +305,27 @@ test("selects the first matching branch and exposes branch metadata", () => {
   assert.deepEqual(selectAutomationBranch(rule, "Hello"), {
     branchName: null, branchIndex: null, steps: [{ message: "Default reply", delaySeconds: 0 }]
   });
+});
+
+
+test("validates out-of-office fallback replies and requires a schedule", () => {
+  const base = { name: "Support hours", keyword: "support", response: "We are online.", schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" } };
+  const normalized = normalizeAutomationRule({ ...base, outOfOfficeMessage: "We are away. We will reply during business hours." });
+  assert.equal(normalized.outOfOfficeMessage, "We are away. We will reply during business hours.");
+  assert.throws(() => normalizeAutomationRule({ ...base, schedule: undefined, outOfOfficeMessage: "Away" }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({ ...base, outOfOfficeMessage: "x".repeat(1025) }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({ ...base, outOfOfficeMessage: 12 }), { statusCode: 400 });
+});
+
+test("selects an out-of-office fallback only outside its configured local hours", () => {
+  const rule = normalizeAutomationRule({
+    name: "Support", keyword: "support", response: "A teammate will help.",
+    schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" },
+    outOfOfficeMessage: "We are currently away."
+  });
+  const rules = [{ ...rule, id: "support" }];
+  assert.equal(findMatchingAutomationRule(rules, "I need support", new Date("2026-11-25T05:00:00Z")).id, "support");
+  assert.equal(findMatchingOutOfOfficeRule(rules, "I need support", new Date("2026-11-25T15:00:00Z")).id, "support");
+  assert.equal(findMatchingOutOfOfficeRule(rules, "I need support", new Date("2026-11-25T05:00:00Z")), null);
+  assert.equal(findMatchingOutOfOfficeRule(rules, "I need pricing", new Date("2026-11-25T15:00:00Z")), null);
 });
