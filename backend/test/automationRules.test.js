@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch, findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason } = require("../src/automationRules");
+const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch, findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason, normalizeOutOfOfficeSettings } = require("../src/automationRules");
 
 test("normalizes valid keyword automation rules and defaults", () => {
   assert.deepEqual(normalizeAutomationRule({
@@ -355,4 +355,26 @@ test("suppresses repeated out-of-office replies for 24 hours and concurrent send
     outOfOfficeClaimedFor: "run-1",
     outOfOfficeClaimedAt: new Date(now.getTime() - 3 * 60 * 1000)
   }, now), null);
+});
+
+test("normalizes workspace out-of-office settings and working hours", () => {
+  assert.deepEqual(normalizeOutOfOfficeSettings({
+    enabled: true, message: " We are closed. ",
+    schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" }
+  }), {
+    enabled: true, message: "We are closed.",
+    schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" }
+  });
+  assert.throws(() => normalizeOutOfOfficeSettings({
+    enabled: true, message: "", schedule: { timezone: "Asia/Kolkata", days: [1], startTime: "09:00", endTime: "18:00" }
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeOutOfOfficeSettings({
+    enabled: true, message: "Closed", schedule: { timezone: "Invalid/Zone", days: [1], startTime: "09:00", endTime: "18:00" }
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeOutOfOfficeSettings({
+    enabled: true, message: "Closed", schedule: { timezone: "Asia/Kolkata", days: [1, 1], startTime: "09:00", endTime: "18:00" }
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeOutOfOfficeSettings({
+    enabled: true, message: "Closed", schedule: { timezone: "Asia/Kolkata", days: [1], startTime: "18:00", endTime: "09:00" }
+  }), { statusCode: 400 });
 });
