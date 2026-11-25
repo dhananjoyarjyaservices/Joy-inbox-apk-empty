@@ -115,6 +115,9 @@ test("public submissions create one CRM lead and retries return the original res
   assert.deepEqual(retry, first);
   assert.equal([...documents.keys()].filter(path => path.includes("/leadFormSubmissions/")).length, 1);
   assert.equal([...documents.keys()].filter(path => path.includes("/crmLeads/")).length, 1);
+  assert.equal([...documents.keys()].filter(path => path.includes("/contacts/")).length, 1);
+  const lead = [...documents.entries()].find(([path]) => path.includes("/crmLeads/"))[1];
+  assert.equal(lead.contactId, "919876543210");
   assert.equal([...documents.entries()].find(([path]) => path.startsWith("publicFormRateLimits/"))[1].count, 1);
 });
 
