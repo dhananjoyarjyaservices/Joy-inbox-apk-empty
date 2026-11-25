@@ -7,7 +7,8 @@ const API_KEY_ID_PATTERN = /^[a-f0-9]{64}$/;
 const ALLOWED_SCOPES = new Set(["contacts:read", "contacts:write", "leads:read", "leads:write", "messages:write", "templates:read", "campaigns:read", "campaigns:write", "campaigns:control"]);
 const DEFAULT_EXPIRY_DAYS = 90;
 const MAX_EXPIRY_DAYS = 365;
-const MAX_REQUESTS_PER_MINUTE = 60;
+const DEFAULT_REQUESTS_PER_MINUTE = 60;
+const ALLOWED_RATE_LIMITS_PER_MINUTE = new Set([60, 120, 300]);
 
 function httpError(message, statusCode) {
   const error = new Error(message);
@@ -36,7 +37,13 @@ function normalizeApiKeyInput(input) {
   if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > MAX_EXPIRY_DAYS) {
     throw httpError("API keys must expire within 1–365 days.", 400);
   }
-  return { name, scopes, expiryDays };
+  const rateLimitPerMinute = input.rateLimitPerMinute === undefined
+    ? DEFAULT_REQUESTS_PER_MINUTE
+    : Number(input.rateLimitPerMinute);
+  if (!ALLOWED_RATE_LIMITS_PER_MINUTE.has(rateLimitPerMinute)) {
+    throw httpError("Choose a supported API rate limit: 60, 120 or 300 requests per minute.", 400);
+  }
+  return { name, scopes, expiryDays, rateLimitPerMinute };
 }
 
 async function createOrganizationApiKey(db, organizationId, actorUid, input, now = Date.now()) {
@@ -52,6 +59,7 @@ async function createOrganizationApiKey(db, organizationId, actorUid, input, now
     name: definition.name,
     keyPrefix: token.slice(0, 16),
     scopes: definition.scopes,
+    rateLimitPerMinute: definition.rateLimitPerMinute,
     status: "active",
     createdBy: actorUid,
     createdAt: new Date(now),
@@ -62,6 +70,7 @@ async function createOrganizationApiKey(db, organizationId, actorUid, input, now
     name: definition.name,
     keyPrefix: token.slice(0, 16),
     scopes: definition.scopes,
+    rateLimitPerMinute: definition.rateLimitPerMinute,
     status: "active",
     createdAt: new Date(now).toISOString(),
     expiresAt: expiresAt.toISOString(),
@@ -81,6 +90,7 @@ async function listOrganizationApiKeys(db, organizationId) {
       name: data.name,
       keyPrefix: data.keyPrefix,
       scopes: Array.isArray(data.scopes) ? data.scopes : [],
+      rateLimitPerMinute: ALLOWED_RATE_LIMITS_PER_MINUTE.has(Number(data.rateLimitPerMinute)) ? Number(data.rateLimitPerMinute) : DEFAULT_REQUESTS_PER_MINUTE,
       status: data.status,
       createdAt: toIso(data.createdAt),
       expiresAt: toIso(data.expiresAt),
@@ -104,7 +114,7 @@ async function revokeOrganizationApiKey(db, organizationId, keyId, now = Date.no
   return { id: keyId, status: "revoked" };
 }
 
-async function consumeApiRateLimit(db, keyHash, organizationId, now = Date.now()) {
+async function consumeApiRateLimit(db, keyHash, organizationId, now = Date.now(), limit = DEFAULT_REQUESTS_PER_MINUTE) {
   const minute = Math.floor(now / 60000);
   const dateKey = new Date(now).toISOString().slice(0, 10).replace(/-/g, "");
   const rateRef = db.collection("publicApiRateLimits").doc(`${keyHash}_${minute}`);
@@ -116,7 +126,7 @@ async function consumeApiRateLimit(db, keyHash, organizationId, now = Date.now()
     ]);
     const count = rateSnapshot.exists ? Number(rateSnapshot.data()?.count || 0) : 0;
     const usage = usageSnapshot.exists ? usageSnapshot.data() || {} : {};
-    const isLimited = count >= MAX_REQUESTS_PER_MINUTE;
+    const isLimited = count >= limit;
     if (!isLimited) {
       transaction.set(rateRef, {
         keyHash,
@@ -191,7 +201,10 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(data.organizationId || "")) throw httpError("API key workspace is invalid.", 403);
   const organization = await db.collection("organizations").doc(data.organizationId).get();
   if (!organization.exists || organization.data()?.status !== "active") throw httpError("API key workspace is inactive.", 403);
-  await consumeApiRateLimit(db, keyHash, data.organizationId, now);
+  const rateLimitPerMinute = ALLOWED_RATE_LIMITS_PER_MINUTE.has(Number(data.rateLimitPerMinute))
+    ? Number(data.rateLimitPerMinute)
+    : DEFAULT_REQUESTS_PER_MINUTE;
+  await consumeApiRateLimit(db, keyHash, data.organizationId, now, rateLimitPerMinute);
   const lastUsedAt = typeof data.lastUsedAt?.toDate === "function"
     ? data.lastUsedAt.toDate().getTime()
     : data.lastUsedAt instanceof Date ? data.lastUsedAt.getTime() : 0;
@@ -202,6 +215,7 @@ async function authenticateOrganizationApiKey(db, authorization, now = Date.now(
     keyId: keyHash,
     organizationId: data.organizationId,
     scopes: Array.isArray(data.scopes) ? data.scopes : [],
+    rateLimitPerMinute,
     createdBy: data.createdBy
   };
 }
@@ -265,7 +279,8 @@ function requireApiScope(authenticatedKey, scope) {
 
 module.exports = {
   ALLOWED_SCOPES,
-  MAX_REQUESTS_PER_MINUTE,
+  DEFAULT_REQUESTS_PER_MINUTE,
+  ALLOWED_RATE_LIMITS_PER_MINUTE,
   listOrganizationApiUsage,
   runIdempotentApiRequest,
   normalizeApiKeyInput,
