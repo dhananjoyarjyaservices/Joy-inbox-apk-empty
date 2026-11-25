@@ -89,7 +89,7 @@ const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_S
 const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
 const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule, sortAutomationRules } = require("./automationRules");
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
-const { filterSuppressedCampaignRecipients } = require("./campaignCompliance");
+const { filterSuppressedCampaignRecipients, suppressionDocumentId } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
 const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
@@ -511,7 +511,13 @@ async function handlePublicApiMessages(event) {
     if (!/^[a-z0-9_]{1,512}$/.test(templateName) || !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(language) || !validVariables(variables) || !validVariables(headerVariables) || !validVariables(buttonVariables)) {
       return jsonResponse(event, 400, { error: "Template name, language or template variables are invalid." });
     }
-    normalizedTemplate = { templateName, language, variables, headerVariables, buttonVariables };
+    const consent = body.consent;
+    const consentAt = typeof consent?.consentAt === "string" ? new Date(consent.consentAt) : null;
+    const consentSource = typeof consent?.consentSource === "string" ? consent.consentSource.trim() : "";
+    if (!consent || consent.optedIn !== true || !consentAt || Number.isNaN(consentAt.getTime()) || consentAt.getTime() > Date.now() || consentSource.length < 2 || consentSource.length > 120) {
+      return jsonResponse(event, 400, { error: "Template sends require explicit opt-in evidence: optedIn=true, a past ISO consentAt timestamp and a consentSource (2–120 characters)." });
+    }
+    normalizedTemplate = { templateName, language, variables, headerVariables, buttonVariables, consent: { optedIn: true, consentAt: consentAt.toISOString(), consentSource } };
     previewText = `Template: ${templateName} (${language})`;
   } else if (type === "text") {
     previewText = typeof body.text === "string" ? body.text.trim() : "";
@@ -574,6 +580,8 @@ async function handlePublicApiMessages(event) {
         } else if (type === "interactive") {
           result = await sendWhatsAppInteractive(buildWhatsAppInteractivePayload(to, normalizedInteractive), credentials);
         } else if (type === "template") {
+          const suppression = await filterSuppressedCampaignRecipients(db, authenticatedKey.organizationId, [{ phone: to }]);
+          if (suppression.suppressed > 0) { const error = new Error("This recipient has opted out. A new WhatsApp START message is required before sending again."); error.statusCode = 409; error.definitive = true; throw error; }
           if (!credentials.wabaId || !/^[0-9]{5,32}$/.test(String(credentials.wabaId))) {
             const error = new Error("The connected WhatsApp number is missing its Business Account link."); error.statusCode = 409; error.definitive = true; throw error;
           }
@@ -623,13 +631,17 @@ async function handlePublicApiMessages(event) {
         status: "sent", source: "public_api", sender: "api"
       };
       if (type === "interactive") messageData.interactive = normalizedInteractive;
-      if (type === "template") Object.assign(messageData, { templateName: normalizedTemplate.templateName, language: normalizedTemplate.language, templateVariables: normalizedTemplate.variables, templateHeaderVariables: normalizedTemplate.headerVariables, templateButtonVariables: normalizedTemplate.buttonVariables });
+      if (type === "template") Object.assign(messageData, { templateName: normalizedTemplate.templateName, language: normalizedTemplate.language, templateVariables: normalizedTemplate.variables, templateHeaderVariables: normalizedTemplate.headerVariables, templateButtonVariables: normalizedTemplate.buttonVariables, consentSource: normalizedTemplate.consent.consentSource, consentAt: new Date(normalizedTemplate.consent.consentAt) });
       if (media) Object.assign(messageData, {
         mediaId: uploadedMediaId, mimeType: media.mimeType, filename: media.filename || null,
         caption: media.caption || null, mediaStorage: "meta"
       });
       const batch = db.batch();
       batch.set(messageRef, messageData);
+      if (type === "template") {
+        const consentRef = db.collection("organizations").doc(authenticatedKey.organizationId).collection("messageConsentEvidence").doc(suppressionDocumentId(to));
+        batch.set(consentRef, { phoneHash: consentRef.id, consentAt: new Date(normalizedTemplate.consent.consentAt), consentSource: normalizedTemplate.consent.consentSource, recordedAt: timestamp, recordedBy: authenticatedKey.keyId, source: "public_api_template_send" }, { merge: true });
+      }
       batch.set(chatRef, {
         customerPhone: to, phoneNumberId, lastMessage: previewText, lastMessageAt: timestamp,
         lastMessageDirection: "outgoing", updatedAt: timestamp
