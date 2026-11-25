@@ -43,3 +43,11 @@ test("selects the lowest-priority-number matching FAQ", () => {
   assert.equal(findMatchingFaqEntry(entries, "Can I get a refund?").id, "first");
   assert.equal(findMatchingFaqEntry([], "refund"), null);
 });
+
+
+test("rejects FAQ keywords that can never match and deduplicates normalized phrases", () => {
+  assert.throws(() => normalizeFaqEntry({ question: "Single letter?", answer: "Answer", keywords: ["a"] }), { statusCode: 400 });
+  assert.throws(() => normalizeFaqEntry({ question: "Punctuation only?", answer: "Answer", keywords: ["!!!"] }), { statusCode: 400 });
+  const normalized = normalizeFaqEntry({ question: "Opening hours?", answer: "9 AM", keywords: ["opening-hours", "OPENING hours", "timing"] });
+  assert.deepEqual(normalized.keywords, ["opening-hours", "timing"]);
+});
