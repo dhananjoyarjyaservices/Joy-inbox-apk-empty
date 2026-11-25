@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch, findMatchingAutomationRule, findMatchingOutOfOfficeRule } = require("../src/automationRules");
+const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch, findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason } = require("../src/automationRules");
 
 test("normalizes valid keyword automation rules and defaults", () => {
   assert.deepEqual(normalizeAutomationRule({
@@ -328,4 +328,17 @@ test("selects an out-of-office fallback only outside its configured local hours"
   assert.equal(findMatchingOutOfOfficeRule(rules, "I need support", new Date("2026-11-25T15:00:00Z")).id, "support");
   assert.equal(findMatchingOutOfOfficeRule(rules, "I need support", new Date("2026-11-25T05:00:00Z")), null);
   assert.equal(findMatchingOutOfOfficeRule(rules, "I need pricing", new Date("2026-11-25T15:00:00Z")), null);
+});
+test("suppresses repeated out-of-office replies for 24 hours and concurrent sends", () => {
+  const now = new Date("2026-11-25T12:00:00.000Z");
+  assert.equal(getOutOfOfficeSkipReason({ outOfOfficeSentAt: new Date(now.getTime() - 23 * 60 * 60 * 1000) }, now), "out_of_office_cooldown");
+  assert.equal(getOutOfOfficeSkipReason({ outOfOfficeSentAt: new Date(now.getTime() - 24 * 60 * 60 * 1000) }, now), null);
+  assert.equal(getOutOfOfficeSkipReason({
+    outOfOfficeClaimedFor: "run-1",
+    outOfOfficeClaimedAt: new Date(now.getTime() - 60 * 1000)
+  }, now), "out_of_office_send_in_progress");
+  assert.equal(getOutOfOfficeSkipReason({
+    outOfOfficeClaimedFor: "run-1",
+    outOfOfficeClaimedAt: new Date(now.getTime() - 3 * 60 * 1000)
+  }, now), null);
 });
