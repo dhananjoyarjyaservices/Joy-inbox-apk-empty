@@ -317,8 +317,11 @@ export interface OrganizationAutomationRun {
   ruleName: string;
   customerPhone: string;
   status: "sending" | "sent" | "failed" | "partially_failed" | "skipped" | string;
+  branchName?: string | null;
+  branchIndex?: number | null;
   completedSteps: number;
   totalSteps: number;
+  stepResults?: { step: number; status: string; delaySeconds: number; sentAt?: string; error?: string }[];
   error: string;
   reason: string;
   createdAt: string | null;
