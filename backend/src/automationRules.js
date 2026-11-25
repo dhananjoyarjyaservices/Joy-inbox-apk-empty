@@ -8,7 +8,7 @@ function httpError(message, statusCode) {
 
 function normalizeAutomationRule(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Automation rule details are required.", 400);
-  const allowed = ["name", "keyword", "matchType", "conditions", "conditionMode", "response", "steps", "enabled", "priority", "schedule"];
+  const allowed = ["name", "keyword", "matchType", "conditions", "conditionMode", "response", "steps", "enabled", "priority", "schedule", "branches"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Automation rule contains unsupported fields.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const hasConditions = input.conditions !== undefined;
@@ -80,10 +80,64 @@ function normalizeAutomationRule(input) {
     }
     schedule = { timezone, days: [...days].sort((a, b) => a - b), startTime: value.startTime, endTime: value.endTime };
   }
+  let branches;
+  if (input.branches !== undefined) {
+    if (!Array.isArray(input.branches) || input.branches.length < 1 || input.branches.length > 5) {
+      throw httpError("Provide between 1 and 5 conditional branches.", 400);
+    }
+    const branchNames = new Set();
+    branches = input.branches.map((branch) => {
+      if (!branch || typeof branch !== "object" || Array.isArray(branch) ||
+          Object.keys(branch).some((key) => !["name", "conditions", "conditionMode", "steps"].includes(key))) {
+        throw httpError("Each branch may only contain name, conditions, conditionMode and steps.", 400);
+      }
+      const branchName = typeof branch.name === "string" ? branch.name.trim() : "";
+      if (!branchName || branchName.length > 50 || branchNames.has(branchName.toLocaleLowerCase("und"))) {
+        throw httpError("Each branch needs a unique name (maximum 50 characters).", 400);
+      }
+      branchNames.add(branchName.toLocaleLowerCase("und"));
+      if (!Array.isArray(branch.conditions) || branch.conditions.length < 1 || branch.conditions.length > 5 ||
+          (branch.conditionMode !== undefined && !["all", "any"].includes(branch.conditionMode))) {
+        throw httpError("Each branch needs 1–5 conditions and an all/any condition mode.", 400);
+      }
+      const branchConditions = branch.conditions.map((condition) => {
+        if (!condition || typeof condition !== "object" || Array.isArray(condition) ||
+            Object.keys(condition).some((key) => !["keyword", "matchType"].includes(key))) {
+          throw httpError("Branch conditions may only contain keyword and matchType.", 400);
+        }
+        const value = typeof condition.keyword === "string" ? condition.keyword.trim() : "";
+        const matchType = condition.matchType === undefined ? "contains" : condition.matchType;
+        if (!value || value.length > 80 || [...value].some((character) => character.charCodeAt(0) < 32) ||
+            !["contains", "exact", "starts_with", "ends_with", "not_contains", "not_exact"].includes(matchType)) {
+          throw httpError("Branch condition keywords and match types are invalid.", 400);
+        }
+        return { keyword: value, matchType };
+      });
+      if (!Array.isArray(branch.steps) || branch.steps.length < 1 || branch.steps.length > 5) {
+        throw httpError("Each branch must contain between 1 and 5 reply steps.", 400);
+      }
+      const branchSteps = branch.steps.map((step) => {
+        if (typeof step === "string") return { message: step.trim(), delaySeconds: 0 };
+        if (!step || typeof step !== "object" || Array.isArray(step) ||
+            Object.keys(step).some((key) => !["message", "delaySeconds"].includes(key))) {
+          throw httpError("Branch steps may only contain message and delaySeconds.", 400);
+        }
+        const delaySeconds = step.delaySeconds === undefined ? 0 : step.delaySeconds;
+        if (!Number.isInteger(delaySeconds) || delaySeconds < 0 || delaySeconds > 86400) {
+          throw httpError("Branch step delays must be between 0 and 86,400 seconds.", 400);
+        }
+        return { message: typeof step.message === "string" ? step.message.trim() : "", delaySeconds };
+      });
+      if (branchSteps.some((step) => !step.message || step.message.length > 1024)) {
+        throw httpError("Each branch reply is required and must be 1,024 characters or fewer.", 400);
+      }
+      return { name: branchName, conditions: branchConditions, conditionMode: branch.conditionMode || "all", steps: branchSteps };
+    });
+  }
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw httpError("Enabled must be true or false.", 400);
   return {
     name, keyword, matchType, ...(conditions ? { conditions, conditionMode: input.conditionMode || "all" } : {}),
-    response: steps[0].message, steps, enabled: input.enabled !== false, priority, ...(schedule ? { schedule } : {})
+    response: steps[0].message, steps, enabled: input.enabled !== false, priority, ...(schedule ? { schedule } : {}), ...(branches ? { branches } : {})
   };
 }
 
@@ -126,6 +180,16 @@ function matchesAutomationRule(rule, messageText) {
     return rule.conditionMode === "any" ? results.some(Boolean) : results.every(Boolean);
   }
   return matchesKeyword(message, rule.keyword, rule.matchType);
+}
+
+function selectAutomationSteps(rule, messageText) {
+  const message = normalizeAutomationMatchText(messageText);
+  if (!message || !Array.isArray(rule?.branches)) return Array.isArray(rule?.steps) ? rule.steps : [];
+  const branch = rule.branches.find((item) => {
+    const results = item.conditions.map((condition) => matchesKeyword(message, condition.keyword, condition.matchType));
+    return item.conditionMode === "any" ? results.some(Boolean) : results.every(Boolean);
+  });
+  return branch ? branch.steps : (Array.isArray(rule.steps) ? rule.steps : []);
 }
 
 function isWithinAutomationSchedule(rule, instant = new Date()) {
