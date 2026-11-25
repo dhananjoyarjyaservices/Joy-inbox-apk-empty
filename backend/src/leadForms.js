@@ -106,6 +106,16 @@ async function deleteLeadForm(db, organization, formId) {
   return { id: formId, enabled: false };
 }
 
+async function listLeadFormSubmissions(organization, formId, rawLimit = 50) {
+  if (!FORM_ID_PATTERN.test(formId || "")) throw formError("A valid form ID is required.");
+  const limit = Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw formError("Submission limit must be between 1 and 100.");
+  const form = await organization.ref.collection("leadForms").doc(formId).get();
+  if (!form.exists) throw formError("Lead form was not found.", 404);
+  const snapshot = await organization.ref.collection("leadFormSubmissions").where("formId", "==", formId).orderBy("submittedAt", "desc").limit(limit).get();
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
 async function getPublicLeadForm(db, formId) {
   if (!FORM_ID_PATTERN.test(formId || "")) throw formError("A valid form ID is required.");
   const index = await db.collection("publicLeadForms").doc(formId).get();
@@ -182,6 +192,6 @@ async function submitPublicLeadForm(db, formId, input, options = {}) {
 
 module.exports = {
   FORM_ID_PATTERN, normalizeLeadForm, normalizeSubmission, safePublicForm,
-  listLeadForms, saveLeadForm, deleteLeadForm, getPublicLeadForm, submitPublicLeadForm,
+  listLeadForms, saveLeadForm, deleteLeadForm, listLeadFormSubmissions, getPublicLeadForm, submitPublicLeadForm,
   MAX_SUBMISSIONS_PER_MINUTE
 };
