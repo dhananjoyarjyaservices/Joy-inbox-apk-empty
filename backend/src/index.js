@@ -1138,7 +1138,7 @@ async function handleTenantAutomationRules(event) {
       response: String(document.data().response || document.data().steps?.[0] || ""),
       steps: Array.isArray(document.data().steps) && document.data().steps.length ? document.data().steps.slice(0, 5).map((step) => typeof step === "string" ? { message: step, delaySeconds: 0 } : { message: String(step?.message || ""), delaySeconds: Number.isInteger(step?.delaySeconds) ? step.delaySeconds : 0 }) : [{ message: String(document.data().response || ""), delaySeconds: 0 }],
       enabled: document.data().enabled === true,
-      priority: Number.isInteger(document.data().priority) ? document.data().priority : 100,\n      ...(document.data().schedule ? { schedule: document.data().schedule } : {}),
+      priority: Number.isInteger(document.data().priority) ? document.data().priority : 100,\n      ...(Array.isArray(document.data().branches) ? { branches: document.data().branches } : {}),\n      ...(document.data().schedule ? { schedule: document.data().schedule } : {}),
       createdAt: document.data().createdAt?.toDate ? document.data().createdAt.toDate().toISOString() : null,
       updatedAt: document.data().updatedAt?.toDate ? document.data().updatedAt.toDate().toISOString() : null
     })));
