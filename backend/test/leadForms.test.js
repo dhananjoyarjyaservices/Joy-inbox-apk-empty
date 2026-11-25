@@ -57,3 +57,82 @@ test("public form projection excludes private management metadata", () => {
   assert.equal("internalNotes" in safe, false);
   assert.equal(safe.fields[0].key, "full_name");
 });
+
+function makeFirestoreMock(formId, formData) {
+  const documents = new Map();
+  const key = path => path.join("/");
+  const collection = path => ({
+    doc(id = `auto_${Math.random().toString(16).slice(2)}`) {
+      const docPath = [...path, id];
+      return {
+        id,
+        path: key(docPath),
+        async get() {
+          const data = documents.get(key(docPath));
+          return { exists: Boolean(data), data: () => data };
+        },
+        async set(data, options = {}) {
+          const previous = documents.get(key(docPath)) || {};
+          documents.set(key(docPath), options.merge ? { ...previous, ...data } : data);
+        },
+        async create(data) {
+          if (documents.has(key(docPath))) throw new Error("already exists");
+          documents.set(key(docPath), data);
+        },
+        collection(name) { return collection([...docPath, name]); }
+      };
+    }
+  });
+  const db = {
+    collection(name) { return collection([name]); },
+    async runTransaction(callback) {
+      return callback({
+        get: ref => ref.get(),
+        set: (ref, data, options) => { void ref.set(data, options); },
+        create: (ref, data) => { void ref.create(data); }
+      });
+    }
+  };
+  const orgRef = collection(["organizations"]).doc("org_test");
+  const formRef = orgRef.collection("leadForms").doc(formId);
+  const publicRef = collection(["publicLeadForms"]).doc(formId);
+  documents.set(publicRef.path, { organizationId: "org_test", enabled: true });
+  documents.set(formRef.path, formData);
+  return { db, documents };
+}
+
+test("public submissions create one CRM lead and retries return the original response", async () => {
+  const { submitPublicLeadForm } = require("../src/leadForms");
+  const form = validForm();
+  const formId = "0123456789abcdef01234567";
+  const { db, documents } = makeFirestoreMock(formId, form);
+  const options = {
+    consent: true, ip: "203.0.113.10", idempotencyKey: "visitor-session-0001",
+    now: new Date("2026-11-25T08:00:00.000Z")
+  };
+  const first = await submitPublicLeadForm(db, formId, { full_name: "A User", email: "a@example.com" }, options);
+  const retry = await submitPublicLeadForm(db, formId, { full_name: "A User", email: "a@example.com" }, options);
+  assert.deepEqual(retry, first);
+  assert.equal([...documents.keys()].filter(path => path.includes("/leadFormSubmissions/")).length, 1);
+  assert.equal([...documents.keys()].filter(path => path.includes("/crmLeads/")).length, 1);
+  assert.equal([...documents.entries()].find(([path]) => path.startsWith("publicFormRateLimits/"))[1].count, 1);
+});
+
+test("public form submissions require consent and enforce five per IP per minute", async () => {
+  const { submitPublicLeadForm } = require("../src/leadForms");
+  const form = validForm();
+  const formId = "abcdef0123456789abcdef01";
+  const { db } = makeFirestoreMock(formId, form);
+  const now = new Date("2026-11-25T08:00:00.000Z");
+  await assert.rejects(() => submitPublicLeadForm(db, formId, { full_name: "A", email: "a@example.com" }, {
+    ip: "203.0.113.11", idempotencyKey: "visitor-session-0001", now
+  }), /accept the consent/);
+  for (let index = 1; index <= 5; index += 1) {
+    await submitPublicLeadForm(db, formId, { full_name: "A", email: "a@example.com" }, {
+      consent: true, ip: "203.0.113.11", idempotencyKey: `visitor-session-000${index}`, now
+    });
+  }
+  await assert.rejects(() => submitPublicLeadForm(db, formId, { full_name: "A", email: "a@example.com" }, {
+    consent: true, ip: "203.0.113.11", idempotencyKey: "visitor-session-0006", now
+  }), { statusCode: 429 });
+});
