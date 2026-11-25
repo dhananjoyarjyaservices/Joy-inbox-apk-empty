@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Plus, RefreshCw, Trash2, ExternalLink } from "lucide-react";
-import { deleteCrmLeadForm, listCrmLeadForms, saveCrmLeadForm, type CrmLeadForm, type CrmLeadFormField } from "../services/crm";
+import { Copy, Plus, RefreshCw, Trash2, ExternalLink, FileText } from "lucide-react";
+import { deleteCrmLeadForm, listCrmLeadForms, listCrmLeadFormSubmissions, saveCrmLeadForm, type CrmLeadForm, type CrmLeadFormField, type CrmLeadFormSubmission } from "../services/crm";
 
 type Props = { organizationId: string };
 
@@ -20,6 +20,9 @@ export default function LeadFormsPanel({ organizationId }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [selectedFormId, setSelectedFormId] = useState("");
+  const [submissions, setSubmissions] = useState<CrmLeadFormSubmission[]>([]);
+  const [responsesLoading, setResponsesLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -65,6 +68,12 @@ export default function LeadFormsPanel({ organizationId }: Props) {
     catch (e) { setError(e instanceof Error ? e.message : "Form could not be disabled."); }
     finally { setSaving(false); }
   }
+  async function viewResponses(form: CrmLeadForm) {
+    setSelectedFormId(form.id); setResponsesLoading(true); setError("");
+    try { setSubmissions(await listCrmLeadFormSubmissions(organizationId, form.id)); }
+    catch (e) { setError(e instanceof Error ? e.message : "Form responses could not be loaded."); }
+    finally { setResponsesLoading(false); }
+  }
   async function copyLink(form: CrmLeadForm) {
     const link = `${window.location.origin}${import.meta.env.BASE_URL}form/${form.id}`;
     try { await navigator.clipboard.writeText(link); setNotice("Public form link copied."); }
@@ -82,13 +91,17 @@ export default function LeadFormsPanel({ organizationId }: Props) {
       {loading ? <p className="text-xs text-gray-400">Loading forms...</p> : forms.length ? forms.map(form => <article key={form.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
         <div className="min-w-0"><p className="truncate text-sm font-medium">{form.name}</p><p className="text-[10px] text-gray-500">{form.fields.length} fields · {form.createLead ? "Creates CRM leads" : "Stores submissions only"} · {form.enabled ? "Published" : "Disabled"}</p></div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void copyLink(form)} disabled={saving || !form.enabled} className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] text-[#075e54]" title="Copy public form link"><Copy size={12}/> Copy link</button>
+          <button type="button" onClick={() => void copyLink(form)} disabled={saving || !form.enabled} className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] text-[#075e54]" title="Copy public form link"><Copy size={12}/> Copy link</button>\n          <button type="button" onClick={() => void viewResponses(form)} disabled={saving || responsesLoading} className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] text-gray-600" title="View submissions"><FileText size={12}/> Responses</button>
           <a href={`${import.meta.env.BASE_URL}form/${form.id}`} target="_blank" rel="noreferrer" className="rounded-md border p-1.5 text-gray-500" aria-label="Preview form"><ExternalLink size={13}/></a>
           <button type="button" onClick={() => void toggle(form)} disabled={saving} className="rounded-md border px-2 py-1.5 text-[11px]">{form.enabled ? "Disable" : "Publish"}</button>
           <button type="button" onClick={() => void remove(form)} disabled={saving || !form.enabled} className="rounded-md border p-1.5 text-red-600" aria-label="Disable form"><Trash2 size={13}/></button>
         </div>
       </article>) : <p className="rounded-lg border border-dashed p-3 text-center text-xs text-gray-400">No lead forms yet.</p>}
     </div>
+    {selectedFormId && <section className="mb-4 rounded-lg border p-3">
+      <div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold">Recent form responses</p><button type="button" onClick={() => { setSelectedFormId(""); setSubmissions([]); }} className="text-xs text-gray-500">Close</button></div>
+      {responsesLoading ? <p className="text-xs text-gray-400">Loading responses...</p> : submissions.length ? <div className="max-h-72 space-y-2 overflow-y-auto">{submissions.map(item => <article key={item.id} className="rounded-md bg-gray-50 p-2"><div className="mb-1 flex justify-between gap-2"><span className="text-[10px] text-gray-500">{new Date(typeof item.submittedAt === "string" ? item.submittedAt : (item.submittedAt as { _seconds?: number })?._seconds ? (item.submittedAt as { _seconds: number })._seconds * 1000 : Date.now()).toLocaleString()}</span><span className="text-[10px] text-emerald-700">{item.status}</span></div><dl className="grid gap-1 sm:grid-cols-2">{Object.entries(item.values || {}).map(([key, value]) => <div key={key} className="text-xs"><dt className="inline text-gray-500">{key}: </dt><dd className="inline break-words text-gray-800">{value}</dd></div>)}</dl>{item.leadId && <p className="mt-1 text-[10px] text-gray-500">CRM lead: {item.leadId}</p>}</article>)}</div> : <p className="text-xs text-gray-400">No submissions yet.</p>}
+    </section>}
     <form onSubmit={event => void createForm(event)} className="rounded-lg bg-gray-50 p-3">
       <p className="mb-2 text-xs font-semibold">Create a form</p>
       <div className="grid gap-2 sm:grid-cols-2">
