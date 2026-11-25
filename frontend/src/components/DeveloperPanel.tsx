@@ -48,7 +48,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
   const [writeCampaigns, setWriteCampaigns] = useState(false);
   const [controlCampaigns, setControlCampaigns] = useState(false);
   const [expiryDays, setExpiryDays] = useState(90);
-  const [rateLimitPerMinute, setRateLimitPerMinute] = useState(60);
+  const [rateLimitPerMinute, setRateLimitPerMinute] = useState<60 | 120 | 300>(60);
   const [newKey, setNewKey] = useState("");
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -214,7 +214,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             </select>
           </label>
           <label className="block text-sm text-gray-600">API requests allowed per minute
-            <select value={rateLimitPerMinute} onChange={event => setRateLimitPerMinute(Number(event.target.value))} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">
+            <select value={rateLimitPerMinute} onChange={event => setRateLimitPerMinute(Number(event.target.value) as 60 | 120 | 300)} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">
               <option value={60}>60 requests/minute · Standard</option><option value={120}>120 requests/minute · Growth</option><option value={300}>300 requests/minute · High volume</option>
             </select>
             <span className="mt-1 block text-xs text-gray-400">This limit applies to this API key only. Higher tiers are available for integrations with greater traffic.</span>
