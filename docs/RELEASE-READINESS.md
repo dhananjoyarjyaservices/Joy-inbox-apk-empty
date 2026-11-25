@@ -159,15 +159,14 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-25)
 
-Latest checked development commit: `4fcb467ce0898c98e455a53f758812c0025a3fa4`. GitHub Actions reported Backend tests, Frontend build and Joy Inbox CI as completed successfully for this commit.
-- Frontend TypeScript and production build (run 45417962816): **passed**.
-- Backend unit tests (run 45417976709): **passed**.
-- Frontend build (run 45417976712): **passed**.
-- Backend tests (run 45417976726): **passed**.
-- Cloudflare Pages branch preview: **deployed successfully** at https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev.
-- The passing checks validate repository CI and the static frontend preview only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
+Latest checked development commit: `3d60f47e9256e05505b60ddc1446081930c6ab4d`.
+- Backend tests (run 45532325605): **passed**, including Firestore emulator tests and Lambda package verification.
+- Frontend build (run 45532325418): **passed**.
+- Joy Inbox CI (run 45532325407): **passed**.
+- Cloudflare Pages preview workflow (run 45532318995): **passed**; the actual Cloudflare deploy step was **skipped** because repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are not configured.
+- The checks cover repository tests/build and the static preview build only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
 
-PR #1 remains open and unmerged. The current PR metadata and merge readiness must be rechecked before any merge. Keep the pull request unmerged until all external staging and launch gates pass and the owner explicitly approves.
+PR #1 remains open and unmerged. Keep it unmerged until external staging and launch gates pass and the owner explicitly approves.
 
 ## Static security review completed in repository
 
