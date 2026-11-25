@@ -22,7 +22,8 @@ export default function LeadFormsPanel({ organizationId }: Props) {
   const [notice, setNotice] = useState("");
   const [selectedFormId, setSelectedFormId] = useState("");
   const [submissions, setSubmissions] = useState<CrmLeadFormSubmission[]>([]);
-  const [responsesLoading, setResponsesLoading] = useState(false);\n  const [editingFormId, setEditingFormId] = useState("");
+  const [responsesLoading, setResponsesLoading] = useState(false);
+  const [editingFormId, setEditingFormId] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -99,7 +100,9 @@ export default function LeadFormsPanel({ organizationId }: Props) {
       {loading ? <p className="text-xs text-gray-400">Loading forms...</p> : forms.length ? forms.map(form => <article key={form.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
         <div className="min-w-0"><p className="truncate text-sm font-medium">{form.name}</p><p className="text-[10px] text-gray-500">{form.fields.length} fields · {form.createLead ? "Creates CRM leads" : "Stores submissions only"} · {form.enabled ? "Published" : "Disabled"}</p></div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void copyLink(form)} disabled={saving || !form.enabled} className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] text-[#075e54]" title="Copy public form link"><Copy size={12}/> Copy link</button>\n          <button type="button" onClick={() => editForm(form)} disabled={saving} className="rounded-md border p-1.5 text-gray-500" title="Edit form"><Pencil size={13}/></button>\n          <button type="button" onClick={() => void viewResponses(form)} disabled={saving || responsesLoading} className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] text-gray-600" title="View submissions"><FileText size={12}/> Responses</button>
+          <button type="button" onClick={() => void copyLink(form)} disabled={saving || !form.enabled} className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] text-[#075e54]" title="Copy public form link"><Copy size={12}/> Copy link</button>
+          <button type="button" onClick={() => editForm(form)} disabled={saving} className="rounded-md border p-1.5 text-gray-500" title="Edit form"><Pencil size={13}/></button>
+          <button type="button" onClick={() => void viewResponses(form)} disabled={saving || responsesLoading} className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] text-gray-600" title="View submissions"><FileText size={12}/> Responses</button>
           <a href={`${import.meta.env.BASE_URL}form/${form.id}`} target="_blank" rel="noreferrer" className="rounded-md border p-1.5 text-gray-500" aria-label="Preview form"><ExternalLink size={13}/></a>
           <button type="button" onClick={() => void toggle(form)} disabled={saving} className="rounded-md border px-2 py-1.5 text-[11px]">{form.enabled ? "Disable" : "Publish"}</button>
           <button type="button" onClick={() => void remove(form)} disabled={saving || !form.enabled} className="rounded-md border p-1.5 text-red-600" aria-label="Disable form"><Trash2 size={13}/></button>
@@ -126,7 +129,8 @@ export default function LeadFormsPanel({ organizationId }: Props) {
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <button type="button" disabled={fields.length >= 10} onClick={() => setFields(current => [...current, { key: `field_${Date.now()}`, label: "New field", type: "text", required: false, options: [] }])} className="flex items-center gap-1 rounded-md border bg-white px-2 py-1.5 text-xs text-[#075e54] disabled:opacity-40"><Plus size={13}/> Add field</button>
-        <button type="submit" disabled={saving || !name.trim() || fields.length < 1} className="rounded-md bg-[#075e54] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : editingFormId ? "Save changes" : "Create form"}</button>\n        {editingFormId && <button type="button" onClick={() => { setEditingFormId(""); setName("Website enquiry"); setDescription("Tell us how we can help."); setFields(defaultFields); }} className="rounded-md border bg-white px-3 py-2 text-xs">Cancel edit</button>}
+        <button type="submit" disabled={saving || !name.trim() || fields.length < 1} className="rounded-md bg-[#075e54] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : editingFormId ? "Save changes" : "Create form"}</button>
+        {editingFormId && <button type="button" onClick={() => { setEditingFormId(""); setName("Website enquiry"); setDescription("Tell us how we can help."); setFields(defaultFields); }} className="rounded-md border bg-white px-3 py-2 text-xs">Cancel edit</button>}
       </div>
       <p className="mt-2 text-[10px] text-gray-500">Consent is required by default. Form submissions are rate-limited and stored in your workspace; CRM lead creation is enabled.</p>
     </form>
