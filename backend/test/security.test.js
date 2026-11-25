@@ -58,7 +58,7 @@ test("CORS omits browser origin headers when the request has no Origin", () => {
   withCorsOrigins("https://app.example.com", () => {
     const headers = getCorsHeaders({ headers: {} });
     assert.equal(headers["Access-Control-Allow-Origin"], undefined);
-    assert.equal(headers["Access-Control-Allow-Headers"], "Content-Type,Authorization");
+    assert.equal(headers["Access-Control-Allow-Headers"], "Content-Type,Authorization,Idempotency-Key");
   });
 });
 
