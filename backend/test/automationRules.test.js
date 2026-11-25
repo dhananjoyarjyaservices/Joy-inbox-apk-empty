@@ -212,3 +212,44 @@ test("validates and evaluates expanded operators in all/any condition groups", (
     response: "Welcome"
   }), { statusCode: 400 });
 });
+
+
+test("validates timezone-aware weekday automation schedules", () => {
+  const scheduled = normalizeAutomationRule({
+    name: "Business hours", keyword: "hello", response: "Welcome",
+    schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" }
+  });
+  assert.deepEqual(scheduled.schedule, {
+    timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00"
+  });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Bad timezone", keyword: "hello", response: "Welcome",
+    schedule: { timezone: "Mars/Olympus", days: [1], startTime: "09:00", endTime: "18:00" }
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Bad day", keyword: "hello", response: "Welcome",
+    schedule: { timezone: "UTC", days: [1, 1], startTime: "09:00", endTime: "18:00" }
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Overnight not supported", keyword: "hello", response: "Welcome",
+    schedule: { timezone: "UTC", days: [1], startTime: "22:00", endTime: "06:00" }
+  }), { statusCode: 400 });
+  assert.throws(() => normalizeAutomationRule({
+    name: "Unknown schedule key", keyword: "hello", response: "Welcome",
+    schedule: { timezone: "UTC", days: [1], startTime: "09:00", endTime: "18:00", enabled: true }
+  }), { statusCode: 400 });
+});
+
+test("matches scheduled automations using the configured local timezone and weekday", () => {
+  const { isWithinAutomationSchedule, findMatchingAutomationRule } = require("../src/automationRules");
+  const rule = normalizeAutomationRule({
+    name: "Weekday support", keyword: "help", response: "Support",
+    schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" }
+  });
+  assert.equal(isWithinAutomationSchedule(rule, new Date("2026-11-23T04:00:00.000Z")), true); // Monday 09:30 IST
+  assert.equal(isWithinAutomationSchedule(rule, new Date("2026-11-23T13:00:00.000Z")), false); // Monday 18:30 IST
+  assert.equal(isWithinAutomationSchedule(rule, new Date("2026-11-22T04:00:00.000Z")), false); // Sunday
+  assert.equal(findMatchingAutomationRule([rule], "help", new Date("2026-11-23T04:00:00.000Z")).name, "Weekday support");
+  assert.equal(findMatchingAutomationRule([rule], "help", new Date("2026-11-23T13:00:00.000Z")), null);
+  assert.equal(isWithinAutomationSchedule({ keyword: "help" }, new Date("invalid")), true);
+});
