@@ -5,11 +5,11 @@ This document describes the workspace-scoped server-to-server API. API keys are 
 ## Authentication
 
 1. Open **Developer** in the workspace inbox.
-2. Create an API key with only the required permissions and an expiry.
+2. Create an API key with only the required permissions, an expiry and a supported rate-limit tier.
 3. Copy the key once and store it in a server-side secret manager.
 4. Send it as an HTTP Bearer token. Never put it in browser JavaScript, mobile app bundles or public source repositories.
 
-The raw key is generated from cryptographic random bytes. Joy Inbox stores only its SHA-256 hash. Keys are workspace-scoped, expire within 1–365 days, can be revoked immediately and are limited to 60 requests per key per minute. The workspace ID is derived from the key and is never accepted from API requests.
+The raw key is generated from cryptographic random bytes. Joy Inbox stores only its SHA-256 hash. Keys are workspace-scoped, expire within 1–365 days and can be revoked immediately. When creating a key, choose `rateLimitPerMinute` as 60 (default), 120 or 300; the selected limit is enforced independently for that key. The workspace ID is derived from the key and is never accepted from API requests.
 
 ## Contacts
 
@@ -143,7 +143,7 @@ Required scope: `leads:write`. Send `{ "resourceId": "lead-document-id" }`.
 
 - Workspace owners/admins manage API keys; the full key is shown only once.
 - Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`, `messages:write`, `templates:read`, `campaigns:read`, `campaigns:write` (draft creation), and `campaigns:control` (start/schedule/pause/resume/cancel). Campaign control is intentionally separate from draft creation.
-- API rate limit is 60 requests per key per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` and `publicApiUsageDaily.expiresAt` before production.
+- Per-key rate-limit tiers are 60 (default), 120 and 300 requests per minute. Unsupported values are rejected. Older keys without a stored tier continue to use 60 requests per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` and `publicApiUsageDaily.expiresAt` before production.
 - Idempotency records are retained for 24 hours. Enable Firestore TTL on `publicApiIdempotency.expiresAt`; use a new key for a distinct logical mutation.
 - Daily usage analytics count accepted requests and rate-limited attempts by API key and UTC date.
 
