@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch, findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason, normalizeOutOfOfficeSettings } = require("../src/automationRules");
+const { normalizeAutomationRule, matchesAutomationRule, selectAutomationBranch, findMatchingAutomationRule, findMatchingOutOfOfficeRule, getOutOfOfficeSkipReason, normalizeOutOfOfficeSettings, selectWorkspaceOutOfOfficeRule } = require("../src/automationRules");
 
 test("normalizes valid keyword automation rules and defaults", () => {
   assert.deepEqual(normalizeAutomationRule({
@@ -377,4 +377,17 @@ test("normalizes workspace out-of-office settings and working hours", () => {
   assert.throws(() => normalizeOutOfOfficeSettings({
     enabled: true, message: "Closed", schedule: { timezone: "Asia/Kolkata", days: [1], startTime: "18:00", endTime: "09:00" }
   }), { statusCode: 400 });
+});
+
+test("selects workspace out-of-office only outside configured working hours", () => {
+  const settings = normalizeOutOfOfficeSettings({
+    enabled: true, message: "We are currently closed.",
+    schedule: { timezone: "Asia/Kolkata", days: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "18:00" }
+  });
+  assert.equal(selectWorkspaceOutOfOfficeRule(settings, new Date("2026-11-25T05:00:00.000Z")), null);
+  assert.deepEqual(selectWorkspaceOutOfOfficeRule(settings, new Date("2026-11-25T14:00:00.000Z")), {
+    id: "workspace_out_of_office", name: "Workspace out-of-office",
+    outOfOfficeMessage: "We are currently closed.", enabled: true
+  });
+  assert.equal(selectWorkspaceOutOfOfficeRule({ ...settings, enabled: false }, new Date("2026-11-25T14:00:00.000Z")), null);
 });
