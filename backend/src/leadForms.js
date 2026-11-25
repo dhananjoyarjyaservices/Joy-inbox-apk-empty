@@ -59,7 +59,8 @@ function normalizeSubmission(form, input) {
     const raw = input[field.key];
     const value = raw === undefined || raw === null ? "" : String(raw).trim();
     if (field.required && !value) throw formError(`${field.label} is required.`);
-    const maxLength = field.type === "textarea" ? 2000 : field.type === "email" ? 254 : field.type === "phone" ? 16 : 500;\n    if (value.length > maxLength) throw formError(`${field.label} is too long.`);
+    const maxLength = field.type === "textarea" ? 2000 : field.type === "email" ? 254 : field.type === "phone" ? 16 : 500;
+    if (value.length > maxLength) throw formError(`${field.label} is too long.`);
     if (field.type === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw formError(`${field.label} must be a valid email address.`);
     if (field.type === "phone" && value && !/^\+[1-9][0-9]{7,14}$/.test(value)) throw formError(`${field.label} must be an international phone number starting with +.`);
     if (field.type === "select" && value && !field.options.includes(value)) throw formError(`Choose a valid option for ${field.label}.`);
@@ -150,7 +151,7 @@ async function submitPublicLeadForm(db, formId, input, options = {}) {
   const stageRef = organizationRef.collection("crmStages").doc("new");
   const phoneField = form.fields.find(field => field.type === "phone");
   const phone = phoneField ? String(values[phoneField.key] || "") : "";
-  const contactRef = shouldCreateLead && phone ? organizationRef.collection("contacts").doc(phone.replace(/^\\+/, "")) : null;
+  const contactRef = shouldCreateLead && phone ? organizationRef.collection("contacts").doc(phone.replace(/^\+/, "")) : null;
   const leadRef = shouldCreateLead ? organizationRef.collection("crmLeads").doc() : null;
   const response = {
     accepted: true, successMessage: form.successMessage, submissionId: submissionRef.id,
