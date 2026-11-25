@@ -238,6 +238,39 @@ function findMatchingAutomationRule(rules, messageText, instant = new Date()) {
   ) || null;
 }
 
+function normalizeOutOfOfficeSettings(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).some((key) => !["enabled", "message", "schedule"].includes(key))) {
+    throw httpError("Out-of-office settings contain unsupported fields.", 400);
+  }
+  if (typeof input.enabled !== "boolean") throw httpError("Out-of-office enabled state is required.", 400);
+  const message = typeof input.message === "string" ? input.message.trim() : "";
+  if (message.length > 1024 || (input.enabled && !message)) {
+    throw httpError("Enabled out-of-office replies require a message of at most 1,024 characters.", 400);
+  }
+  const value = input.schedule;
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      Object.keys(value).some((key) => !["timezone", "days", "startTime", "endTime"].includes(key))) {
+    throw httpError("A valid out-of-office working-hours schedule is required.", 400);
+  }
+  const timezone = typeof value.timezone === "string" ? value.timezone.trim() : "";
+  try { new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date()); }
+  catch { throw httpError("Out-of-office timezone must be a valid IANA timezone.", 400); }
+  if (!Array.isArray(value.days) || value.days.length < 1 || value.days.length > 7 ||
+      value.days.some((day) => !Number.isInteger(day) || day < 0 || day > 6) ||
+      new Set(value.days).size !== value.days.length) {
+    throw httpError("Choose unique working days from Sunday to Saturday.", 400);
+  }
+  const validTime = (time) => typeof time === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time);
+  if (!validTime(value.startTime) || !validTime(value.endTime) || value.startTime >= value.endTime) {
+    throw httpError("Working hours must use valid 24-hour times, with start before end.", 400);
+  }
+  return {
+    enabled: input.enabled, message,
+    schedule: { timezone, days: [...value.days].sort((a, b) => a - b), startTime: value.startTime, endTime: value.endTime }
+  };
+}
+
 function getOutOfOfficeSkipReason(chat = {}, instant = new Date()) {
   const now = instant instanceof Date ? instant.getTime() : new Date(instant).getTime();
   if (!Number.isFinite(now)) return "invalid_instant";
