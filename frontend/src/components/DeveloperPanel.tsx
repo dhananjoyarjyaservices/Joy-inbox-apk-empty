@@ -48,6 +48,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
   const [writeCampaigns, setWriteCampaigns] = useState(false);
   const [controlCampaigns, setControlCampaigns] = useState(false);
   const [expiryDays, setExpiryDays] = useState(90);
+  const [rateLimitPerMinute, setRateLimitPerMinute] = useState(60);
   const [newKey, setNewKey] = useState("");
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -83,7 +84,8 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
         organizationId,
         name,
         scopes: [ ...(readContacts ? ["contacts:read"] : []), ...(writeContacts ? ["contacts:write"] : []), ...(readLeads ? ["leads:read"] : []), ...(writeLeads ? ["leads:write"] : []), ...(writeMessages ? ["messages:write"] : []), ...(readTemplates ? ["templates:read"] : []), ...(readCampaigns ? ["campaigns:read"] : []), ...(writeCampaigns ? ["campaigns:write"] : []), ...(controlCampaigns ? ["campaigns:control"] : []) ],
-        expiryDays
+        expiryDays,
+        rateLimitPerMinute
       });
       setNewKey(result.apiKey.apiKey);
       setName("");
@@ -211,6 +213,12 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
               <option value={30}>30 days</option><option value={90}>90 days</option><option value={180}>180 days</option><option value={365}>365 days</option>
             </select>
           </label>
+          <label className="block text-sm text-gray-600">API requests allowed per minute
+            <select value={rateLimitPerMinute} onChange={event => setRateLimitPerMinute(Number(event.target.value))} className="mt-1 w-full rounded-lg border bg-white p-2 text-sm">
+              <option value={60}>60 requests/minute · Standard</option><option value={120}>120 requests/minute · Growth</option><option value={300}>300 requests/minute · High volume</option>
+            </select>
+            <span className="mt-1 block text-xs text-gray-400">This limit applies to this API key only. Higher tiers are available for integrations with greater traffic.</span>
+          </label>
           <button disabled={saving || !organizationId || (!readContacts && !writeContacts && !readLeads && !writeLeads && !writeMessages && !readTemplates && !readCampaigns && !writeCampaigns && !controlCampaigns)} className="rounded-lg bg-[#075e54] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Creating..." : "Create API key"}</button>
         </form>
         <div className="rounded-xl border bg-white p-4">
@@ -218,7 +226,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
           {keys.length ? <div className="space-y-2">{keys.map(key => <article key={key.id} className="rounded-lg border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{key.name}</strong><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${key.status === "active" ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{key.status}</span></div>
             <p className="mt-1 font-mono text-xs text-gray-500">{key.keyPrefix}••••••••</p>
-            <p className="mt-1 text-[11px] text-gray-500">Permissions: {key.scopes.join(", ")} · Expires: {displayDate(key.expiresAt)}</p>
+            <p className="mt-1 text-[11px] text-gray-500">Permissions: {key.scopes.join(", ")} · Limit: {key.rateLimitPerMinute ?? 60}/min · Expires: {displayDate(key.expiresAt)}</p>
             <p className="mt-1 text-[11px] text-gray-400">Created: {displayDate(key.createdAt)} · Last used: {displayDate(key.lastUsedAt)}</p>
             {key.status === "active" && <button type="button" onClick={() => void revoke(key)} className="mt-2 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600">Revoke key</button>}
           </article>)}</div> : <p className="text-sm text-gray-500">{loading ? "Loading API keys..." : "No API keys created for this workspace."}</p>}
@@ -273,7 +281,7 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
             <div><p className="font-mono text-xs font-semibold text-amber-700">PUT /public/v1/leads · DELETE /public/v1/leads</p><p className="text-xs text-gray-500">Requires <code>leads:write</code>. Supply <code>resourceId</code>; PUT also requires a complete <code>data</code> object.</p></div>
           </div>
           <pre className="mt-3 overflow-x-auto rounded-lg bg-gray-950 p-3 text-xs text-gray-100"><code>{`curl -H "Authorization: Bearer YOUR_JOY_API_KEY" \\\n  YOUR_API_BASE_URL/public/v1/contacts?limit=50`}</code></pre>
-          <p className="mt-2 text-[11px] text-gray-500">Workspace ID is derived from the API key, never accepted from the request. Keys cannot access another workspace. Each key is limited to 60 requests per minute. Message sending requires an idempotency key; contacts, leads and campaign reports support cursor pagination. Campaign report access does not expose recipient personal data.</p>
+          <p className="mt-2 text-[11px] text-gray-500">Workspace ID is derived from the API key, never accepted from the request. Keys cannot access another workspace. Each key has its own configurable limit of 60, 120 or 300 requests per minute. Message sending requires an idempotency key; contacts, leads and campaign reports support cursor pagination. Campaign report access does not expose recipient personal data.</p>
         </div>
       </div>
     </section>
