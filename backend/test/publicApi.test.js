@@ -329,3 +329,37 @@ test("campaign control is a separate least-privilege API key scope", async () =>
   assert.throws(() => requireApiScope(controlAuth, "campaigns:write"), { statusCode: 403 });
   assert.doesNotThrow(() => requireApiScope(controlAuth, "campaigns:control"));
 });
+
+
+test("supports configurable per-key rate-limit tiers and enforces the selected tier", async () => {
+  const db = fakeDb({ "organizations/org_one": { status: "active" } });
+  const created = await createOrganizationApiKey(db, "org_one", "owner_uid", {
+    name: "Higher volume integration",
+    scopes: ["contacts:read"],
+    rateLimitPerMinute: 120
+  });
+  assert.equal(created.rateLimitPerMinute, 120);
+  assert.equal(db.records.get("publicApiKeys/" + created.id).rateLimitPerMinute, 120);
+  const listed = await listOrganizationApiKeys(db, "org_one");
+  assert.equal(listed[0].rateLimitPerMinute, 120);
+  const now = Date.parse("2026-11-25T12:00:00Z");
+  for (let index = 0; index < 120; index += 1) {
+    await authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + index);
+  }
+  await assert.rejects(
+    () => authenticateOrganizationApiKey(db, "Bearer " + created.apiKey, now + 1000),
+    { statusCode: 429 }
+  );
+});
+
+test("rejects unsupported API rate-limit tiers", async () => {
+  const db = fakeDb();
+  await assert.rejects(
+    () => createOrganizationApiKey(db, "org_one", "owner_uid", {
+      name: "Invalid tier",
+      scopes: ["contacts:read"],
+      rateLimitPerMinute: 999
+    }),
+    { statusCode: 400 }
+  );
+});
