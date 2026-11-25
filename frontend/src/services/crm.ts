@@ -54,6 +54,35 @@ export async function deleteCrmLead(organizationId: string, id: string) {
   await request<{ success: boolean }>("leads", organizationId, "DELETE", undefined, id);
 }
 
+export type CrmSavedFilter = {
+  id: string; name: string; stageId: string; ownerUid: string; source: string;
+  followUp: "all" | "overdue" | "today" | "upcoming" | "none";
+  minValue: number | null; maxValue: number | null; search: string; shared: boolean; createdBy: string;
+};
+async function savedFilterRequest<T>(organizationId: string, method = "GET", data?: unknown, resourceId?: string): Promise<T> {
+  if (!API_URL) throw new Error("AWS API URL is not configured.");
+  const user = auth.currentUser;
+  if (!user) throw new Error("Please sign in again.");
+  const token = await user.getIdToken();
+  const query = method === "GET" ? `?organizationId=${encodeURIComponent(organizationId)}` : "";
+  const response = await fetch(`${API_URL.replace(/\\/$/, "")}/organizations/crm/saved-filters${query}`, {
+    method, headers: { Authorization: `Bearer ${token}`, ...(method !== "GET" ? { "Content-Type": "application/json" } : {}) },
+    ...(method !== "GET" ? { body: JSON.stringify({ organizationId, ...(data !== undefined ? { data } : {}), ...(resourceId ? { resourceId } : {}) }) } : {})
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "CRM saved filter request failed.");
+  return result as T;
+}
+export async function listCrmSavedFilters(organizationId: string): Promise<CrmSavedFilter[]> {
+  return (await savedFilterRequest<{ items: CrmSavedFilter[] }>(organizationId)).items;
+}
+export async function saveCrmSavedFilter(organizationId: string, filter: Omit<CrmSavedFilter, "id" | "createdBy">): Promise<CrmSavedFilter> {
+  return (await savedFilterRequest<{ item: CrmSavedFilter }>(organizationId, "POST", filter)).item;
+}
+export async function deleteCrmSavedFilter(organizationId: string, id: string): Promise<void> {
+  await savedFilterRequest<{ success: boolean }>(organizationId, "DELETE", undefined, id);
+}
+
 export interface CrmLeadActivity { id: string; leadId: string; actorUid: string; action: "created" | "updated" | "deleted"; changedFields: string[]; before: Record<string, unknown> | null; after: Record<string, unknown> | null; createdAt: string | { _seconds?: number; seconds?: number } }
 
 export async function listCrmLeadActivity(organizationId: string, leadId: string, limit = 50): Promise<CrmLeadActivity[]> {
