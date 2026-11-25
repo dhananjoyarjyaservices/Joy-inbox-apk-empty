@@ -88,6 +88,7 @@ const { runScheduledAutomationSteps } = require("./automationScheduler");
 const { getOrganizationSlaSettings, normalizeSlaSettings, MIN_SLA_MINUTES, MAX_SLA_MINUTES } = require("./slaSettings");
 const { normalizeNotificationPreferences, getTenantNotificationPreferences } = require("./notificationPreferences");
 const { ID_PATTERN: AUTOMATION_RULE_ID_PATTERN, normalizeAutomationRule, sortAutomationRules } = require("./automationRules");
+const { FAQ_ID_PATTERN, normalizeFaqEntry } = require("./faqKnowledge");
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients, suppressionDocumentId } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
@@ -1176,6 +1177,64 @@ async function handleTenantAutomationRules(event) {
     const ref = collection.doc(body.resourceId);
     const existing = await ref.get();
     if (!existing.exists) return jsonResponse(event, 404, { error: "Automation rule was not found." });
+    await ref.delete();
+    return jsonResponse(event, 200, { success: true });
+  }
+  return jsonResponse(event, 405, { error: "Method not allowed." });
+}
+
+
+async function handleTenantFaqEntries(event) {
+  const decoded = await authenticateUser(event);
+  const method = getMethod(event);
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
+  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  requirePermission(organization, "settings:manage");
+  const collection = organization.ref.collection("faqEntries");
+  if (method === "GET") {
+    const snapshot = await collection.limit(100).get();
+    const entries = snapshot.docs.map((document) => {
+      const value = document.data() || {};
+      return {
+        id: document.id,
+        question: String(value.question || ""),
+        answer: String(value.answer || ""),
+        keywords: Array.isArray(value.keywords) ? value.keywords.slice(0, 8).map(item => String(item).slice(0, 60)) : [],
+        matchMode: value.matchMode === "all" ? "all" : "any",
+        enabled: value.enabled !== false,
+        priority: Number.isInteger(value.priority) ? value.priority : 100,
+        createdAt: value.createdAt?.toDate ? value.createdAt.toDate().toISOString() : null,
+        updatedAt: value.updatedAt?.toDate ? value.updatedAt.toDate().toISOString() : null
+      };
+    }).sort((a, b) => a.priority - b.priority || a.question.localeCompare(b.question));
+    return jsonResponse(event, 200, { entries, capped: snapshot.size === 100 });
+  }
+  if (method === "POST" || method === "PUT") {
+    const data = normalizeFaqEntry(body.data);
+    let ref;
+    if (method === "PUT") {
+      if (!FAQ_ID_PATTERN.test(body.resourceId || "")) return jsonResponse(event, 400, { error: "A valid FAQ entry ID is required." });
+      ref = collection.doc(body.resourceId);
+      const existing = await ref.get();
+      if (!existing.exists) return jsonResponse(event, 404, { error: "FAQ entry was not found." });
+    } else {
+      if ((await collection.limit(100).get()).size >= 100) return jsonResponse(event, 409, { error: "This workspace has reached the 100-entry FAQ limit." });
+      ref = collection.doc();
+    }
+    const now = new Date();
+    await ref.set({ ...data, ...(method === "POST" ? { createdAt: now, createdBy: decoded.uid } : {}), updatedAt: now, updatedBy: decoded.uid }, { merge: true });
+    return jsonResponse(event, method === "POST" ? 201 : 200, { entry: { id: ref.id, ...data, updatedAt: now.toISOString() } });
+  }
+  if (method === "DELETE") {
+    if (!FAQ_ID_PATTERN.test(body.resourceId || "")) return jsonResponse(event, 400, { error: "A valid FAQ entry ID is required." });
+    const ref = collection.doc(body.resourceId);
+    const existing = await ref.get();
+    if (!existing.exists) return jsonResponse(event, 404, { error: "FAQ entry was not found." });
     await ref.delete();
     return jsonResponse(event, 200, { success: true });
   }
@@ -4385,6 +4444,11 @@ exports.handler = async (event) => {
   if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/automation-rules")) {
     try { return await handleTenantAutomationRules(event); }
     catch (error) { console.error("Tenant automation rules request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "Automation rules request could not be completed." }); }
+  }
+
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/organizations/faq-entries")) {
+    try { return await handleTenantFaqEntries(event); }
+    catch (error) { console.error("Tenant FAQ entries request failed:", error); return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "FAQ knowledge request could not be completed." }); }
   }
 
   if (method === "POST" && path.endsWith("/organizations/invitations/accept")) {
