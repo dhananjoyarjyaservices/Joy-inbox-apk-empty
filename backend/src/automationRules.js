@@ -8,7 +8,7 @@ function httpError(message, statusCode) {
 
 function normalizeAutomationRule(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Automation rule details are required.", 400);
-  const allowed = ["name", "keyword", "matchType", "conditions", "conditionMode", "response", "steps", "enabled", "priority", "schedule", "branches"];
+  const allowed = ["name", "keyword", "matchType", "conditions", "conditionMode", "response", "steps", "enabled", "priority", "schedule", "branches", "outOfOfficeMessage"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Automation rule contains unsupported fields.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const hasConditions = input.conditions !== undefined;
@@ -134,10 +134,15 @@ function normalizeAutomationRule(input) {
       return { name: branchName, conditions: branchConditions, conditionMode: branch.conditionMode || "all", steps: branchSteps };
     });
   }
+  const outOfOfficeMessage = input.outOfOfficeMessage === undefined ? "" : (typeof input.outOfOfficeMessage === "string" ? input.outOfOfficeMessage.trim() : null);
+  if (outOfOfficeMessage === null || outOfOfficeMessage.length > 1024 || [...outOfOfficeMessage].some((character) => character.charCodeAt(0) < 32 && character !== "\n" && character !== "\t")) {
+    throw httpError("Out-of-office reply must be text of 1,024 characters or fewer.", 400);
+  }
+  if (outOfOfficeMessage && !schedule) throw httpError("An out-of-office reply requires a business-hours schedule.", 400);
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") throw httpError("Enabled must be true or false.", 400);
   return {
     name, keyword, matchType, ...(conditions ? { conditions, conditionMode: input.conditionMode || "all" } : {}),
-    response: steps[0].message, steps, enabled: input.enabled !== false, priority, ...(schedule ? { schedule } : {}), ...(branches ? { branches } : {})
+    response: steps[0].message, steps, enabled: input.enabled !== false, priority, ...(schedule ? { schedule } : {}), ...(branches ? { branches } : {}), ...(outOfOfficeMessage ? { outOfOfficeMessage } : {})
   };
 }
 
@@ -232,6 +237,14 @@ function findMatchingAutomationRule(rules, messageText, instant = new Date()) {
   ) || null;
 }
 
+function findMatchingOutOfOfficeRule(rules, messageText, instant = new Date()) {
+  return sortAutomationRules(rules).find(rule =>
+    rule.enabled === true && typeof rule.outOfOfficeMessage === "string" && rule.outOfOfficeMessage.trim() &&
+    rule.schedule && matchesAutomationRule(rule, messageText) &&
+    !isWithinAutomationSchedule(rule, instant)
+  ) || null;
+}
+
 module.exports = {
   ID_PATTERN,
   normalizeAutomationRule,
@@ -239,6 +252,7 @@ module.exports = {
   normalizeAutomationMatchText,
   matchesAutomationRule,
   findMatchingAutomationRule,
+  findMatchingOutOfOfficeRule,
   isWithinAutomationSchedule,
   selectAutomationSteps,
   selectAutomationBranch
