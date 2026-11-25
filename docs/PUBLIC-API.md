@@ -43,6 +43,78 @@ Required scope: `messages:write`. The request must include the connected `phoneN
 ```
 The number must belong to the API key's workspace. The API sends through the WhatsApp Cloud API and stores the text and delivery metadata in the workspace inbox; it does not store customer media. A unique `Idempotency-Key` is required for every send and makes retries safe. Sends consume the workspace outbound-message allowance and obey its hard-block plan limit. WhatsApp policy, recipient opt-in, messaging windows and Meta account limits still apply. A successful response means Meta accepted the message, not that the recipient device received it.
 
+## Send WhatsApp media
+
+Use the same POST /public/v1/messages endpoint and messages:write scope. Media is uploaded directly to Meta and is not persisted in Joy Inbox customer-media storage. The current public upload limit is 3 MB; the MIME type and file signature must match.
+
+~~~http
+POST /public/v1/messages
+Authorization: Bearer YOUR_JOY_API_KEY
+Idempotency-Key: media-attachment-123
+Content-Type: application/json
+~~~
+
+~~~json
+{
+  "phoneNumberId": "123456789012345",
+  "to": "919876543210",
+  "type": "image",
+  "media": {
+    "base64": "BASE64_ENCODED_FILE",
+    "mimeType": "image/jpeg",
+    "filename": "product.jpg",
+    "caption": "The product you asked about"
+  }
+}
+~~~
+
+Supported type values are image, video, audio and document. Documents require a filename. The MIME type must be compatible with the selected type. The request is idempotent; use a new Idempotency-Key for a new send. Upload and outbound-message usage are checked against workspace limits.
+
+## Send WhatsApp interactive messages
+
+Use POST /public/v1/messages with messages:write. Interactive messages are validated against WhatsApp limits before sending.
+
+Reply buttons (1–3 buttons):
+
+~~~json
+{
+  "phoneNumberId": "123456789012345",
+  "to": "919876543210",
+  "type": "interactive",
+  "interactive": {
+    "type": "button",
+    "header": "Order update",
+    "body": "What would you like to do?",
+    "footer": "Joy Inbox",
+    "buttons": [
+      { "id": "track", "title": "Track order" },
+      { "id": "support", "title": "Contact support" }
+    ]
+  }
+}
+~~~
+
+Lists support 1–10 sections and up to 10 rows total. CTA URL messages use type: "cta_url", displayText and an HTTPS url. Carousel messages support 2–10 cards with HTTPS image URLs, card text and HTTPS CTA links. Button/row IDs must be unique; text lengths follow WhatsApp limits. Meta's Cloud API availability and account eligibility for each interactive format still apply.
+
+## Send an approved WhatsApp template
+
+Use POST /public/v1/messages with messages:write. The API derives the WABA ID from the connected number, checks that the template is approved for the requested language, validates body/header/URL-button variable counts and sends through the connected WhatsApp number. Text-header templates are supported by this endpoint; templates with image/video/document headers must use the media template flow in the workspace inbox.
+
+~~~json
+{
+  "phoneNumberId": "123456789012345",
+  "to": "919876543210",
+  "type": "template",
+  "templateName": "order_update",
+  "language": "en",
+  "variables": ["A-100", "today"],
+  "headerVariables": ["Customer"],
+  "buttonVariables": ["A-100"]
+}
+~~~
+
+Use a unique Idempotency-Key for every send. A successful response means Meta accepted the message, not that the recipient device received it. WhatsApp consent, template policy and messaging rules still apply.
+
 ## Campaigns
 
 ### Create a campaign draft
@@ -142,7 +214,7 @@ Required scope: `leads:write`. Send `{ "resourceId": "lead-document-id" }`.
 ## Key management and limits
 
 - Workspace owners/admins manage API keys; the full key is shown only once.
-- Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`, `messages:write`, `templates:read`, `campaigns:read`, `campaigns:write` (draft creation), and `campaigns:control` (start/schedule/pause/resume/cancel). Campaign control is intentionally separate from draft creation.
+- Supported scopes: `contacts:read`, `contacts:write`, `leads:read`, `leads:write`, `messages:write` (text, media, interactive and approved text-header template sends), `templates:read`, `campaigns:read`, `campaigns:write` (draft creation), and `campaigns:control` (start/schedule/pause/resume/cancel). Campaign control is intentionally separate from draft creation.
 - Per-key rate-limit tiers are 60 (default), 120 and 300 requests per minute. Unsupported values are rejected. Older keys without a stored tier continue to use 60 requests per minute. Enable Firestore TTL on `publicApiRateLimits.expiresAt` and `publicApiUsageDaily.expiresAt` before production.
 - Idempotency records are retained for 24 hours. Enable Firestore TTL on `publicApiIdempotency.expiresAt`; use a new key for a distinct logical mutation.
 - Daily usage analytics count accepted requests and rate-limited attempts by API key and UTC date.
