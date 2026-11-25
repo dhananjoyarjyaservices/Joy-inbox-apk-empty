@@ -77,7 +77,7 @@ function getCorsHeaders(event) {
   const headers = {
     "Cache-Control": "no-store",
     "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization"
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,Idempotency-Key"
   };
 
   const origin = getCorsOrigin(event);
