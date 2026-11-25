@@ -18,7 +18,9 @@ interface AutomationFlowPreviewProps {
   scheduleEnd: string;
   onMoveBranch: (from: number, to: number) => void;
   onMoveDefaultStep: (from: number, to: number) => void;
-  onMoveBranchStep: (branchIndex: number, from: number, to: number) => void;\n  onMoveTriggerCondition: (from: number, to: number) => void;\n  onMoveBranchCondition: (branchIndex: number, from: number, to: number) => void;
+  onMoveBranchStep: (branchIndex: number, from: number, to: number) => void;
+  onMoveTriggerCondition: (from: number, to: number) => void;
+  onMoveBranchCondition: (branchIndex: number, from: number, to: number) => void;
 }
 
 const matchLabel: Record<string, string> = {
