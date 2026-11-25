@@ -109,11 +109,16 @@ Use POST /public/v1/messages with messages:write. The API derives the WABA ID fr
   "language": "en",
   "variables": ["A-100", "today"],
   "headerVariables": ["Customer"],
-  "buttonVariables": ["A-100"]
+  "buttonVariables": ["A-100"],
+  "consent": {
+    "optedIn": true,
+    "consentAt": "2026-11-24T10:00:00.000Z",
+    "consentSource": "Website checkout opt-in"
+  }
 }
 ~~~
 
-Use a unique Idempotency-Key for every send. A successful response means Meta accepted the message, not that the recipient device received it. WhatsApp consent, template policy and messaging rules still apply.
+A template send requires explicit opt-in evidence with optedIn=true, a past ISO-8601 consentAt timestamp and a 2–120 character consentSource. The API checks the workspace suppression list and rejects recipients who have opted out; the evidence source/time is retained in a workspace-scoped audit record. Use a unique Idempotency-Key for every send. A successful response means Meta accepted the message, not that the recipient device received it. WhatsApp consent, template policy and messaging rules still apply.
 
 ## Campaigns
 
