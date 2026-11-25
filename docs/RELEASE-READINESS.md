@@ -28,7 +28,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add API-key authentication that derives the workspace from the key, checks active workspace state and enforces contacts read/write scopes.
 - [x] Add versioned `GET /public/v1/contacts` and `POST /public/v1/contacts` endpoints.
 - [x] Add versioned `GET`, `POST`, `PUT` and `DELETE /public/v1/leads` endpoints with workspace-scoped CRM validation.
-- [x] Add `POST /public/v1/messages` for workspace-connected WhatsApp text, media (Meta-hosted upload; no customer media persisted in Firebase) and validated interactive button/list/CTA/carousel sends, with `messages:write`, required idempotency keys, message/media quota enforcement and outbound webhook events.
+- [x] Add `POST /public/v1/messages` for workspace-connected WhatsApp text, media (Meta-hosted upload; no customer media persisted in Firebase), validated interactive button/list/CTA/carousel sends and approved text-header template sends, with `messages:write`, required idempotency keys, message/media quota enforcement and outbound webhook events.
 - [x] Add `GET /public/v1/templates` for listing the first Meta template page with `templates:read` and workspace phone/WABA ownership checks.
 - [x] Add paginated `GET /public/v1/campaigns` summaries with `campaigns:read`; results expose aggregate delivery counters only and never recipient phone numbers or consent records.
 - [x] Add `POST /public/v1/campaigns` with separate `campaigns:write` scope, mandatory idempotency, connected-number validation, Meta approved-template/language/category verification, body-variable validation and opt-out suppression; this endpoint creates drafts only and cannot schedule or send.
