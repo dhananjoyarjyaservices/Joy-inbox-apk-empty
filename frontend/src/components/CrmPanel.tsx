@@ -42,7 +42,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
   const [stageProbability, setStageProbability] = useState("50");
   const [customValues, setCustomValues] = useState<Record<string, string | number | boolean>>({});
   const [editingLeadId, setEditingLeadId] = useState("");
-  const [followUpFilter, setFollowUpFilter] = useState<"all" | "overdue" | "today">("all");
+  const [followUpFilter, setFollowUpFilter] = useState<"all" | "overdue" | "today" | "upcoming" | "none">("all");
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState("");
   const [activityLeadId, setActivityLeadId] = useState("");
@@ -384,7 +384,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
           <input aria-label="Maximum deal value" type="number" min="0" value={filterMaxValue} onChange={event => setFilterMaxValue(event.target.value)} placeholder="Max deal value" className="rounded-lg border p-2 text-xs"/>
         </div>
       </div>
-      {followUpFilter !== "all" && <div className="mb-3 flex items-center justify-between text-xs text-gray-500"><span>Showing {followUpFilter === "overdue" ? "overdue follow-ups" : "follow-ups due later today"}</span><button type="button" onClick={() => setFollowUpFilter("all")} className="font-semibold text-[#075e54]">Show all leads</button></div>}
+      {followUpFilter !== "all" && <div className="mb-3 flex items-center justify-between text-xs text-gray-500"><span>Showing {followUpFilter === "overdue" ? "overdue follow-ups" : followUpFilter === "today" ? "follow-ups due today" : followUpFilter === "upcoming" ? "upcoming follow-ups" : "leads without a follow-up"}</span><button type="button" onClick={() => setFollowUpFilter("all")} className="font-semibold text-[#075e54]">Show all leads</button></div>}
       <form onSubmit={submitLead} className="mb-5 grid gap-2 rounded-xl border bg-white p-4 sm:grid-cols-4">
         <label className="text-xs text-gray-600 sm:col-span-2">Lead / deal name<input required maxLength={120} value={title} onChange={event => setTitle(event.target.value)} placeholder="Website redesign project" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
         <label className="text-xs text-gray-600">Deal value (₹)<input type="number" min="0" max="1000000000000" step="0.01" value={value} onChange={event => setValue(event.target.value)} placeholder="25000" className="mt-1 w-full rounded-lg border p-2 text-sm"/></label>
