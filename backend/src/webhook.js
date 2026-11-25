@@ -6,7 +6,7 @@ const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
-const { findMatchingAutomationRule, selectAutomationBranch } = require("./automationRules");
+const { findMatchingAutomationRule, findMatchingOutOfOfficeRule, selectAutomationBranch } = require("./automationRules");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 
@@ -153,21 +153,26 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
     .map((document) => ({ id: document.id, ...document.data() }))
     .filter((rule) => typeof rule.keyword === "string" && (typeof rule.response === "string" || (Array.isArray(rule.steps) && rule.steps.length > 0)));
   const scheduleInstant = new Date();
-  const rule = findMatchingAutomationRule(rules, body, scheduleInstant);
+  const regularRule = findMatchingAutomationRule(rules, body, scheduleInstant);
+  const outOfOfficeRule = regularRule ? null : findMatchingOutOfOfficeRule(rules, body, scheduleInstant);
+  const rule = regularRule || outOfOfficeRule;
   if (!rule) return;
+  const isOutOfOffice = Boolean(outOfOfficeRule);
 
   const inboundTimestamp = Number(inboundMessage.timestamp)
     ? new Date(Number(inboundMessage.timestamp) * 1000) : new Date();
   const withinWindow = inboundTimestamp.getTime() <= Date.now() + 5 * 60 * 1000 &&
     Date.now() - inboundTimestamp.getTime() < 24 * 60 * 60 * 1000;
-  const selectedBranch = selectAutomationBranch(rule, body);
+  const selectedBranch = isOutOfOffice
+    ? { branchName: "Out of office", branchIndex: null, steps: [{ message: rule.outOfOfficeMessage, delaySeconds: 0 }] }
+    : selectAutomationBranch(rule, body);
   const selectedSteps = selectedBranch.steps;
   const steps = Array.isArray(selectedSteps) && selectedSteps.length
     ? selectedSteps.slice(0, 5).map((step) => typeof step === "string"
       ? { message: step.trim(), delaySeconds: 0 }
       : { message: String(step?.message || "").trim(), delaySeconds: Number.isInteger(step?.delaySeconds) ? Math.max(0, Math.min(86400, step.delaySeconds)) : 0 }).filter((step) => step.message)
     : [{ message: String(rule.response || "").trim(), delaySeconds: 0 }].filter((step) => step.message);
-  const runId = crypto.createHash("sha256").update(String(inboundMessage.id || "") + ":" + rule.id).digest("hex");
+  const runId = crypto.createHash("sha256").update(String(inboundMessage.id || "") + ":" + rule.id + (isOutOfOffice ? ":ooo" : "")).digest("hex");
   const runRef = organization.ref.collection("automationRuns").doc(runId);
   const claimed = await db.runTransaction(async (transaction) => {
     const existing = await transaction.get(runRef);
@@ -177,6 +182,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       ruleName: String(rule.name || "Automation").slice(0, 80),
       branchName: selectedBranch.branchName,
       branchIndex: selectedBranch.branchIndex,
+      mode: isOutOfOffice ? "out_of_office" : "standard",
       inboundMessageId: String(inboundMessage.id || "").slice(0, 256),
       customerPhone: phone,
       status: withinWindow ? "sending" : "skipped",
