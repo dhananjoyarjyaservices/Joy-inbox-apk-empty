@@ -38,8 +38,8 @@ Legend:
 | WhatsApp catalog/product messages | Missing | No catalog sync/management or catalog-message workflow found. |
 | Payment links / WhatsApp Pay / order management | Missing | Stripe is for Joy Inbox subscription billing, not customer checkout or WhatsApp-native commerce. |
 | Greeting / welcome automation | Implemented (code) | Tenant greeting settings and inbound webhook trigger. |
-| Out-of-office, delayed reply and FAQ automation | Partial | Greeting plus keyword-triggered short sequential rules exist; no complete schedule-aware OOO/delayed/FAQ suite. |
-| Visual no-code chatbot builder, branching, API calls and intent routing | Missing | Current automation is keyword matching with up to five reply steps; no visual flow builder, branching conditions, API action nodes or intent model. |
+| Out-of-office, delayed reply and FAQ automation | Partial | Greeting plus keyword-triggered short sequential rules exist, now with up to five ALL/ANY conditions and six match operators; no complete schedule-aware OOO/delayed/FAQ suite. |
+| Visual no-code chatbot builder, branching, API calls and intent routing | Partial / missing | Rule editor supports up to five ALL/ANY keyword conditions (`contains`, `exact`, `starts_with`, `ends_with`, `not_contains`, `not_exact`), priority ordering and up to five delayed reply steps. Still missing: visual canvas, conditional branch/action nodes, schedules/timezone windows, API actions and intent routing. |
 | Campaigns/broadcasts and consent safeguards | Implemented (code) | Draft/schedule/pause/cancel, approved-template revalidation, opt-in evidence, STOP/START suppression, delivery reconciliation. Provider acceptance remains pending. |
 | Campaign click/conversion attribution and advanced segmentation | Partial | Delivery/read/failure reporting exists; no complete click/conversion attribution or advanced campaign segmentation found. |
 | SLA monitoring and agent performance | Implemented (code) | SLA settings/worker, notifications and historical agent response metrics. |
