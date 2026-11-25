@@ -232,7 +232,7 @@ async function handleWhatsAppTemplates(event) {
   url.searchParams.set("fields", "id,name,status,language,category,components");
   const limit = params.limit === undefined ? 50 : Number(params.limit);
   const cursor = typeof params.cursor === "string" ? params.cursor.trim() : "";
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100 || cursor.length > 512 || (cursor && !/^[A-Za-z0-9_-]+$/.test(cursor))) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100 || cursor.length > 512 || (cursor && !/^[A-Za-z0-9_=-]+$/.test(cursor))) {
     return jsonResponse(event, 400, { error: "Template limit must be 1–100 and cursor must be a valid Meta paging cursor." });
   }
   url.searchParams.set("limit", String(limit));
