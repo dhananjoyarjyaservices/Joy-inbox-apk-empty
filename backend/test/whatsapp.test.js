@@ -182,7 +182,7 @@ test("interactive sends use workspace credentials and return Meta message IDs", 
       accessToken: "EAA-tenant-token", phoneNumberId: "123456789012345"
     });
     assert.equal(result.messageId, "wamid.interactive-test");
-    assert.match(requestUrl, /123456789012345\\/messages$/);
+    assert.equal(requestUrl.endsWith("123456789012345/messages"), true);
     assert.equal(authorization, "Bearer EAA-tenant-token");
     assert.deepEqual(requestBody, payload);
   } finally { global.fetch = originalFetch; }
