@@ -433,7 +433,14 @@ async function runScheduledCampaigns(options = {}) {
     db.collectionGroup("campaigns").where("status", "==", "queued").orderBy("createdAt", "asc").limit(limit).get(),
     db.collectionGroup("campaigns").where("status", "==", "sending").orderBy("updatedAt", "asc").limit(limit).get()
   ]);
-  const docs = [...queued.docs, ...sending.docs].slice(0, limit);
+  // Alternate queued and already-sending campaigns so a steady stream of
+  // newly queued work cannot starve campaigns that need to finish or retry.
+  const docs = [];
+  for (let index = 0; docs.length < limit &&
+      (index < queued.docs.length || index < sending.docs.length); index += 1) {
+    if (index < queued.docs.length && docs.length < limit) docs.push(queued.docs[index]);
+    if (index < sending.docs.length && docs.length < limit) docs.push(sending.docs[index]);
+  }
   const results = [];
   for (const document of docs) {
     try {
