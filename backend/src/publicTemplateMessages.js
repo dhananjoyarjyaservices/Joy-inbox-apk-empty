@@ -7,6 +7,16 @@ function httpError(message, statusCode = 400) {
   return error;
 }
 
+function normalizeTemplateConsent(input, now = Date.now()) {
+  const consentAt = typeof input?.consentAt === "string" ? new Date(input.consentAt) : null;
+  const consentSource = typeof input?.consentSource === "string" ? input.consentSource.trim() : "";
+  if (!input || input.optedIn !== true || !consentAt || Number.isNaN(consentAt.getTime()) ||
+      consentAt.getTime() > now || consentSource.length < 2 || consentSource.length > 120) {
+    throw httpError("Template sends require explicit opt-in evidence: optedIn=true, a past ISO consentAt timestamp and a consentSource (2–120 characters).");
+  }
+  return { optedIn: true, consentAt: consentAt.toISOString(), consentSource };
+}
+
 function countTemplatePlaceholders(value) {
   const indexes = [...String(value || "").matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
   return indexes.length ? Math.max(...indexes) : 0;
@@ -57,4 +67,4 @@ function buildPublicTemplateComponents(approvedTemplate, input = {}) {
   return components;
 }
 
-module.exports = { countTemplatePlaceholders, buildPublicTemplateComponents };
+module.exports = { normalizeTemplateConsent, countTemplatePlaceholders, buildPublicTemplateComponents };
