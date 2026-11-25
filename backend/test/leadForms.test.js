@@ -110,8 +110,8 @@ test("public submissions create one CRM lead and retries return the original res
     consent: true, ip: "203.0.113.10", idempotencyKey: "visitor-session-0001",
     now: new Date("2026-11-25T08:00:00.000Z")
   };
-  const first = await submitPublicLeadForm(db, formId, { full_name: "A User", email: "a@example.com" }, options);
-  const retry = await submitPublicLeadForm(db, formId, { full_name: "A User", email: "a@example.com" }, options);
+  const first = await submitPublicLeadForm(db, formId, { full_name: "A User", email: "a@example.com", phone: "+919876543210" }, options);
+  const retry = await submitPublicLeadForm(db, formId, { full_name: "A User", email: "a@example.com", phone: "+919876543210" }, options);
   assert.deepEqual(retry, first);
   assert.equal([...documents.keys()].filter(path => path.includes("/leadFormSubmissions/")).length, 1);
   assert.equal([...documents.keys()].filter(path => path.includes("/crmLeads/")).length, 1);
