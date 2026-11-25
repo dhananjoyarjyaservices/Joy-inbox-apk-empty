@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-25  
 **Audited branch:** `feature/saas-foundation`  
-**Audited code head:** `75abee3e6b17699089f1554899fad45af16fe4ec`  
+**Audited code head:** `8624557b9288ca42bca6f0b58bd4b5cb1299f257`  
 **Scope:** Repository code and automated-test evidence only. This is not a live-provider acceptance test.
 
 ## Executive finding
@@ -52,7 +52,7 @@ Legend:
 | Click-to-WhatsApp ads launcher/conversion analytics | Missing | No CTWA ad management or Meta conversion-event pipeline found. |
 | Sales CRM pipeline, lead stages and owner routing | Implemented code foundation / partial advanced parity | Tenant-scoped pipeline, custom stages and typed lead fields, contact linking, member assignment, follow-up dates/reminders, CSV import, sales reports, append-only activity history, weighted forecasting, saved filters and transactional duplicate-contact merge with audit records are implemented. Real workspace validation and advanced segmentation/conversion attribution remain open. |
 | Shopify/WooCommerce and other commerce integrations | Missing | No production commerce integration/sync workflow found. |
-| WhatsApp Forms / lead capture forms | Partial / implemented code foundation | Workspace form builder and hosted public form page support 1–10 validated fields, consent capture, honeypot, IP-hash rate limits, transactional idempotent submissions, optional CRM lead creation and tenant-scoped response history. Meta WhatsApp Flows/forms message sending and real staging/privacy acceptance remain missing. |
+| WhatsApp Forms / lead capture forms | Partial / implemented code foundation | Workspace form builder and hosted public form page support 1–10 validated fields, consent capture, honeypot, IP-hash rate limits, transactional idempotent submissions, CRM contact upsert from submitted phone numbers, linked CRM lead creation and tenant-scoped response history. Meta WhatsApp Flows/forms message sending and real staging/privacy acceptance remain missing. |
 | AI Copilot, AI AnswerBot, AI agents and intent automation | Missing | No AI generation/runtime, knowledge base ingestion, agent tool execution or AI workflow code found. |
 | WhatsApp voice calling / voice AI | Missing | No calling or voice-agent implementation found. |
 | Cross-channel omnichannel inbox | Missing | Current product is WhatsApp-focused; no Instagram/RCS unified conversation model found. |
@@ -75,7 +75,7 @@ Firebase remains intentionally deferred until all repository-only work is comple
 2. **Public API/webhooks:** extend current contacts/leads API with message, campaign and template endpoints, configurable rate tiers, and richer delivery filters/analytics.
 3. **Automation builder:** branch/condition nodes, schedules, OOO/delayed replies, FAQ knowledge entries and safe API action nodes.
 4. **Commerce:** catalog/product sync and customer payment-link/order lifecycle (separate from subscription billing).
-5. **Forms and campaign attribution:** WhatsApp Forms/lead capture and CRM response storage now have an initial implementation; remaining work is Meta WhatsApp Flows integration, response-to-custom-field mapping, click/conversion events and advanced segmentation.
+5. **Forms and campaign attribution:** WhatsApp Forms/lead capture and CRM contact/lead conversion now have an initial implementation; remaining work is Meta WhatsApp Flows integration, response-to-custom-field mapping, click/conversion events and advanced segmentation.
 6. **Additional channels:** Instagram first, then RCS; requires provider permissions, channel-specific data model and end-to-end tests.
 7. **AI and voice:** opt-in AI assistant/agent runtime with data boundaries, review controls and cost/abuse protections; voice only after provider and compliance review.
 
