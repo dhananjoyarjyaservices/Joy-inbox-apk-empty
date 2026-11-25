@@ -10,11 +10,19 @@ This checklist separates code already present from work that requires real servi
 
 Complete all repository-only implementation, code review, documentation, local/emulator testing, CI checks, static security review, frontend build/preview preparation, Lambda packaging review and infrastructure-template review before requesting any Firebase connection. Firebase connection is intentionally reserved for the final external integration phase. Once the repository-only phase is complete, connect an isolated Firebase staging project and then run integrated Firebase/Meta/Stripe/AWS acceptance tests. Do not ask the owner to configure Firebase while code-only work remains. This sequencing does not waive any staging or production gate below.
 
-## Current parity implementation plan\n\n- [x] Prepare a phased implementation backlog with acceptance criteria for CRM, public APIs/webhooks, advanced automation, commerce/forms/attribution, additional channels and AI/voice in [docs/EVENING-IMPLEMENTATION-PLAN.md](EVENING-IMPLEMENTATION-PLAN.md). This is planning documentation, not implementation of those modules.\n\n- [x] Initial tenant-scoped CRM foundation: pipeline stages, typed custom field definitions/validation, lead records, contact and owner pickers, lead editing/stage changes, follow-up dates, agent-only assigned-lead access and Sales CRM UI.
+## Current parity implementation plan
+
+- [x] Prepare a phased implementation backlog with acceptance criteria for CRM, public APIs/webhooks, advanced automation, commerce/forms/attribution, additional channels and AI/voice in [docs/EVENING-IMPLEMENTATION-PLAN.md](EVENING-IMPLEMENTATION-PLAN.md). This is planning documentation, not implementation of those modules.
+
+- [x] Initial tenant-scoped CRM foundation: pipeline stages, typed custom field definitions/validation, lead records, contact and owner pickers, lead editing/stage changes, follow-up dates, agent-only assigned-lead access and Sales CRM UI.
 - [x] Automated CRM follow-up reminders: scheduled scan, transactional deduplication, active-owner validation, in-app notification, push delivery, member opt-out and retry after failure. Notification Center routes CRM alerts to Sales CRM. See `docs/CRM-FOUNDATION.md`.
 - [x] CRM CSV bulk import for up to 200 leads per upload, with row-level validation and partial success reporting.
 - [x] CRM sales performance report: pipeline totals, won revenue, conversion rate, stage, owner and source breakdowns with agent-scoped visibility and a 1,000-lead sample cap.
-- [x] CRM lead activity timeline: append-only actor-attributed create/update/delete events, tracked-field before/after snapshots, agent assignment checks and on-demand pipeline-card history.\n- [x] Probability-weighted CRM pipeline forecast using configurable stage win probabilities; expected open value is calculated separately per currency.\n- [ ] Validate forecast accuracy and stage-probability configuration with real workspace sales data.\n\n## Public developer API and outbound webhooks — contacts, CRM, text-send, template-read, campaign reporting and draft creation slices
+- [x] CRM lead activity timeline: append-only actor-attributed create/update/delete events, tracked-field before/after snapshots, agent assignment checks and on-demand pipeline-card history.
+- [x] Probability-weighted CRM pipeline forecast using configurable stage win probabilities; expected open value is calculated separately per currency.
+- [ ] Validate forecast accuracy and stage-probability configuration with real workspace sales data.
+
+## Public developer API and outbound webhooks — contacts, CRM, text-send, template-read, campaign reporting and draft creation slices
 
 - [x] Add owner/admin API key creation, metadata listing and revocation with one-time raw-key display, SHA-256-only storage, scopes, expiry and throttled last-used metadata.
 - [x] Add API-key authentication that derives the workspace from the key, checks active workspace state and enforces contacts read/write scopes.
@@ -31,7 +39,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Add cursor pagination for contacts and CRM leads, 24-hour idempotency for public API mutations, and daily per-key request/rate-limit usage analytics.
 - [ ] Add configurable rate-limit tiers.
 - [x] Add public API `leads:read` and `leads:write` scopes with workspace-derived list/create/update/delete endpoints and CRM stage/contact/owner/custom-field validation; add unit coverage and explicitly classify the API-key route in the HTTP route-security inventory.
-- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Campaign creation/control endpoints, template sending/management, media/interactive sends, configurable rate-limit tiers and richer webhook delivery filters/pagination remain open.
+- [x] Add `messages:write` for public text sends and `templates:read` for public template listing. Public campaign draft creation and campaign state controls are implemented with separate scopes, idempotency and transactional state transitions. Remaining public API gaps: template sending/management, media and interactive sends, configurable rate-limit tiers, richer webhook delivery filters/pagination and full staging verification.
 - [x] Add owner/admin-managed HTTPS webhook subscriptions, one-time encrypted signing secrets, HMAC-SHA256 delivery, idempotent queueing, bounded retries and contact/message/CRM lead lifecycle events.
 - [x] Wire inbound message and Meta message-status events (`sent`, `delivered`, `read`, `failed`) into the outbound delivery queue.
 - [x] Add workspace-scoped webhook delivery history API/UI and manual replay for failed deliveries.
@@ -40,7 +48,12 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [ ] Enable Firestore TTL on `webhookDeliveryQueue.expiresAt`; split the delivery worker into its own schedule after staging load tests.
 - [ ] Validate external integration traffic, abuse controls and production CORS strategy before public launch.
 
-## Product parity audit\n\n- [x] Compare the implemented Joy Inbox code paths against Interakt's current public product categories and document implemented, partial, missing and externally gated capabilities in [docs/INTERAKT-FEATURE-PARITY.md](INTERAKT-FEATURE-PARITY.md).\n- [ ] Implement the remaining missing/partial product capabilities listed in that audit before claiming Interakt feature parity. CRM pipeline, follow-up reminders, CSV import and recent sales reporting are implemented as an initial slice; public contacts/leads APIs and webhook operations are implemented as initial slices. Instagram, RCS, AI/voice, commerce, forms, CTWA ads, CRM activity timeline/forecasting and public message/campaign/template APIs remain incomplete.\n\n## WhatsApp Embedded Signup onboarding
+## Product parity audit
+
+- [x] Compare the implemented Joy Inbox code paths against Interakt's current public product categories and document implemented, partial, missing and externally gated capabilities in [docs/INTERAKT-FEATURE-PARITY.md](INTERAKT-FEATURE-PARITY.md).
+- [ ] Implement remaining missing/partial product capabilities listed in `docs/INTERAKT-FEATURE-PARITY.md` before claiming Interakt feature parity. CRM activity timeline and weighted forecasting are implemented; validate them with real workspace data. Public text-send, template-read, campaign reporting/draft/control and signed webhook operations have initial implementations. Still missing or partial: Instagram, RCS, AI/voice, commerce, forms, CTWA ads, visual automation builder, advanced CRM segments/deduplication/conversion attribution, catalog/order/payment workflows, and richer public media/interactive/template APIs.
+
+## WhatsApp Embedded Signup onboarding
 
 - [x] Replace customer-facing manual Phone Number ID/access-token entry with a Meta-hosted Facebook Login for Business Embedded Signup flow.
 - [x] Add authenticated, workspace-bound, expiring and single-use signup sessions.
@@ -141,9 +154,9 @@ Complete all repository-only implementation, code review, documentation, local/e
 
 No production data migration, Firebase rules deployment, Lambda deployment, EventBridge activation, Meta webhook change, Stripe live-mode payment or PR merge is performed by this development workflow. These actions require the correct account credentials, an agreed maintenance window and explicit approval.
 
-## Latest automated verification (2026-11-24)
+## Latest automated verification (2026-11-25)
 
-Latest verified code commit: `188a686ccd99a727f08ec0e0ffe3b5189c9ad744`.
+Latest checked development commit: `4fcb467ce0898c98e455a53f758812c0025a3fa4`. GitHub Actions reported Backend tests, Frontend build and Joy Inbox CI as completed successfully for this commit.
 - Frontend TypeScript and production build (run 45417962816): **passed**.
 - Backend unit tests (run 45417976709): **passed**.
 - Frontend build (run 45417976712): **passed**.
@@ -151,7 +164,7 @@ Latest verified code commit: `188a686ccd99a727f08ec0e0ffe3b5189c9ad744`.
 - Cloudflare Pages branch preview: **deployed successfully** at https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev.
 - The passing checks validate repository CI and the static frontend preview only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
 
-The PR #1 branch tip at this verification point is `188a686ccd99a727f08ec0e0ffe3b5189c9ad744`. Keep the pull request in draft until all external staging and launch gates pass.
+PR #1 remains open and unmerged. The current PR metadata and merge readiness must be rechecked before any merge. Keep the pull request unmerged until all external staging and launch gates pass and the owner explicitly approves.
 
 ## Static security review completed in repository
 
