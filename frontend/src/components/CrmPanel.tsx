@@ -9,6 +9,7 @@ import {
 import { mergeTenantContacts, saveTenantContact, type TenantContact } from "../services/tenantResources";
 import type { OrganizationMember } from "../services/organizationMembers";
 import LeadFormsPanel from "./LeadFormsPanel";
+import { parseCrmCsv } from "../utils/crmCsv";
 
 type Props = { organizationId: string; contacts: TenantContact[]; members: OrganizationMember[]; canManageSchema: boolean; initialContactId?: string; initialContactName?: string };
 
@@ -182,61 +183,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
     if (!file) return;
     setImporting(true); setError(""); setImportSummary("");
     try {
-      const sourceText = (await file.text()).replace(/^\uFEFF/, "");
-      const rows: string[][] = [];
-      let row: string[] = [], cell = "", quoted = false;
-      for (let index = 0; index < sourceText.length; index += 1) {
-        const char = sourceText[index];
-        if (char === '"' && quoted && sourceText[index + 1] === '"') { cell += '"'; index += 1; }
-        else if (char === '"') quoted = !quoted;
-        else if (char === "," && !quoted) { row.push(cell); cell = ""; }
-        else if ((char === "\n" || char === "\r") && !quoted) {
-          if (char === "\r" && sourceText[index + 1] === "\n") index += 1;
-          row.push(cell); cell = "";
-          if (row.some(value => value.trim())) rows.push(row);
-          row = [];
-        } else cell += char;
-      }
-      row.push(cell);
-      if (row.some(value => value.trim())) rows.push(row);
-      if (quoted) throw new Error("CSV has an unclosed quoted field.");
-      if (rows.length < 2) throw new Error("CSV must contain a header and at least one lead row.");
-      const headers = rows[0].map(value => value.trim().toLowerCase().replace(/[\s-]+/g, "_"));
-      if (!headers.includes("title")) throw new Error('CSV needs a "title" column.');
-      if (new Set(headers).size !== headers.length) throw new Error("CSV contains duplicate column headers.");
-      if (rows.slice(1).some(values => values.length > headers.length)) throw new Error("CSV contains a row with more values than the header columns.");
-      const importedRows = rows.slice(1).map(values => {
-        const record: Record<string, string> = {};
-        headers.forEach((header, index) => { record[header] = values[index] || ""; });
-        return {
-          title: record.title || "",
-          stageId: record.stage_id || "new",
-          contactId: record.contact_id || "",
-          ownerUid: record.owner_uid || "",
-          source: record.source || "",
-          value: record.value ? Number(record.value) : null,
-          currency: record.currency || "INR",
-          nextFollowUpAt: record.next_follow_up_at || null,
-          notes: record.notes || "",
-          customFields: Object.fromEntries(fields
-            .filter(field => field.active)
-            .flatMap(field => {
-              const raw = record[field.key] ?? record[`custom_${field.key}`] ?? "";
-              if (raw === "") return [];
-              if (field.type === "number") { const parsed = Number(raw); return [[field.key, Number.isFinite(parsed) ? parsed : raw]]; }
-              if (field.type === "boolean") {
-                const normalized = raw.trim().toLowerCase();
-                const parsed = normalized === "true" || normalized === "yes" || normalized === "1"
-                  ? true
-                  : normalized === "false" || normalized === "no" || normalized === "0"
-                    ? false
-                    : raw;
-                return [[field.key, parsed]];
-              }
-              return [[field.key, raw]];
-            })
-        };
-      });
+      const importedRows = parseCrmCsv(await file.text(), fields);
       const result = await importCrmLeads(organizationId, importedRows);
       setImportSummary(`Imported ${result.imported} leads · ${result.failed} rows need attention${result.errors.length ? ` · First error (row ${result.errors[0].row}): ${result.errors[0].error}` : ""}`);
       await refresh();
