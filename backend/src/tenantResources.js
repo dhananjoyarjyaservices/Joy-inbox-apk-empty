@@ -1,4 +1,4 @@
-const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;\nconst { normalizeCrmFieldValues } = require("./crm");
 
 function httpError(message, statusCode) {
   const error = new Error(message);
@@ -8,7 +8,7 @@ function httpError(message, statusCode) {
 
 function contactInput(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Contact details are required.", 400);
-  const allowed = ["name", "phone", "email", "notes", "source", "tags"];
+  const allowed = ["name", "phone", "email", "notes", "source", "tags", "customFields"];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw httpError("Unsupported contact field.", 400);
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const rawPhone = typeof input.phone === "string" ? input.phone.trim().replace(/[\s().-]/g, "") : "";
@@ -25,7 +25,7 @@ function contactInput(input) {
   if (!/^\+[1-9]\d{6,14}$/.test(phone)) throw httpError("Enter a valid international phone number.", 400);
   if (email.length > 254 || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw httpError("Enter a valid email address.", 400);
   if (notes.length > 1000) throw httpError("Contact notes are too long.", 400);
-  return { name, phone, phoneId: phone.slice(1), email, notes, source, tags };
+  const result = { name, phone, phoneId: phone.slice(1), email, notes, source, tags };\n  if (input.customFields !== undefined) result.customFields = normalizeCrmFieldValues(input.customFields, arguments[1] || [], { enforceRequired: false });\n  return result;
 }
 
 function quickReplyInput(input) {
@@ -102,9 +102,9 @@ async function listTenantResource(db, organizationId, resource) {
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
 }
 
-async function saveTenantResource(db, organizationId, resource, input, resourceId) {
+async function saveTenantResource(db, organizationId, resource, input, resourceId, fieldDefinitions = []) {
   const collection = getTenantResourceCollection(db, organizationId, resource);
-  const data = resource === "contacts" ? contactInput(input) : quickReplyInput(input);
+  const data = resource === "contacts" ? contactInput(input, fieldDefinitions) : quickReplyInput(input);
   const now = new Date();
   if (resource === "contacts") {
     const id = data.phoneId;
