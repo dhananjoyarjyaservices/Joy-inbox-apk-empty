@@ -1306,6 +1306,7 @@ async function handlePublicLeadForm(event, formId, submit) {
     return jsonResponse(event, 200, { form: result.form });
   }
   if (getMethod(event) !== "POST" || !submit) return jsonResponse(event, 405, { error: "Method not allowed." });
+  if (String(event.body || "").length > 32_000) return jsonResponse(event, 413, { error: "Form submission payload is too large." });
   let body;
   try { body = parseBody(event); } catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   const forwarded = getHeader(event, "x-forwarded-for");
