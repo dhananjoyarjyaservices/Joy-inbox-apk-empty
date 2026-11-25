@@ -346,3 +346,36 @@ test("campaign worker skips recipients whose consent timestamp is in the future"
   assert.equal(harness.recipient.status, "skipped");
   assert.equal(harness.recipient.reason, "missing_or_invalid_opt_in_evidence");
 });
+
+test("scheduled worker alternates queued and sending campaigns to prevent starvation", async () => {
+  const { runScheduledCampaigns } = require("../src/campaignWorker");
+  const makeDocument = id => ({
+    id,
+    ref: { async get() { return { exists: false }; } }
+  });
+  const resultsByStatus = {
+    scheduled: [],
+    queued: [makeDocument("queued_1"), makeDocument("queued_2"), makeDocument("queued_3")],
+    sending: [makeDocument("sending_1"), makeDocument("sending_2")]
+  };
+  const db = {
+    collectionGroup(name) {
+      assert.equal(name, "campaigns");
+      let status = "";
+      return {
+        where(field, operator, value) {
+          if (field === "status") status = value;
+          return this;
+        },
+        orderBy() { return this; },
+        limit() { return this; },
+        async get() { return { docs: resultsByStatus[status] || [] }; }
+      };
+    }
+  };
+  const result = await runScheduledCampaigns({ db, now: new Date("2026-11-25T12:00:00.000Z"), limit: 3 });
+  assert.deepEqual(result.results.map(item => item.campaignId), [
+    "queued_1", "sending_1", "queued_2"
+  ]);
+});
+
