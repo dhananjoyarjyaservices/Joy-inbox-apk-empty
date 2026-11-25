@@ -71,3 +71,28 @@ test("does not write any rows when every imported row fails validation", async (
   assert.equal(result.failed, 2);
   assert.equal([...db.records.keys()].filter(path => path.includes("/crmLeads/")).length, 0);
 });
+
+
+test("imports typed custom field values and reports invalid custom field rows", async () => {
+  const { db, organization } = makeDb({
+    fields: [
+      { id: "budget", key: "budget", label: "Budget", type: "number", active: true },
+      { id: "priority", key: "priority", label: "Priority", type: "select", options: ["High", "Normal"], active: true },
+      { id: "verified", key: "verified", label: "Verified", type: "boolean", active: true }
+    ],
+    stages: { new: { name: "New", active: true } }
+  });
+  const result = await importCrmLeads(db, organization, "owner_1", [
+    { title: "Valid custom fields", stageId: "new", customFields: { budget: 2500, priority: "High", verified: true } },
+    { title: "Invalid number type", stageId: "new", customFields: { budget: "2500" } },
+    { title: "Invalid select option", stageId: "new", customFields: { priority: "Urgent" } }
+  ], new Date("2026-11-25T12:00:00Z"));
+
+  assert.equal(result.imported, 1);
+  assert.equal(result.failed, 2);
+  assert.deepEqual(result.items[0].customFields, { budget: 2500, priority: "High", verified: true });
+  assert.match(result.errors[0].error, /Budget must be a valid number/);
+  assert.match(result.errors[1].error, /Choose a valid option for Priority/);
+  const saved = [...db.records.entries()].find(([path]) => path.includes("/crmLeads/"))?.[1];
+  assert.deepEqual(saved.customFields, { budget: 2500, priority: "High", verified: true });
+});
