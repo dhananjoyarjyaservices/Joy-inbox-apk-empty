@@ -237,13 +237,44 @@ function sendPinnedWebhookRequest(endpoint, resolvedAddress, options) {
   });
 }
 
-async function listOrganizationWebhookDeliveries(db, organizationId, limit = 50) {
-  const safeLimit = Number.isInteger(limit) ? Math.min(100, Math.max(1, limit)) : 50;
-  const snapshot = await db.collection("webhookDeliveryQueue")
-    .where("organizationId", "==", organizationId)
-    .limit(100)
-    .get();
-  return snapshot.docs.map(document => {
+function encodeWebhookDeliveryCursor(createdAt, id) {
+  return Buffer.from(JSON.stringify({ createdAt: new Date(createdAt).toISOString(), id }), "utf8").toString("base64url");
+}
+
+function decodeWebhookDeliveryCursor(cursor) {
+  if (cursor === undefined || cursor === null || cursor === "") return null;
+  if (typeof cursor !== "string" || cursor.length > 512) throw httpError("Webhook delivery cursor is invalid.", 400);
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    const timestamp = new Date(decoded.createdAt);
+    if (!decoded || typeof decoded.id !== "string" || !/^[a-f0-9]{64}$/.test(decoded.id) ||
+        Number.isNaN(timestamp.getTime()) || timestamp.toISOString() !== decoded.createdAt) throw new Error("invalid");
+    return { createdAt: timestamp, id: decoded.id };
+  } catch {
+    throw httpError("Webhook delivery cursor is invalid.", 400);
+  }
+}
+
+async function listOrganizationWebhookDeliveries(db, organizationId, options = {}) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(organizationId || "")) throw httpError("A valid workspace is required.", 400);
+  if (typeof options === "number") options = { limit: options };
+  const rawLimit = options.limit === undefined ? 50 : Number(options.limit);
+  if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) throw httpError("Webhook delivery page size must be between 1 and 100.", 400);
+  const allowedStatuses = new Set(["pending", "processing", "delivered", "failed", "cancelled"]);
+  const status = options.status || "";
+  const event = options.event || "";
+  if (status && !allowedStatuses.has(status)) throw httpError("Webhook delivery status filter is invalid.", 400);
+  if (event && !WEBHOOK_EVENTS.has(event)) throw httpError("Webhook delivery event filter is invalid.", 400);
+  const cursor = decodeWebhookDeliveryCursor(options.cursor);
+  let query = db.collection("webhookDeliveryQueue").where("organizationId", "==", organizationId);
+  if (status) query = query.where("status", "==", status);
+  if (event) query = query.where("event", "==", event);
+  query = query.orderBy("createdAt", "desc").orderBy("__name__", "desc");
+  if (cursor) query = query.startAfter(cursor.createdAt, cursor.id);
+  const snapshot = await query.limit(rawLimit + 1).get();
+  const hasMore = snapshot.docs.length > rawLimit;
+  const documents = snapshot.docs.slice(0, rawLimit);
+  const deliveries = documents.map(document => {
     const data = document.data() || {};
     return {
       id: document.id,
@@ -258,7 +289,13 @@ async function listOrganizationWebhookDeliveries(db, organizationId, limit = 50)
       deliveredAt: toIso(data.deliveredAt),
       nextAttemptAt: toIso(data.nextAttemptAt)
     };
-  }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, safeLimit);
+  });
+  const last = documents[documents.length - 1];
+  const lastCreatedAt = last ? toIso(last.data()?.createdAt) : null;
+  return {
+    deliveries,
+    nextCursor: hasMore && lastCreatedAt ? encodeWebhookDeliveryCursor(lastCreatedAt, last.id) : null
+  };
 }
 
 async function replayOrganizationWebhookDelivery(db, organizationId, deliveryId, now = Date.now()) {
