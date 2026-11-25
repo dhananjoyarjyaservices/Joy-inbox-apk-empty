@@ -6,7 +6,7 @@ const { normalizePhoneNumber, sendWhatsAppText } = require("./whatsapp");
 const { resolvePhoneNumberOrganization, getWhatsAppCredentials } = require("./tenancy");
 const { isWhatsAppOptInMessage, recordCampaignOptIn, isWhatsAppOptOutMessage, recordCampaignOptOut } = require("./campaignCompliance");
 const { sendTenantIncomingTextNotification } = require("./push");
-const { findMatchingAutomationRule, selectAutomationSteps } = require("./automationRules");
+const { findMatchingAutomationRule, selectAutomationBranch } = require("./automationRules");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 
@@ -160,7 +160,8 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
     ? new Date(Number(inboundMessage.timestamp) * 1000) : new Date();
   const withinWindow = inboundTimestamp.getTime() <= Date.now() + 5 * 60 * 1000 &&
     Date.now() - inboundTimestamp.getTime() < 24 * 60 * 60 * 1000;
-  const selectedSteps = selectAutomationSteps(rule, body);
+  const selectedBranch = selectAutomationBranch(rule, body);
+  const selectedSteps = selectedBranch.steps;
   const steps = Array.isArray(selectedSteps) && selectedSteps.length
     ? selectedSteps.slice(0, 5).map((step) => typeof step === "string"
       ? { message: step.trim(), delaySeconds: 0 }
@@ -174,11 +175,14 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
     transaction.create(runRef, {
       ruleId: rule.id,
       ruleName: String(rule.name || "Automation").slice(0, 80),
+      branchName: selectedBranch.branchName,
+      branchIndex: selectedBranch.branchIndex,
       inboundMessageId: String(inboundMessage.id || "").slice(0, 256),
       customerPhone: phone,
       status: withinWindow ? "sending" : "skipped",
       totalSteps: steps.length,
       completedSteps: 0,
+      stepResults: steps.map((step, index) => ({ step: index + 1, status: "queued", delaySeconds: step.delaySeconds })),
       reason: withinWindow ? null : "outside_whatsapp_service_window",
       createdAt: new Date(),
       updatedAt: new Date()
@@ -201,6 +205,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
       queueBatch.set(queueRef, {
         runId, ruleId: rule.id, organizationId: organization.id, customerPhone: phone,
         phoneNumberId: credentials.phoneNumberId || null, stepIndex: index,
+        branchName: selectedBranch.branchName, branchIndex: selectedBranch.branchIndex,
         totalSteps: steps.length, previousStepQueued: index > immediateCount, text: steps[index].message,
         delaySeconds: steps[index].delaySeconds, dueAt: new Date(dueAt),
         windowExpiresAt: new Date(inboundTimestamp.getTime() + 24 * 60 * 60 * 1000),
@@ -241,6 +246,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
         responseMessageIds: [...responseMessageIds],
         completedSteps: index + 1,
         totalSteps: steps.length,
+        stepResults: steps.map((step, stepIndex) => ({ step: stepIndex + 1, status: stepIndex <= index ? "sent" : "queued", delaySeconds: step.delaySeconds, ...(stepIndex === index ? { sentAt } : {}) })),
         status: index + 1 === steps.length ? "sent" : "sending",
         updatedAt: sentAt,
         ...(index + 1 === steps.length ? { sentAt } : {})
@@ -251,6 +257,7 @@ async function maybeRunTenantKeywordAutomation(db, organization, credentials, ph
     await runRef.set({
       status: responseMessageIds.length ? "partially_failed" : "failed",
       responseMessageIds, completedSteps: responseMessageIds.length, totalSteps: steps.length,
+      stepResults: steps.map((step, index) => ({ step: index + 1, status: responseMessageIds.length > index ? "sent" : index === responseMessageIds.length ? "failed" : "queued", delaySeconds: step.delaySeconds, ...(index === responseMessageIds.length ? { error: String(error?.message || "Automation reply failed.").slice(0, 200) } : {}) })),
       error: String(error?.message || "Automation reply failed.").slice(0, 300), updatedAt: new Date()
     }, { merge: true });
     console.error("Tenant keyword automation failed:", error);
