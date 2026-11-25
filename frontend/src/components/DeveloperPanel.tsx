@@ -30,6 +30,10 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
   const [usageDays, setUsageDays] = useState(30);
   const [webhooks, setWebhooks] = useState<OrganizationWebhook[]>([]);
   const [deliveries, setDeliveries] = useState<OrganizationWebhookDelivery[]>([]);
+  const [deliveryStatus, setDeliveryStatus] = useState("");
+  const [deliveryEvent, setDeliveryEvent] = useState("");
+  const [deliveryCursor, setDeliveryCursor] = useState<string | null>(null);
+  const [loadingMoreDeliveries, setLoadingMoreDeliveries] = useState(false);
   const [replayingDeliveryId, setReplayingDeliveryId] = useState("");
   const [webhookName, setWebhookName] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
@@ -63,17 +67,31 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
       const [apiKeys, subscriptions, deliveryHistory, usage] = await Promise.all([
         listOrganizationApiKeys(organizationId),
         listOrganizationWebhooks(organizationId),
-        listOrganizationWebhookDeliveries(organizationId),
+        listOrganizationWebhookDeliveries(organizationId, { status: deliveryStatus, event: deliveryEvent }),
         getOrganizationApiUsage(organizationId, usageDays)
       ]);
       setKeys(apiKeys);
       setWebhooks(subscriptions);
-      setDeliveries(deliveryHistory);
+      setDeliveries(deliveryHistory.deliveries);
+      setDeliveryCursor(deliveryHistory.nextCursor);
       setApiUsage(usage);
     } catch (e) { setError(e instanceof Error ? e.message : "Developer settings could not be loaded."); }
     finally { setLoading(false); }
   }
-  useEffect(() => { void refresh(); }, [organizationId, usageDays]);
+  useEffect(() => { void refresh(); }, [organizationId, usageDays, deliveryStatus, deliveryEvent]);
+
+  async function loadMoreDeliveries() {
+    if (!organizationId || !deliveryCursor || loadingMoreDeliveries) return;
+    setLoadingMoreDeliveries(true);
+    try {
+      const page = await listOrganizationWebhookDeliveries(organizationId, {
+        status: deliveryStatus, event: deliveryEvent, cursor: deliveryCursor
+      });
+      setDeliveries(current => [...current, ...page.deliveries]);
+      setDeliveryCursor(page.nextCursor);
+    } catch (e) { setError(e instanceof Error ? e.message : "More webhook deliveries could not be loaded."); }
+    finally { setLoadingMoreDeliveries(false); }
+  }
 
   async function createKey(event: FormEvent) {
     event.preventDefault();
@@ -256,13 +274,22 @@ export default function DeveloperPanel({ organizationId }: { organizationId: str
           </form>
           <div className="space-y-2">{webhooks.length ? webhooks.map(webhook => <article key={webhook.id} className="rounded-lg border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{webhook.name}</strong><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${webhook.status === "active" ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{webhook.status}</span></div><p className="mt-1 break-all text-xs text-gray-500">{webhook.url}</p><p className="mt-1 text-[11px] text-gray-500">Events: {webhook.events.join(", ")} · Last delivery: {displayDate(webhook.lastDeliveryAt)}</p>{webhook.status === "active" && <div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => void rotateWebhookSecret(webhook)} disabled={webhookSaving} className="rounded-lg border px-3 py-1.5 text-xs text-[#075e54] disabled:opacity-50">Rotate secret</button><button type="button" onClick={() => void revokeWebhook(webhook)} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600">Disable webhook</button></div>}</article>) : <p className="text-xs text-gray-500">No webhook subscriptions created.</p>}</div>
           <div className="mt-4 border-t pt-4">
-            <div className="mb-2 flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">Delivery history</h4><button type="button" onClick={() => void refresh()} disabled={loading} className="text-xs font-medium text-[#075e54]">Refresh</button></div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">Delivery history</h4><button type="button" onClick={() => void refresh()} disabled={loading} className="text-xs font-medium text-[#075e54]">Refresh</button></div>
+            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <select aria-label="Filter webhook deliveries by status" value={deliveryStatus} onChange={event => setDeliveryStatus(event.target.value)} className="rounded-lg border bg-white p-2 text-xs">
+                <option value="">All statuses</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="delivered">Delivered</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option>
+              </select>
+              <select aria-label="Filter webhook deliveries by event" value={deliveryEvent} onChange={event => setDeliveryEvent(event.target.value)} className="rounded-lg border bg-white p-2 text-xs">
+                <option value="">All events</option>{["contact.upserted","lead.created","lead.updated","lead.deleted","message.received","message.sent","message.delivered","message.read","message.failed"].map(eventName => <option key={eventName} value={eventName}>{eventName}</option>)}
+              </select>
+            </div>
             {deliveries.length ? <div className="max-h-80 space-y-2 overflow-y-auto">{deliveries.map(delivery => <article key={delivery.id} className="rounded-lg border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><strong className="font-mono text-xs">{delivery.event}</strong><span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${delivery.status === "delivered" ? "bg-green-50 text-green-700" : delivery.status === "failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{delivery.status}</span></div>
               <p className="mt-1 text-[10px] text-gray-500">Attempts: {delivery.attempts} · HTTP: {delivery.responseStatus ?? "—"} · Created: {displayDate(delivery.createdAt)}</p>
               {delivery.lastError && <p className="mt-1 break-words text-xs text-red-600">{delivery.lastError}</p>}
               {delivery.status === "failed" && <button type="button" onClick={() => void replayDelivery(delivery)} disabled={Boolean(replayingDeliveryId)} className="mt-2 rounded-md border border-[#075e54] px-3 py-1.5 text-xs font-semibold text-[#075e54] disabled:opacity-50">{replayingDeliveryId === delivery.id ? "Queueing..." : "Replay delivery"}</button>}
-            </article>)}</div> : <p className="text-xs text-gray-500">No webhook deliveries recorded yet.</p>}
+            </article>)}</div> : <p className="text-xs text-gray-500">No webhook deliveries match these filters.</p>}
+            {deliveryCursor && <button type="button" onClick={() => void loadMoreDeliveries()} disabled={loadingMoreDeliveries} className="mt-3 rounded-lg border px-3 py-2 text-xs font-medium text-[#075e54] disabled:opacity-50">{loadingMoreDeliveries ? "Loading..." : "Load more deliveries"}</button>}
           </div>
         </div>
         <div className="rounded-xl border bg-white p-4">
