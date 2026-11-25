@@ -78,7 +78,7 @@ All data remains under the authenticated workspace path. Custom field keys and s
 
 ## CSV bulk import
 
-Owners and admins can import up to 200 leads per upload from the Sales CRM screen. The importer accepts quoted CSV cells and requires a `title` header. Supported optional columns are `stage_id` (defaults to `new`), `contact_id`, `owner_uid`, `source`, `value`, `currency` (defaults to INR), `next_follow_up_at` and `notes`.
+Owners and admins can import up to 200 leads per upload from the Sales CRM screen. The importer accepts quoted CSV cells and requires a `title` header. Supported optional columns are `stage_id` (defaults to `new`), `contact_id`, `owner_uid`, `source`, `value`, `currency` (defaults to INR), `next_follow_up_at` and `notes`. Active workspace custom fields can also be imported by adding a column named exactly as the field key (or `custom_<field_key>`). Number fields are parsed as numbers; boolean fields accept `true`/`false`, `yes`/`no` or `1`/`0`; text, date and select values are validated by the backend against the configured field definition.
 
 Every row is validated against the workspace's active pipeline stages, contacts, active members and configured custom fields. Invalid rows are reported with their CSV row number while valid rows are committed together in a single Firestore batch. Imports emit the same signed `lead.created` webhook events as individual lead creation.
 
