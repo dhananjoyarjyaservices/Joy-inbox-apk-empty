@@ -18,6 +18,7 @@ const {
   isDefinitiveWhatsAppSendRejection,
   sendWhatsAppText,
   sendWhatsAppMedia,
+  sendWhatsAppInteractive,
   checkWhatsAppConnection
 } = require("./whatsapp");
 const {
@@ -481,11 +482,51 @@ async function handlePublicApiMessages(event) {
     return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
   }
   const to = normalizePhoneNumber(body.to);
-  const text = typeof body.text === "string" ? body.text.trim() : "";
   const phoneNumberId = typeof body.phoneNumberId === "string" ? body.phoneNumberId.trim() : "";
+  const type = body.type === undefined ? "text" : String(body.type);
   if (!/^[1-9][0-9]{7,14}$/.test(to)) return jsonResponse(event, 400, { error: "Recipient must be an international phone number in E.164 digits format." });
-  if (!text || text.length > 4096) return jsonResponse(event, 400, { error: "Text must contain 1–4096 characters." });
   if (!/^[0-9]{5,32}$/.test(phoneNumberId)) return jsonResponse(event, 400, { error: "A connected phoneNumberId is required." });
+  if (!["text", "image", "video", "audio", "document", "interactive"].includes(type)) {
+    return jsonResponse(event, 400, { error: "Message type must be text, image, video, audio, document or interactive." });
+  }
+  let normalizedInteractive = null;
+  let previewText = "";
+  let media = null;
+  if (type === "text") {
+    previewText = typeof body.text === "string" ? body.text.trim() : "";
+    if (!previewText || previewText.length > 4096) return jsonResponse(event, 400, { error: "Text must contain 1–4096 characters." });
+  } else if (type === "interactive") {
+    try {
+      normalizedInteractive = normalizeInteractiveMessage(body.interactive);
+      previewText = getInteractivePreview(normalizedInteractive);
+    } catch (error) {
+      return jsonResponse(event, error.statusCode || 400, { error: error.message || "Interactive message details are invalid." });
+    }
+  } else {
+    if (!isValidBase64(body.media?.base64) || typeof body.media?.mimeType !== "string") {
+      return jsonResponse(event, 400, { error: "Media requires valid base64 content and a MIME type." });
+    }
+    const filename = typeof body.media.filename === "string" ? body.media.filename.trim().replace(/[\\/\r\n]/g, "_").slice(0, 180) : "";
+    const caption = typeof body.media.caption === "string" ? body.media.caption.trim() : "";
+    if (caption.length > 1024 || (type === "document" && !filename)) {
+      return jsonResponse(event, 400, { error: "Media caption must be 1,024 characters or fewer and documents require a filename." });
+    }
+    try {
+      const buffer = Buffer.from(body.media.base64, "base64");
+      const mimeType = validateMedia(body.media.mimeType, buffer.length, MAX_UPLOAD_BYTES);
+      validateMediaContent(mimeType, buffer);
+      const compatible = type === "image" ? mimeType.startsWith("image/")
+        : type === "video" ? mimeType.startsWith("video/")
+        : type === "audio" ? mimeType.startsWith("audio/")
+        : type === "document" ? !/^(image|video|audio)\//.test(mimeType)
+        : false;
+      if (!compatible) return jsonResponse(event, 400, { error: "The media MIME type does not match the selected message type." });
+      media = { buffer, mimeType, filename, caption, base64: body.media.base64 };
+      previewText = caption || `[${type}]`;
+    } catch (error) {
+      return jsonResponse(event, 400, { error: error.message || "Media content is invalid." });
+    }
+  }
   const connections = await listWhatsAppConnections(db, authenticatedKey.organizationId);
   const connection = connections.find(item => item.phoneNumberId === phoneNumberId && item.connected);
   if (!connection) return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the API key workspace." });
@@ -493,13 +534,37 @@ async function handlePublicApiMessages(event) {
   if (!idempotencyKey) return jsonResponse(event, 400, { error: "Idempotency-Key is required for message sends." });
   const idempotent = await runIdempotentApiRequest(
     db, authenticatedKey, idempotencyKey,
-    { method: "POST", resource: "messages", payload: { to, text, phoneNumberId } },
+    { method: "POST", resource: "messages", payload: {
+      to, phoneNumberId, type,
+      ...(type === "text" ? { text: previewText } : {}),
+      ...(type === "interactive" ? { interactive: normalizedInteractive } : {}),
+      ...(media ? { media: { base64: media.base64, mimeType: media.mimeType, filename: media.filename, caption: media.caption } } : {})
+    } },
     async () => {
       const credentials = await getWhatsAppCredentials(db, authenticatedKey.organizationId, phoneNumberId);
       const reservation = await reserveTenantMessageQuota(db, authenticatedKey.organizationId, crypto.randomUUID());
       let result;
+      let uploadedMediaId = "";
+      let mediaReservation = null;
       try {
-        result = await sendWhatsAppText(to, text, undefined, credentials);
+        if (type === "text") {
+          result = await sendWhatsAppText(to, previewText, undefined, credentials);
+        } else if (type === "interactive") {
+          result = await sendWhatsAppInteractive(buildWhatsAppInteractivePayload(to, normalizedInteractive), credentials);
+        } else {
+          mediaReservation = await reserveTenantMediaQuota(db, authenticatedKey.organizationId,
+            `public_api_${crypto.randomUUID()}`, media.buffer.length);
+          try {
+            const uploaded = await uploadWhatsAppMedia(media.buffer, media.mimeType, media.filename || `upload.${media.mimeType.split("/")[1]}`, credentials);
+            uploadedMediaId = uploaded.mediaId;
+            await settleTenantMediaQuota(db, mediaReservation, "sent", media.buffer.length);
+          } catch (error) {
+            await settleTenantMediaQuota(db, mediaReservation, error?.definitive === true ? "failed" : "sent",
+              error?.definitive === true ? 0 : media.buffer.length);
+            throw error;
+          }
+          result = await sendWhatsAppMedia(to, type, uploadedMediaId, media.caption, media.filename, undefined, credentials);
+        }
         await settleTenantMessageQuota(db, reservation);
       } catch (error) {
         await settleTenantMessageQuota(db, reservation, error);
@@ -508,23 +573,29 @@ async function handlePublicApiMessages(event) {
       const timestamp = new Date();
       const chatRef = getTenantChatRef(db, authenticatedKey.organizationId, to);
       const messageRef = getTenantMessageRef(db, authenticatedKey.organizationId, to, result.messageId);
-      const batch = db.batch();
-      batch.set(messageRef, {
+      const messageData = {
         messageId: result.messageId, chatId: to, organizationId: authenticatedKey.organizationId,
-        phoneNumberId, direction: "outgoing", type: "text", text, timestamp,
+        phoneNumberId, direction: "outgoing", type, text: previewText, timestamp,
         status: "sent", source: "public_api", sender: "api"
+      };
+      if (type === "interactive") messageData.interactive = normalizedInteractive;
+      if (media) Object.assign(messageData, {
+        mediaId: uploadedMediaId, mimeType: media.mimeType, filename: media.filename || null,
+        caption: media.caption || null, mediaStorage: "meta"
       });
+      const batch = db.batch();
+      batch.set(messageRef, messageData);
       batch.set(chatRef, {
-        customerPhone: to, phoneNumberId, lastMessage: text, lastMessageAt: timestamp,
+        customerPhone: to, phoneNumberId, lastMessage: previewText, lastMessageAt: timestamp,
         lastMessageDirection: "outgoing", updatedAt: timestamp
       }, { merge: true });
       await batch.commit();
       await enqueueOrganizationWebhookEvent(
         db, authenticatedKey.organizationId, "message.sent",
         `public-api:${result.messageId}`,
-        { messageId: result.messageId, chatId: to, phoneNumberId, type: "text", text, timestamp: timestamp.toISOString() }
+        { messageId: result.messageId, chatId: to, phoneNumberId, type, text: previewText, timestamp: timestamp.toISOString() }
       ).catch(error => console.error("Public API message webhook enqueue failed:", error.statusCode || "WEBHOOK_ENQUEUE_FAILED"));
-      return { data: { messageId: result.messageId, to, phoneNumberId, status: "sent", timestamp: timestamp.toISOString() }, statusCode: 201 };
+      return { data: { messageId: result.messageId, to, phoneNumberId, type, status: "sent", timestamp: timestamp.toISOString() }, statusCode: 201 };
     }
   );
   const { statusCode = 201, ...response } = idempotent;
