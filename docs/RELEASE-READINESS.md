@@ -53,7 +53,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 ## Product parity audit
 
 - [x] Compare the implemented Joy Inbox code paths against Interakt's current public product categories and document implemented, partial, missing and externally gated capabilities in [docs/INTERAKT-FEATURE-PARITY.md](INTERAKT-FEATURE-PARITY.md).
-- [ ] Implement remaining missing/partial product capabilities listed in `docs/INTERAKT-FEATURE-PARITY.md` before claiming Interakt feature parity. CRM activity timeline and weighted forecasting are implemented; validate them with real workspace data. Public text-send, template-read, campaign reporting/draft/control and signed webhook operations have initial implementations. Still missing or partial: Instagram, RCS, AI/voice, commerce, forms, CTWA ads, visual automation builder, advanced CRM segments/deduplication/conversion attribution, catalog/order/payment workflows, and richer public media/interactive/template APIs.
+- [ ] Implement remaining missing/partial product capabilities listed in `docs/INTERAKT-FEATURE-PARITY.md` before claiming Interakt feature parity. CRM activity timeline and weighted forecasting are implemented; validate them with real workspace data. Public text-send, template-read, campaign reporting/draft/control and signed webhook operations have initial implementations. Still missing or partial: Instagram, RCS, AI/voice, commerce, forms, CTWA ads, visual automation canvas/branching/schedule nodes (the rule builder now supports ALL/ANY conditions and six keyword operators), advanced CRM segments/conversion attribution, catalog/order/payment workflows, and public template management/media-header template sends.
 
 ## WhatsApp Embedded Signup onboarding
 
@@ -80,7 +80,7 @@ Complete all repository-only implementation, code review, documentation, local/e
 - [x] Contact phone-number changes use a Firestore transaction, preserve creation timestamps and reject destination-number collisions; regression tests cover missing source and collision cases.
 - [x] Inbox assignment and agent-performance views page through the complete organization member list instead of silently stopping at the first 100 members.
 - [x] Assignment/state management, SLA checks and team notifications.
-- [x] Automation rules, leased queue processing and uncertain-delivery protection.
+- [x] Automation rules with up to five ALL/ANY keyword conditions (`contains`, `exact`, `starts_with`, `ends_with`, `not_contains`, `not_exact`), priority ordering, up to five delayed reply steps, leased queue processing, execution history/health and uncertain-delivery protection. Visual branching, schedules/timezone windows, API/action nodes and FAQ knowledge-base automation remain product gaps.
 - [x] Campaign drafts, approved-template checks, consent evidence validation, STOP suppression, explicit START re-subscription, send worker, pause/cancel and recipient reports.
 - [x] Internal conversation notes served through authenticated tenant APIs.
 - [x] Interactive WhatsApp button and list messages.
