@@ -12,6 +12,7 @@ export default function PublicLeadForm() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [consent, setConsent] = useState(false);
   const [website, setWebsite] = useState("");
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
@@ -42,7 +43,7 @@ export default function PublicLeadForm() {
     setSubmitting(true); setError("");
     try {
       const response = await fetch(`${API_URL.replace(/\/$/, "")}/public/v1/forms/${encodeURIComponent(formId)}/submissions`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({ values, consent, website })
       });
       const result = await response.json().catch(() => ({}));
