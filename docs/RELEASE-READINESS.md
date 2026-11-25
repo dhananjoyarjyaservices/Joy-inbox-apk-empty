@@ -162,14 +162,15 @@ No production data migration, Firebase rules deployment, Lambda deployment, Even
 
 ## Latest automated verification (2026-11-25)
 
-Latest checked development commit: `9d4303b2c5dc3d761d7a9be099b55a20fdbc2fd8`.
-- Backend tests (run 45575421269): **passed**, including Firestore emulator tests and production Lambda package verification.
-- Frontend build (run 45575421242): **passed**.
-- Joy Inbox CI (run 45575412407): **passed**.
-- Cloudflare Pages preview workflow (run 45575466353): **passed**; frontend build succeeded, while the actual Cloudflare deploy step was **skipped** because repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are not configured.
-- These checks cover repository tests/build and the static preview build only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
+Latest verified development PR head: `ac89bf4158e988110efad88228c558b654732ac3`.
+- Backend tests (run 45575657460): **passed**.
+- Frontend build (run 45575657317): **passed**.
+- Joy Inbox CI (run 45575657492): **passed**.
+- Cloudflare Pages branch preview: Cloudflare deployment bot reported **successful deployment** for commit `ac89bf4`. Preview URL: https://feature-saas-foundation.joy-inbox-apk-empty.pages.dev
+- The earlier CI run `45575466353` had skipped its own deploy step because Cloudflare credentials were not available to that workflow invocation; the later Cloudflare Pages deployment confirmation supersedes that older skipped result.
+- These checks verify repository tests/build and a Cloudflare Pages preview deployment only. They do not prove that live Firebase, Meta, Stripe, AWS workers, email or customer-device integrations are configured correctly.
 
-PR #1 remains open and unmerged. Keep it unmerged until external staging and launch gates pass and the owner explicitly approves.
+PR #1 remains open, draft and unmerged. Keep it unmerged until external staging and launch gates pass and the owner explicitly approves.
 
 ## Static security review completed in repository
 
