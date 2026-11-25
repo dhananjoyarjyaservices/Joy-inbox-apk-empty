@@ -191,7 +191,7 @@ export default function CrmPanel({ organizationId, contacts, members, canManageS
         else if (char === '"') quoted = !quoted;
         else if (char === "," && !quoted) { row.push(cell); cell = ""; }
         else if ((char === "\n" || char === "\r") && !quoted) {
-          if (char === "\\r" && sourceText[index + 1] === "\\n") index += 1;
+          if (char === "\r" && sourceText[index + 1] === "\n") index += 1;
           row.push(cell); cell = "";
           if (row.some(value => value.trim())) rows.push(row);
           row = [];
