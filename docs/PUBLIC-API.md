@@ -123,7 +123,34 @@ Authorization: Bearer FIREBASE_ID_TOKEN
 Content-Type: application/json
 ```
 
-Requires an Owner or Admin workspace member with WhatsApp management permission. Include `organizationId`, `phoneNumberId`, `wabaId`, `name`, `language`, `category` and `components`. The API verifies that the WABA ID is the one stored for the connected number before calling Meta. The current builder supports UTILITY and MARKETING templates with BODY, optional text/media HEADER and text FOOTER, and supported QUICK_REPLY, HTTPS URL or PHONE_NUMBER buttons. Media headers require a previously uploaded Meta header handle. Variable text headers/bodies require examples. Media headers, AUTHENTICATION templates, dynamic URL buttons, carousel and Flow components are not supported by this endpoint yet. Meta reviews created templates; a successful create response commonly has PENDING status and does not mean approval.
+Requires an Owner or Admin workspace member with WhatsApp management permission. Include `organizationId`, `phoneNumberId`, `wabaId`, `name`, `language`, `category` and `components`. The API verifies that the WABA ID is the one stored for the connected number before calling Meta. The current builder supports UTILITY and MARKETING templates with BODY, optional text/media HEADER and text FOOTER, and supported QUICK_REPLY, HTTPS URL or PHONE_NUMBER buttons. Media headers require a previously uploaded Meta header handle. Variable text headers/bodies require examples. Authentication templates are also supported through the dedicated OTP options below. Dynamic URL buttons, carousel and Flow components are not supported by this endpoint yet. Meta reviews created templates; a successful create response commonly has PENDING status and does not mean approval.
+
+### Create an authentication (OTP) template
+
+Use the same `POST /whatsapp/templates` endpoint with `category: "AUTHENTICATION"`. Do not send custom BODY text, HEADER, media, FOOTER text, URLs or emoji; Meta supplies the preset verification-code text and optional security recommendation/expiry warning.
+
+Copy-code example:
+
+```json
+{
+  "organizationId": "YOUR_WORKSPACE_ID",
+  "phoneNumberId": "CONNECTED_PHONE_NUMBER_ID",
+  "wabaId": "CONNECTED_WABA_ID",
+  "name": "login_otp",
+  "language": "en_US",
+  "category": "AUTHENTICATION",
+  "otpType": "COPY_CODE",
+  "addSecurityRecommendation": true,
+  "codeExpirationMinutes": 10,
+  "messageSendTtlSeconds": 300
+}
+```
+
+For Android one-tap autofill, set `otpType: "ONE_TAP"` and provide `supportedApps` with 1–5 unique app package names and their exact 11-character signing key hashes. These values must come from the actual Android app signing certificate; do not guess them. One-tap requires the recipient Android app to integrate Meta's current WhatsApp OTP SDK/handshake. Without a valid handshake, WhatsApp may fall back to Copy code; on iOS 26 and later, keyboard OTP suggestions are handled by iOS.
+
+Optional `codeExpirationMinutes` must be 1–90. Optional `messageSendTtlSeconds` must be 60–600. Meta reviews authentication templates just like other templates; only APPROVED templates can be sent. Creating a template does not guarantee approval or delivery.
+
+To send an approved authentication template through `POST /public/v1/messages`, use `type: "template"`, provide the OTP once in `variables` and again in `buttonVariables` with the exact same value, and include the normal explicit opt-in evidence. The OTP must be 4–15 alphanumeric characters. Joy Inbox validates that the approved template has exactly one OTP button and one body placeholder before sending. The workspace inbox asks for the code once and applies it to both positions.
 
 ### Update a template
 
