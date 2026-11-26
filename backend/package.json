@@ -7,7 +7,8 @@
   "type": "commonjs",
   "scripts": {
     "test": "node -r ./test/bootstrap.js --test",
-    "package:lambda": "bash ./scripts/package-lambda.sh"
+    "package:lambda": "bash ./scripts/package-lambda.sh",
+    "test:aws-data-plane": "node -r ./test/bootstrap.js --test ./test/aws-data-plane.test.js"
   },
   "engines": {
     "node": "22.x"
