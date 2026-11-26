@@ -100,6 +100,6 @@ test("validates public template pagination bounds and cursor controls", () => {
   const base = { version: "v26.0", wabaId: "123456789012345", connectedWabaId: "123456789012345" };
   assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 0 }), { statusCode: 400 });
   assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 101 }), { statusCode: 400 });
-  assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 10, cursor: "bad\\ncursor" }), { statusCode: 400 });
+  assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 10, cursor: "bad" + String.fromCharCode(10) + "cursor" }), { statusCode: 400 });
   assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 10, cursor: "x".repeat(2049) }), { statusCode: 400 });
 });
