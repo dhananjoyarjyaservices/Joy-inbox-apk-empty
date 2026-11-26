@@ -6,6 +6,8 @@ const {
   normalizeTemplateComponents,
   normalizeTemplateDefinition,
   normalizeAuthenticationTemplateDefinition,
+  normalizeAuthenticationOtpCode,
+  buildAuthenticationTemplateSendComponents,
   normalizeTemplateMutationIdentity
 } = require("../src/templateManagement");
 
