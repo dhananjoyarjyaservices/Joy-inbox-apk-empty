@@ -73,6 +73,22 @@ test("builds authentication OTP body and button parameters for public template s
   assert.throws(() => buildPublicTemplateComponents(authTemplate, {
     variables: ["1234567890123456"], buttonVariables: ["1234567890123456"]
   }), /1–15/);
+  const zeroTapTemplate = {
+    ...authTemplate,
+    components: [
+      { type: "BODY", text: "{{1}} is your verification code." },
+      { type: "BUTTONS", buttons: [{
+        type: "OTP", otp_type: "ZERO_TAP", zero_tap_terms_accepted: true,
+        supported_apps: [{ package_name: "com.example.app", signature_hash: "K8a/AINcGX7" }]
+      }] }
+    ]
+  };
+  assert.deepEqual(buildPublicTemplateComponents(zeroTapTemplate, {
+    variables: ["654321"], buttonVariables: ["654321"]
+  }), [
+    { type: "body", parameters: [{ type: "text", text: "654321" }] },
+    { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "654321" }] }
+  ]);
 });
 
 test("requires and normalizes explicit past template opt-in evidence", () => {
