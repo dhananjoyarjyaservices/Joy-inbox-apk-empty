@@ -3090,9 +3090,12 @@ async function retryTenantFailedTemplate(event) {
   const otpButtons = templateButtons.filter(button => button.type === "OTP");
   const urlButtons = templateButtons.filter(button=>button.type==="URL" && String(button.url||"").includes("{{"));
   const isAuthenticationTemplate = String(approved.category || "").toUpperCase() === "AUTHENTICATION" || otpButtons.length > 0;
+  const authenticationOtpType = String(otpButtons[0]?.otp_type || "COPY_CODE").toUpperCase();
+  const noAuthenticationButton = isAuthenticationTemplate && authenticationOtpType === "NO_BUTTONS";
   if (isAuthenticationTemplate) {
     if (otpButtons.length !== 1 || header || mediaId || bodyCount !== 1 || variables.length !== 1 ||
-        buttonVariables.length !== 1 || variables[0] !== buttonVariables[0] || headerVariables.length) {
+        buttonVariables.length !== (noAuthenticationButton ? 0 : 1) ||
+        (!noAuthenticationButton && variables[0] !== buttonVariables[0]) || headerVariables.length) {
       return jsonResponse(event, 400, { error: "The original authentication OTP parameters are incomplete. Please send the template again manually." });
     }
     try { normalizeAuthenticationOtpCode(variables[0]); }
@@ -3111,7 +3114,7 @@ async function retryTenantFailedTemplate(event) {
   const quotaReservation = await reserveTenantMessageQuota(db, organization.id, clientMessageId, claim.ref);
   const components = [];
   if (isAuthenticationTemplate) {
-    components.push(...buildAuthenticationTemplateSendComponents(variables[0]));
+    components.push(...buildAuthenticationTemplateSendComponents(variables[0], authenticationOtpType));
   } else {
     if (mediaId) components.push({ type: "header", parameters: [{ type: mediaFormat, [mediaFormat]: { id: mediaId } }] });
     if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text })) });
