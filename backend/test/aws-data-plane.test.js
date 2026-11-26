@@ -629,17 +629,20 @@ test("DynamoDB inbound WhatsApp writer atomically stores customer, conversation 
     });
     assert.equal(saved, true);
     assert.equal(captured.TransactItems.length, 3);
-    const [customer, conversation, message] = captured.TransactItems.map(item => item.Put.Item);
-    assert.deepEqual([customer.entityType, conversation.entityType, message.entityType], [
-      "CUSTOMER", "CONVERSATION", "MESSAGE"
-    ]);
-    assert.equal(customer.PK, "ORG#workspace_1");
-    assert.equal(conversation.PK, "ORG#workspace_1");
-    assert.equal(message.PK, "ORG#workspace_1#CONVERSATION#919999999999");
-    assert.equal(message.messageId, "wamid.HBgMOTE5OTk5OTk5OTk5FQIAEhgUM0VC");
-    assert.equal(message.timestamp, timestamp);
-    assert.equal(message.text, "Hello Joy Inbox");
-    assert.match(captured.TransactItems[2].Put.ConditionExpression, /attribute_not_exists/);
+    const [customer, conversation, message] = captured.TransactItems;
+    assert.equal(customer.Update.Key.PK, "ORG#workspace_1");
+    assert.equal(customer.Update.Key.SK, "CUSTOMER#919999999999");
+    assert.match(customer.Update.UpdateExpression, /^SET /);
+    assert.equal(customer.Update.ExpressionAttributeValues[":name"], "Customer One");
+    assert.equal(conversation.Update.Key.PK, "ORG#workspace_1");
+    assert.equal(conversation.Update.Key.SK, "CONVERSATION#919999999999");
+    assert.match(conversation.Update.UpdateExpression, /lastMessage/);
+    assert.equal(conversation.Update.ExpressionAttributeValues[":lastMessage"], "Hello Joy Inbox");
+    assert.equal(message.Put.Item.PK, "ORG#workspace_1#CONVERSATION#919999999999");
+    assert.equal(message.Put.Item.messageId, "wamid.HBgMOTE5OTk5OTk5OTk5FQIAEhgUM0VC");
+    assert.equal(message.Put.Item.timestamp, timestamp);
+    assert.equal(message.Put.Item.text, "Hello Joy Inbox");
+    assert.match(message.Put.ConditionExpression, /attribute_not_exists/);
   } finally {
     dynamodb.setDocumentClientForTests(null);
     if (prior.region === undefined) delete process.env.AWS_REGION;
