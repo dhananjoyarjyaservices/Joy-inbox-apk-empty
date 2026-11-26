@@ -99,7 +99,7 @@ const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInte
 const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmSavedFilter, canAccessCrmLead, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { normalizeTemplateConsent, buildPublicTemplateComponents, buildPublicTemplateListUrl } = require("./publicTemplateMessages");
-const { normalizeTemplateDefinition, normalizeAuthenticationTemplateDefinition, normalizeTemplateMutationIdentity } = require("./templateManagement");
+const { normalizeTemplateDefinition, normalizeAuthenticationTemplateDefinition, normalizeAuthenticationOtpCode, buildAuthenticationTemplateSendComponents, normalizeTemplateMutationIdentity } = require("./templateManagement");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const { listLeadForms, saveLeadForm, deleteLeadForm, listLeadFormSubmissions, getPublicLeadForm, submitPublicLeadForm } = require("./leadForms");
 const {
@@ -749,7 +749,7 @@ async function handlePublicApiMessages(event) {
           }
           const version = process.env.GRAPH_API_VERSION || "v26.0";
           const templateUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(credentials.wabaId)}/message_templates`);
-          templateUrl.searchParams.set("fields", "name,status,language,components");
+          templateUrl.searchParams.set("fields", "name,status,language,category,components");
           templateUrl.searchParams.set("name", normalizedTemplate.templateName);
           templateUrl.searchParams.set("limit", "100");
           const templateResponse = await fetch(templateUrl.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
@@ -2929,9 +2929,23 @@ async function sendTenantTemplate(event) {
   const headerComponent = headerDefinition?.format === "TEXT" ? headerDefinition : null;
   const mediaHeaderFormat = ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerDefinition?.format) ? headerDefinition.format : null;
   const headerCount = placeholderCount(headerComponent?.text);
-  const urlButtons = templateComponents.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button, index) => ({ ...button, index })) : []).filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
-  if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length || (Boolean(mediaHeaderFormat) !== Boolean(headerMedia))) {
-    return jsonResponse(event, 400, { error: `This template needs ${bodyCount} body, ${headerCount} header and ${urlButtons.length} URL button variable(s).` });
+  const templateButtons = templateComponents.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button, index) => ({ ...button, index })) : []);
+  const otpButtons = templateButtons.filter(button => button.type === "OTP");
+  const urlButtons = templateButtons.filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
+  const isAuthenticationTemplate = String(approvedTemplate.category || "").toUpperCase() === "AUTHENTICATION" || otpButtons.length > 0;
+  const requiredButtonVariables = isAuthenticationTemplate ? 1 : urlButtons.length;
+  if (isAuthenticationTemplate && (otpButtons.length !== 1 || urlButtons.length > 0 || mediaHeaderFormat || headerCount > 0 || headerMedia)) {
+    return jsonResponse(event, 400, { error: "Authentication templates require one OTP button and cannot contain media, text headers or URL buttons." });
+  }
+  if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== requiredButtonVariables || (Boolean(mediaHeaderFormat) !== Boolean(headerMedia))) {
+    return jsonResponse(event, 400, { error: `This template needs ${bodyCount} body, ${headerCount} header and ${requiredButtonVariables} button variable(s).` });
+  }
+  if (isAuthenticationTemplate) {
+    if (variables.length !== 1 || variables[0] !== buttonVariables[0]) {
+      return jsonResponse(event, 400, { error: "Enter the same OTP code once for the message body and OTP button." });
+    }
+    try { normalizeAuthenticationOtpCode(variables[0]); }
+    catch (error) { return jsonResponse(event, 400, { error: error.message }); }
   }
   const headerMediaMimeType = headerMedia ? String(headerMedia.mimeType).split(";")[0].trim().toLowerCase() : "";
   if (headerMedia && !isAllowedTemplateMedia(headerMediaMimeType, mediaHeaderFormat)) {
@@ -2967,12 +2981,16 @@ async function sendTenantTemplate(event) {
     const mediaType = mediaHeaderFormat.toLowerCase();
     components.push({ type: "header", parameters: [{ type: mediaType, [mediaType]: { id: uploaded.mediaId } }] });
   }
-  if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text: text.trim() })) });
-  if (variables.length) components.push({ type: "body", parameters: variables.map(text => ({ type: "text", text: text.trim() })) });
-  buttonVariables.forEach((value, index) => {
-    const button = urlButtons[index];
-    components.push({ type: "button", sub_type: "url", index: String(button.index), parameters: [{ type: "text", text: value.trim() }] });
-  });
+  if (isAuthenticationTemplate) {
+    components.push(...buildAuthenticationTemplateSendComponents(variables[0]));
+  } else {
+    if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text: text.trim() })) });
+    if (variables.length) components.push({ type: "body", parameters: variables.map(text => ({ type: "text", text: text.trim() })) });
+    buttonVariables.forEach((value, index) => {
+      const button = urlButtons[index];
+      components.push({ type: "button", sub_type: "url", index: String(button.index), parameters: [{ type: "text", text: value.trim() }] });
+    });
+  }
   if (components.length) template.components = components;
   let result;
   try {
