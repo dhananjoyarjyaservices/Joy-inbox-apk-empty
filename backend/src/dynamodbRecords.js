@@ -134,6 +134,10 @@ async function saveIncomingWhatsAppMessage(organizationId, message) {
   const customerKey = dynamodb.customerKey(orgId, customerId);
   const conversationKey = dynamodb.conversationSummaryKey(orgId, conversationId);
   const itemKey = dynamodb.messageKey(orgId, conversationId, timestamp, messageId);
+  const messagePointerKey = {
+    PK: "ORG#" + orgId,
+    SK: "WHATSAPP_MESSAGE#" + messageId
+  };
   const now = new Date().toISOString();
   const text = typeof message.text === "string" ? message.text.slice(0, 4096) : "";
   const customer = {
@@ -193,6 +197,19 @@ async function saveIncomingWhatsAppMessage(organizationId, message) {
       },
       { Put: {
         TableName: dynamodb.getTableName("messages"), Item: record,
+        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+      } },
+      { Put: {
+        TableName: dynamodb.getTableName("customers"),
+        Item: {
+          ...messagePointerKey,
+          entityType: "WHATSAPP_MESSAGE_POINTER",
+          organizationId: orgId,
+          conversationId,
+          messageId,
+          timestamp,
+          updatedAt: now
+        },
         ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
       } }
     ]);
