@@ -163,8 +163,34 @@ async function saveIncomingWhatsAppMessage(organizationId, message) {
   };
   try {
     await dynamodb.transactWrite([
-      { Put: { TableName: dynamodb.getTableName("customers"), Item: customer } },
-      { Put: { TableName: dynamodb.getTableName("customers"), Item: summary } },
+      {
+        Update: {
+          TableName: dynamodb.getTableName("customers"),
+          Key: customerKey,
+          UpdateExpression: "SET entityType = :entityType, organizationId = :organizationId, customerId = :customerId, phone = :phone, #name = :name, updatedAt = :updatedAt",
+          ExpressionAttributeNames: { "#name": "name" },
+          ExpressionAttributeValues: {
+            ":entityType": customer.entityType, ":organizationId": orgId,
+            ":customerId": customerId, ":phone": customer.phone,
+            ":name": customer.name, ":updatedAt": now
+          }
+        }
+      },
+      {
+        Update: {
+          TableName: dynamodb.getTableName("customers"),
+          Key: conversationKey,
+          UpdateExpression: "SET entityType = :entityType, organizationId = :organizationId, conversationId = :conversationId, customerId = :customerId, customerPhone = :customerPhone, customerName = :customerName, lastMessage = :lastMessage, lastMessageAt = :lastMessageAt, lastMessageDirection = :direction, phoneNumberId = :phoneNumberId, updatedAt = :updatedAt",
+          ExpressionAttributeValues: {
+            ":entityType": summary.entityType, ":organizationId": orgId,
+            ":conversationId": conversationId, ":customerId": customerId,
+            ":customerPhone": summary.customerPhone, ":customerName": summary.customerName,
+            ":lastMessage": summary.lastMessage, ":lastMessageAt": timestamp,
+            ":direction": "incoming", ":phoneNumberId": summary.phoneNumberId,
+            ":updatedAt": now
+          }
+        }
+      },
       { Put: {
         TableName: dynamodb.getTableName("messages"), Item: record,
         ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
