@@ -97,7 +97,7 @@ const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserv
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmSavedFilter, canAccessCrmLead, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
-const { normalizeTemplateConsent, buildPublicTemplateComponents } = require("./publicTemplateMessages");
+const { normalizeTemplateConsent, buildPublicTemplateComponents, buildPublicTemplateListUrl } = require("./publicTemplateMessages");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const { listLeadForms, saveLeadForm, deleteLeadForm, listLeadFormSubmissions, getPublicLeadForm, submitPublicLeadForm } = require("./leadForms");
 const {
@@ -463,10 +463,18 @@ async function handlePublicApiTemplates(event) {
     return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the API key workspace." });
   }
   const credentials = await getWhatsAppCredentials(db, authenticatedKey.organizationId, phoneNumberId);
-  const version = process.env.GRAPH_API_VERSION || "v26.0";
-  const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
-  url.searchParams.set("fields", "id,name,status,language,category,components");
-  url.searchParams.set("limit", "100");
+  let url;
+  try {
+    url = buildPublicTemplateListUrl({
+      version: process.env.GRAPH_API_VERSION || "v26.0",
+      wabaId,
+      connectedWabaId: credentials.wabaId,
+      limit: params.limit === undefined ? 100 : Number(params.limit),
+      cursor: params.cursor
+    });
+  } catch (error) {
+    return jsonResponse(event, error.statusCode || 400, { error: error.message });
+  }
   const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) return jsonResponse(event, 502, {
@@ -478,7 +486,10 @@ async function handlePublicApiTemplates(event) {
       language: String(item.language || ""), category: String(item.category || ""),
       components: Array.isArray(item.components) ? item.components : []
     })) : [],
-    pagination: { nextCursor: typeof payload.paging?.cursors?.after === "string" && payload.paging?.next ? payload.paging.cursors.after : null },
+    pagination: {
+      nextCursor: typeof payload.paging?.cursors?.after === "string" && payload.paging?.next
+        ? payload.paging.cursors.after : null
+    },
     hasNext: Boolean(payload.paging?.next)
   });
 }
