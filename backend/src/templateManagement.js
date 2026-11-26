@@ -195,6 +195,22 @@ function normalizeAuthenticationTemplateDefinition(input) {
   return result;
 }
 
+function normalizeAuthenticationOtpCode(value) {
+  const code = typeof value === "string" ? value.trim() : "";
+  if (!/^[A-Za-z0-9]{4,15}$/.test(code)) {
+    throw httpError("OTP code must contain 4–15 letters or numbers.");
+  }
+  return code;
+}
+
+function buildAuthenticationTemplateSendComponents(code) {
+  const otp = normalizeAuthenticationOtpCode(code);
+  return [
+    { type: "body", parameters: [{ type: "text", text: otp }] },
+    { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: otp }] }
+  ];
+}
+
 function normalizeTemplateMutationIdentity(input) {
   const templateId = typeof input?.templateId === "string" ? input.templateId.trim() : "";
   const templateName = typeof input?.templateName === "string" ? input.templateName.trim() : "";
@@ -208,6 +224,8 @@ module.exports = {
   normalizeTemplateComponents,
   normalizeTemplateDefinition,
   normalizeAuthenticationTemplateDefinition,
+  normalizeAuthenticationOtpCode,
+  buildAuthenticationTemplateSendComponents,
   normalizeTemplateMutationIdentity,
   TEMPLATE_ID_PATTERN,
   NAME_PATTERN
