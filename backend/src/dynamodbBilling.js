@@ -115,7 +115,7 @@ async function writeWorkspaceSubscription(organizationId, subscription, options 
   if (!customerId) throw billingError("Stripe subscription has no customer ID.", 400);
 
   const status = String(subscription.status || "unknown");
-  const seatLimit = PLAN_SEATS[plan] || 1;
+  const seatLimit = Number(matchedPlan?.limits?.agents) > 0 ? Number(matchedPlan.limits.agents) : (PLAN_SEATS[plan] || 1);
   const toIso = value => Number.isFinite(Number(value)) && Number(value) > 0
     ? new Date(Number(value) * 1000).toISOString() : null;
   const trialEnd = toIso(subscription.trial_end);
