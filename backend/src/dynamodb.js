@@ -143,7 +143,7 @@ async function putItem(kind, item, options = {}) {
   return item;
 }
 
-async function updateItem(kind, key, updateExpression, expressionValues, expressionNames = {}) {
+async function updateItem(kind, key, updateExpression, expressionValues, expressionNames = {}, options = {}) {
   if (!key || typeof key.PK !== "string" || typeof key.SK !== "string") {
     throw new Error("DynamoDB updates require PK and SK string keys.");
   }
@@ -156,6 +156,7 @@ async function updateItem(kind, key, updateExpression, expressionValues, express
     UpdateExpression: updateExpression,
     ExpressionAttributeValues: expressionValues || {},
     ...(Object.keys(expressionNames).length ? { ExpressionAttributeNames: expressionNames } : {}),
+    ...(options.conditionExpression ? { ConditionExpression: options.conditionExpression } : {}),
     ReturnValues: "ALL_NEW"
   }));
   return result.Attributes || null;
