@@ -287,6 +287,13 @@ test("DynamoDB inbound webhook persists STOP consent before acknowledging", asyn
         if (key.SK === "WHATSAPP#PHONE#123456789012") {
           return { Item: { organizationId: "workspace_1", connected: true } };
         }
+        if (key.PK === "ORG#workspace_1" && key.SK === "WORKSPACE") {
+          return { Item: {
+            status: "active", subscriptionStatus: "active", plan: "lite",
+            currentPeriodStart: "2025-01-01T00:00:00.000Z",
+            currentPeriodEnd: "2027-01-01T00:00:00.000Z"
+          } };
+        }
       }
       if (command.constructor.name === "TransactWriteCommand" || command.constructor.name === "PutCommand") return {};
       throw new Error("Unexpected DynamoDB command: " + command.constructor.name);
