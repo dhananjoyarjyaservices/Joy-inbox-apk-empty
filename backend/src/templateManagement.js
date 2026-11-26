@@ -147,7 +147,7 @@ function normalizeAuthenticationTemplateDefinition(input) {
   if (!NAME_PATTERN.test(name)) throw httpError("Template name must use lowercase letters, numbers and underscores.");
   if (!LANGUAGE_PATTERN.test(language)) throw httpError("Template language code is invalid.");
   const otpType = String(input.otpType || "COPY_CODE").trim().toUpperCase();
-  if (!["COPY_CODE", "ONE_TAP"].includes(otpType)) throw httpError("OTP button type must be COPY_CODE or ONE_TAP.");
+  if (!["COPY_CODE", "ONE_TAP", "ZERO_TAP"].includes(otpType)) throw httpError("OTP button type must be COPY_CODE, ONE_TAP or ZERO_TAP.");
   const addSecurityRecommendation = input.addSecurityRecommendation === undefined ? true : input.addSecurityRecommendation;
   if (typeof addSecurityRecommendation !== "boolean") throw httpError("addSecurityRecommendation must be boolean.");
   const components = [{ type: "BODY", add_security_recommendation: addSecurityRecommendation }];
@@ -159,9 +159,9 @@ function normalizeAuthenticationTemplateDefinition(input) {
     components.push({ type: "FOOTER", code_expiration_minutes: minutes });
   }
   const button = { type: "OTP", otp_type: otpType };
-  if (otpType === "ONE_TAP") {
+  if (otpType === "ONE_TAP" || otpType === "ZERO_TAP") {
     if (!Array.isArray(input.supportedApps) || input.supportedApps.length < 1 || input.supportedApps.length > 5) {
-      throw httpError("One-tap autofill requires 1–5 supported Android apps.");
+      throw httpError((otpType === "ZERO_TAP" ? "Zero-tap" : "One-tap") + " autofill requires 1–5 supported Android apps.");
     }
     button.supported_apps = input.supportedApps.map((app, index) => {
       if (!app || typeof app !== "object" || Array.isArray(app)) throw httpError("Supported Android app " + (index + 1) + " is invalid.");
@@ -175,12 +175,18 @@ function normalizeAuthenticationTemplateDefinition(input) {
       }
       return { package_name: packageName, signature_hash: signatureHash };
     });
+    if (otpType === "ZERO_TAP") {
+      if (input.zeroTapTermsAccepted !== true) throw httpError("Zero-tap requires explicit acceptance of Meta zero-tap terms.");
+      button.zero_tap_terms_accepted = true;
+    } else if (input.zeroTapTermsAccepted !== undefined && input.zeroTapTermsAccepted !== false) {
+      throw httpError("zeroTapTermsAccepted is only used with zero-tap autofill.");
+    }
     if (new Set(button.supported_apps.map(app => app.package_name)).size !== button.supported_apps.length) {
       throw httpError("Supported Android app package names must be unique.");
     }
   } else if (input.supportedApps !== undefined && input.supportedApps !== null) {
     if (!Array.isArray(input.supportedApps) || input.supportedApps.length > 0) {
-      throw httpError("Supported Android apps are only used with one-tap autofill.");
+      throw httpError("Supported Android apps are only used with one-tap or zero-tap autofill.");
     }
   }
   components.push({ type: "BUTTONS", buttons: [button] });
