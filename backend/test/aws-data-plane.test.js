@@ -588,7 +588,7 @@ test("DynamoDB WhatsApp connection save uses one transaction and prevents cross-
     assert.equal(transaction.TransactItems[0].Put.Item.entityType, "WHATSAPP_CONNECTION");
     assert.match(transaction.TransactItems[1].Put.ConditionExpression, /organizationId = :org/);
     assert.match(transaction.TransactItems[1].Put.ConditionExpression, /#status = :disconnected/);
-    assert.equal(transaction.TransactItems[0].Put.Item.accessToken.includes("EAA123456789abcdef"), false);
+    assert.notEqual(transaction.TransactItems[0].Put.Item.accessToken, "EAA123456789abcdef");
     assert.notEqual(transaction.TransactItems[0].Put.Item.registrationPin, "123456");
   } finally {
     dynamodb.setDocumentClientForTests(null);
