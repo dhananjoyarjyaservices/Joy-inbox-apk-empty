@@ -148,31 +148,39 @@ async function saveOutgoingWhatsAppMessage(organizationId, conversationId, messa
     ...(message.phoneNumberId ? { phoneNumberId: String(message.phoneNumberId).slice(0, 32) } : {}),
     createdAt: now
   };
-  await dynamodb.transactWrite([
-    {
-      Put: {
-        TableName: dynamodb.getTableName("messages"),
-        Item: record,
-        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+  try {
+    await dynamodb.transactWrite([
+      {
+        Put: {
+          TableName: dynamodb.getTableName("messages"),
+          Item: record,
+          ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+        }
+      },
+      {
+        Put: {
+          TableName: dynamodb.getTableName("customers"),
+          Item: {
+            ...pointerKey,
+            entityType: "WHATSAPP_MESSAGE_POINTER",
+            organizationId: orgId,
+            conversationId,
+            messageId,
+            timestamp,
+            updatedAt: now
+          },
+          ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+        }
       }
-    },
-    {
-      Put: {
-        TableName: dynamodb.getTableName("customers"),
-        Item: {
-          ...pointerKey,
-          entityType: "WHATSAPP_MESSAGE_POINTER",
-          organizationId: orgId,
-          conversationId,
-          messageId,
-          timestamp,
-          updatedAt: now
-        },
-        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
-      }
+    ]);
+    return record;
+  } catch (error) {
+    if (error?.name === "TransactionCanceledException" || error?.name === "ConditionalCheckFailedException") {
+      const existing = await dynamodb.getItem("messages", itemKey, { consistentRead: true });
+      if (existing && existing.organizationId === orgId && existing.messageId === messageId) return existing;
     }
-  ]);
-  return record;
+    throw error;
+  }
 }
 
 async function getWhatsAppMessagePointer(organizationId, messageId) {
