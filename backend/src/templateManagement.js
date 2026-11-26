@@ -42,6 +42,7 @@ function normalizeTemplateComponents(input) {
       if (item.format !== "TEXT") throw httpError("Only text headers are currently supported by the template manager.");
       const component = { type: "HEADER", format: "TEXT", text: cleanText(item.text, "Header text", 60) };
       const headerVariables = countPlaceholders(component.text);
+      if (headerVariables > 1) throw httpError("Text headers support at most one variable.");
       if (item.example !== undefined || headerVariables > 0) {
         if (!item.example || !Array.isArray(item.example.header_text) ||
             item.example.header_text.length !== 1 || typeof item.example.header_text[0] !== "string") {
@@ -68,6 +69,12 @@ function normalizeTemplateComponents(input) {
     } else {
       if (!Array.isArray(item.buttons) || item.buttons.length < 1 || item.buttons.length > 3) {
         throw httpError("Templates support 1–3 buttons.");
+      }
+      const quickReplyCount = item.buttons.filter(button => button?.type === "QUICK_REPLY").length;
+      const ctaTypes = item.buttons.filter(button => button?.type === "URL" || button?.type === "PHONE_NUMBER").map(button => button.type);
+      if (quickReplyCount && ctaTypes.length) throw httpError("Quick reply buttons cannot be mixed with call-to-action buttons.");
+      if (ctaTypes.length > 2 || new Set(ctaTypes).size !== ctaTypes.length) {
+        throw httpError("Call-to-action templates support one URL and one phone button at most.");
       }
       const buttons = item.buttons.map(button => {
         if (!button || typeof button !== "object" || Array.isArray(button)) throw httpError("Template button is invalid.");
