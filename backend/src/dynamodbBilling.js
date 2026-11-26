@@ -145,6 +145,58 @@ async function writeWorkspaceSubscription(organizationId, subscription, options 
   return { plan, status, seatLimit, stripeCustomerId: customerId, stripeSubscriptionId: subscription.id };
 }
 
+
+async function processStripeWebhookEvent(event, dependencies = {}) {
+  if (!event || typeof event.id !== "string" || typeof event.type !== "string" || !event.data?.object) {
+    throw billingError("Invalid Stripe event payload.", 400);
+  }
+  const now = dependencies.now ? dependencies.now() : new Date();
+  const claim = await claimStripeEvent(event.id, now);
+  if (!claim.claimed) {
+    return { duplicate: claim.reason === "processed", inProgress: claim.reason === "processing", eventId: event.id };
+  }
+  try {
+    const object = event.data.object;
+    let subscription = null;
+    let organizationId = "";
+    if (event.type === "checkout.session.completed") {
+      organizationId = String(object.metadata?.organizationId || object.client_reference_id || "");
+      const value = object.subscription || object.parent?.subscription_details?.subscription;
+      const subscriptionId = typeof value === "string" ? value : value?.id;
+      if (organizationId && subscriptionId) {
+        subscription = await (dependencies.getSubscription || (async id => {
+          const billing = require("./billing");
+          return billing.stripeRequest("/subscriptions/" + encodeURIComponent(id));
+        }))(subscriptionId);
+      }
+    } else if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
+      organizationId = String(object.metadata?.organizationId || "");
+      subscription = object;
+    } else if (event.type === "invoice.payment_failed") {
+      const value = object.subscription || object.parent?.subscription_details?.subscription;
+      const subscriptionId = typeof value === "string" ? value : value?.id;
+      if (subscriptionId) {
+        subscription = await (dependencies.getSubscription || (async id => {
+          const billing = require("./billing");
+          return billing.stripeRequest("/subscriptions/" + encodeURIComponent(id));
+        }))(subscriptionId);
+        organizationId = String(subscription.metadata?.organizationId || "");
+      }
+    }
+    if (organizationId && subscription) {
+      const billing = require("./billing");
+      await writeWorkspaceSubscription(organizationId, subscription, {
+        plans: dependencies.plans || billing.getConfiguredBillingPlans()
+      });
+    }
+    await finishStripeEvent(claim.key, "processed", event.type);
+    return { processed: true, eventId: event.id, eventType: event.type };
+  } catch (error) {
+    await finishStripeEvent(claim.key, "failed", event.type, error);
+    throw error;
+  }
+}
+
 module.exports = {
   EVENT_LEASE_SECONDS,
   PLAN_SEATS,
