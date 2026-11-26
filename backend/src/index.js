@@ -287,11 +287,11 @@ async function handleWhatsAppTemplates(event) {
       method: "POST", headers, body: JSON.stringify(definition)
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return jsonResponse(event, 502, {
-      error: payload.error?.message || "Meta could not create the WhatsApp template."
+    if (!response.ok || !/^[0-9]{5,32}$/.test(String(payload.id || ""))) return jsonResponse(event, 502, {
+      error: payload.error?.message || "Meta did not confirm WhatsApp template creation."
     });
     return jsonResponse(event, 201, {
-      success: true, templateId: String(payload.id || ""),
+      success: true, templateId: String(payload.id),
       status: String(payload.status || "PENDING"), category: String(payload.category || definition.category)
     });
   }
@@ -331,10 +331,10 @@ async function handleWhatsAppTemplates(event) {
       method: "POST", headers, body: JSON.stringify(update)
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return jsonResponse(event, 502, {
-      error: payload.error?.message || "Meta could not update the WhatsApp template."
+    if (!response.ok || payload.success !== true) return jsonResponse(event, 502, {
+      error: payload.error?.message || "Meta did not confirm the WhatsApp template update."
     });
-    return jsonResponse(event, 200, { success: payload.success !== false, templateId: identity.templateId, name: identity.templateName });
+    return jsonResponse(event, 200, { success: true, templateId: identity.templateId, name: identity.templateName });
   }
 
   const deleteUrl = new URL(collectionUrl.toString());
