@@ -270,5 +270,8 @@ module.exports = {
   eventKey,
   claimStripeEvent,
   finishStripeEvent,
-  writeWorkspaceSubscription
+  writeWorkspaceSubscription,
+  processStripeWebhookEvent,
+  createCheckoutSession,
+  createPortalSession
 };
