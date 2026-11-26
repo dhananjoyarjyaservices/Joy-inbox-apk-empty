@@ -911,3 +911,55 @@ test("DynamoDB outgoing WhatsApp writer returns the existing message on a duplic
     if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE; else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
   }
 });
+
+
+test("DynamoDB campaign consent stores only a tenant-scoped phone hash and supports STOP/START", async () => {
+  const compliance = require("../src/dynamodbCampaignCompliance");
+  const prior = {
+    region: process.env.AWS_REGION,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    nodeEnv: process.env.NODE_ENV,
+    hashKey: process.env.CAMPAIGN_SUPPRESSION_HASH_KEY
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.NODE_ENV = "test";
+  delete process.env.CAMPAIGN_SUPPRESSION_HASH_KEY;
+  const writes = [];
+  const reads = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      if (command.constructor.name === "PutCommand") {
+        writes.push(command.input.Item);
+        return {};
+      }
+      if (command.constructor.name === "GetCommand") {
+        reads.push(command.input);
+        return { Item: { status: "opted_out" } };
+      }
+      throw new Error("Unexpected DynamoDB command: " + command.constructor.name);
+    }
+  });
+  try {
+    assert.equal(compliance.isWhatsAppOptOutMessage("STOP"), true);
+    assert.equal(compliance.isWhatsAppOptInMessage("START"), true);
+    assert.equal(compliance.isWhatsAppOptOutMessage("Please stop sending messages"), true);
+    await compliance.recordCampaignOptOut("workspace_1", "+91 99999 999999", "wamid.stop.1");
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].PK, "ORG#workspace_1");
+    assert.match(writes[0].SK, /^CAMPAIGN_SUPPRESSION#[a-f0-9]{64}$/);
+    assert.equal(writes[0].status, "opted_out");
+    assert.equal(Object.values(writes[0]).includes("919999999999"), false);
+    assert.equal(await compliance.isCampaignRecipientSuppressed("workspace_1", "919999999999"), true);
+    assert.equal(reads[0].ConsistentRead, true);
+    await compliance.recordCampaignOptIn("workspace_1", "919999999999", "wamid.start.1");
+    assert.equal(writes[1].status, "active");
+    await assert.rejects(compliance.recordCampaignOptOut("workspace_1", "123", "wamid.invalid"), { statusCode: 400 });
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE; else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+    if (prior.nodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prior.nodeEnv;
+    if (prior.hashKey === undefined) delete process.env.CAMPAIGN_SUPPRESSION_HASH_KEY; else process.env.CAMPAIGN_SUPPRESSION_HASH_KEY = prior.hashKey;
+  }
+});
