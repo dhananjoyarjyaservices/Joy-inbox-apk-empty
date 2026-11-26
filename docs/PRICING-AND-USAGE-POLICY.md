@@ -50,11 +50,22 @@ Annual customers pay for 10 months and receive 12 months of service (16.67% lowe
 - Never silently upgrade a customer or charge an overage. An owner must explicitly choose and pay for a higher plan.
 - On successful plan upgrade, apply the new plan's limits immediately. On renewal, reset usage only after confirming the new billing period.
 
-## History retention and media handling
+## Stored-media capacity, transfer and retention
 
-- Retention is measured from message creation time. The plan controls how far back messages remain searchable.
-- Expired message records are eligible for deletion only after a scheduled retention job is implemented, tested and documented. Do not claim automatic deletion until that job is active.
-- Customer media bytes are not permanently stored by default. Keep only the metadata and provider media identifiers required by the product; transfer limits still apply to media bytes served or uploaded by Joy Inbox.
+| Plan | Maximum stored customer media | Media retention |
+|---|---:|---:|
+| Lite | 1 GB | 3 months |
+| Starter | 3 GB | 6 months |
+| Growth | 6 GB | 12 months |
+| Business | 6 GB | 12 months |
+| Pro | 15 GB | 12 months |
+
+- Stored-media capacity is a separate hard cap from the existing monthly media-transfer allowance in the plan table. Both limits must be measured and enforced independently.
+- Customer inbound media (images, videos, audio and documents) and saved Quick Reply images must be retained in private tenant-scoped object storage after the AWS S3 migration is implemented.
+- Store only generated S3 object keys and verified metadata in the tenant database. Do not expose public object URLs; issue short-lived presigned URLs only after workspace membership and ownership checks.
+- Media retention is measured from the media object's creation time. Expired media objects and their metadata are eligible for deletion only after a scheduled retention worker is implemented, tested and documented. Do not claim automatic deletion until that worker is active.
+- The current application still uses Firebase Storage for some media operations and does not yet permanently retain inbound customer media in the requested AWS S3 architecture. The storage caps and retention above are approved product policy, not proof of live enforcement.
+- See [AWS data-plane migration contract](AWS-DATA-PLANE-MIGRATION.md) for object layout, quota reservation, retry, deletion and cutover requirements.
 
 ## Implementation and launch gates
 

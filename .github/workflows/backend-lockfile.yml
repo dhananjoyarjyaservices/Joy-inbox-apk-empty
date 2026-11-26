@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/saas-foundation
+      - feature/aws-data-plane-migration
     paths:
       - "backend/package.json"
       - ".github/workflows/backend-lockfile.yml"
@@ -20,10 +21,10 @@ jobs:
   lockfile:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out development branch
+      - name: Check out the triggering branch
         uses: actions/checkout@v7
         with:
-          ref: feature/saas-foundation
+          ref: ${{ github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Node.js 22
         uses: actions/setup-node@v7
@@ -41,7 +42,7 @@ jobs:
             echo "Backend lockfile is already current."
           else
             git commit -m "build: generate backend npm lockfile"
-            git push origin HEAD:feature/saas-foundation
+            git push origin HEAD:${{ github.ref_name }}
           fi
       - name: Verify clean install from the generated lockfile
         working-directory: backend

@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { saveTenantIncomingMessage, verifyWebhook, isValidMetaWebhookPayload, getWebhookProcessingStatusCode } = require("../src/webhook");
+const { saveTenantIncomingMessage, verifyWebhook, isValidMetaWebhookPayload, getWebhookProcessingStatusCode, processDynamoWhatsAppStatuses, processDynamoWebhookPayload } = require("../src/webhook");
+const dynamodb = require("../src/dynamodb");
 const { handler } = require("../src/index");
 
 function createRef(path, id = path.split("/").pop()) {
@@ -203,4 +204,181 @@ test("HTTP Meta webhook route rejects an invalid signature before processing pay
   });
   assert.equal(response.statusCode, 401);
   assert.match(response.body, /invalid webhook signature/i);
+});
+
+
+test("DynamoDB webhook status path resolves the owning workspace and updates the indexed message", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    workspaces: process.env.DYNAMODB_WORKSPACES_TABLE,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  const calls = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      calls.push(command);
+      if (command.constructor.name === "GetCommand") {
+        const key = command.input.Key;
+        if (key.PK === "PHONE#123456789012" && key.SK === "CONNECTION") {
+          return { Item: { organizationId: "workspace_1", status: "active" } };
+        }
+        if (key.PK === "ORG#workspace_1" && key.SK === "WHATSAPP#PHONE#123456789012") {
+          return { Item: { organizationId: "workspace_1", connected: true } };
+        }
+        if (key.SK === "WHATSAPP_MESSAGE#wamid.webhook.status") {
+          return { Item: {
+            organizationId: "workspace_1",
+            conversationId: "919999999999",
+            timestamp: 1760000000000
+          } };
+        }
+      }
+      if (command.constructor.name === "UpdateCommand") return { Attributes: { status: "delivered" } };
+      throw new Error("Unexpected DynamoDB command: " + command.constructor.name);
+    }
+  });
+  try {
+    const result = await processDynamoWhatsAppStatuses("123456789012", [{
+      id: "wamid.webhook.status",
+      status: "delivered",
+      timestamp: "1760000010"
+    }]);
+    assert.deepEqual(result, [{ messageId: "wamid.webhook.status", status: "delivered", updated: true }]);
+    const update = calls.find(command => command.constructor.name === "UpdateCommand");
+    assert.equal(update.input.TableName, "JoyInboxMessages");
+    assert.equal(update.input.ExpressionAttributeValues[":status"], "delivered");
+    assert.equal(update.input.ExpressionAttributeValues[":statusUpdatedAt"], 1760000010000);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE; else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+    if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE; else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
+  }
+});
+
+test("DynamoDB inbound webhook persists STOP consent before acknowledging", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    workspaces: process.env.DYNAMODB_WORKSPACES_TABLE,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE,
+    nodeEnv: process.env.NODE_ENV
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  process.env.NODE_ENV = "test";
+  const calls = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      calls.push(command);
+      if (command.constructor.name === "GetCommand") {
+        const key = command.input.Key;
+        if (key.PK === "PHONE#123456789012") {
+          return { Item: { organizationId: "workspace_1", status: "active" } };
+        }
+        if (key.SK === "WHATSAPP#PHONE#123456789012") {
+          return { Item: { organizationId: "workspace_1", connected: true } };
+        }
+        if (key.PK === "ORG#workspace_1" && key.SK === "WORKSPACE") {
+          return { Item: {
+            status: "active", subscriptionStatus: "active", plan: "lite",
+            currentPeriodStart: "2025-01-01T00:00:00.000Z",
+            currentPeriodEnd: "2027-01-01T00:00:00.000Z"
+          } };
+        }
+      }
+      if (command.constructor.name === "TransactWriteCommand" || command.constructor.name === "PutCommand") return {};
+      throw new Error("Unexpected DynamoDB command: " + command.constructor.name);
+    }
+  });
+  try {
+    await processDynamoWebhookPayload({
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{
+        field: "messages",
+        value: {
+          metadata: { phone_number_id: "123456789012" },
+          contacts: [{ wa_id: "919999999999", profile: { name: "Test Customer" } }],
+          messages: [{ id: "wamid.inbound.stop", from: "919999999999", timestamp: "1760000000", type: "text", text: { body: "STOP" } }]
+        }
+      }] }]
+    });
+    const transaction = calls.find(command => command.constructor.name === "TransactWriteCommand");
+    const consent = calls.find(command => command.constructor.name === "PutCommand");
+    assert.ok(transaction, "incoming message must be saved");
+    assert.ok(consent, "STOP suppression must be saved");
+    assert.equal(consent.input.Item.status, "opted_out");
+    assert.equal(consent.input.Item.PK, "ORG#workspace_1");
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    for (const [key, value] of Object.entries({
+      AWS_REGION: prior.region,
+      DYNAMODB_WORKSPACES_TABLE: prior.workspaces,
+      DYNAMODB_CUSTOMERS_TABLE: prior.customers,
+      DYNAMODB_MESSAGES_TABLE: prior.messages,
+      NODE_ENV: prior.nodeEnv
+    })) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+test("DynamoDB inbound webhook stores ordinary messages but returns retryable 503 until downstream workflows migrate", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    workspaces: process.env.DYNAMODB_WORKSPACES_TABLE,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE,
+    nodeEnv: process.env.NODE_ENV
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  process.env.NODE_ENV = "test";
+  const calls = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      calls.push(command);
+      if (command.constructor.name === "GetCommand") {
+        const key = command.input.Key;
+        if (key.PK === "PHONE#123456789012") return { Item: { organizationId: "workspace_1", status: "active" } };
+        if (key.SK === "WHATSAPP#PHONE#123456789012") return { Item: { organizationId: "workspace_1", connected: true } };
+      }
+      if (command.constructor.name === "TransactWriteCommand") return {};
+      throw new Error("Unexpected DynamoDB command: " + command.constructor.name);
+    }
+  });
+  try {
+    await assert.rejects(processDynamoWebhookPayload({
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{
+        field: "messages",
+        value: {
+          metadata: { phone_number_id: "123456789012" },
+          messages: [{ id: "wamid.inbound.text", from: "919999999999", timestamp: "1760000000", type: "text", text: { body: "Hello" } }]
+        }
+      }] }]
+    }), { statusCode: 503, retryable: true });
+    assert.ok(calls.some(command => command.constructor.name === "TransactWriteCommand"));
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    for (const [key, value] of Object.entries({
+      AWS_REGION: prior.region,
+      DYNAMODB_WORKSPACES_TABLE: prior.workspaces,
+      DYNAMODB_CUSTOMERS_TABLE: prior.customers,
+      DYNAMODB_MESSAGES_TABLE: prior.messages,
+      NODE_ENV: prior.nodeEnv
+    })) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

@@ -37,6 +37,12 @@ const {
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
+const { createWorkspace, listWorkspaces } = require("./dynamodbWorkspaces");
+const { getWorkspaceContext, listWorkspaceMembers, listWorkspaceMemberAudit, updateWorkspaceMemberRole, removeWorkspaceMember } = require("./dynamodbMembers");
+const { createWorkspaceInvitation, listWorkspaceInvitations, revokeWorkspaceInvitation, acceptWorkspaceInvitation } = require("./dynamodbInvitations");
+const { processStripeWebhookEvent: processDynamoStripeWebhookEvent } = require("./dynamodbBilling");
+const { createCheckoutSession: createDynamoCheckoutSession, createPortalSession: createDynamoPortalSession } = require("./dynamodbBilling");
+const dynamoWhatsApp = require("./dynamodbWhatsApp");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -192,14 +198,18 @@ async function authenticateUser(event) {
     error.statusCode = 401;
     throw error;
   }
-  const idToken = authorization.slice(7).trim();
-  if (!idToken) {
-    const error = new Error("Firebase ID token is missing.");
+  const token = authorization.slice(7).trim();
+  if (!token) {
+    const error = new Error("Bearer token is missing.");
     error.statusCode = 401;
     throw error;
   }
+  if (process.env.AUTH_PROVIDER === "cognito") {
+    const { verifyCognitoAccessToken } = require("./cognitoAuth");
+    return verifyCognitoAccessToken(token);
+  }
   try {
-    return await getFirebaseAdmin().auth().verifyIdToken(idToken, true);
+    return await getFirebaseAdmin().auth().verifyIdToken(token, true);
   } catch {
     const error = new Error("Firebase ID token is invalid or expired.");
     error.statusCode = 401;
@@ -210,9 +220,14 @@ async function authenticateUser(event) {
 async function handleWhatsAppConnections(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
-  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, organizationId)
+    : await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "chats:read");
-  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  const connections = dynamoMode
+    ? await dynamoWhatsApp.listWhatsAppConnections(organization.id)
+    : await listWhatsAppConnections(getDb(), organization.id);
   return jsonResponse(event, 200, { connections });
 }
 
@@ -221,15 +236,22 @@ async function handleWhatsAppTemplates(event) {
   const organizationId = event.queryStringParameters?.organizationId;
   const phoneNumberId = event.queryStringParameters?.phoneNumberId;
   const wabaId = event.queryStringParameters?.wabaId;
-  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, organizationId)
+    : await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "chats:read");
   if (typeof phoneNumberId !== "string" || !/^[0-9]{5,32}$/.test(phoneNumberId) || typeof wabaId !== "string" || !/^[0-9]{5,32}$/.test(wabaId)) {
     return jsonResponse(event, 400, { error: "A valid connected phone number and WhatsApp Business Account ID are required." });
   }
-  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  const connections = dynamoMode
+    ? await dynamoWhatsApp.listWhatsAppConnections(organization.id)
+    : await listWhatsAppConnections(getDb(), organization.id);
   const connection = connections.find(item => item.phoneNumberId === phoneNumberId && item.connected);
   if (!connection) return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the workspace." });
-  const credentials = await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
+  const credentials = dynamoMode
+    ? await dynamoWhatsApp.getWhatsAppCredentials(organization.id, phoneNumberId)
+    : await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
   const version = process.env.GRAPH_API_VERSION || "v26.0";
   const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
   url.searchParams.set("fields", "id,name,status,language,category,components");
@@ -265,14 +287,21 @@ async function handleWhatsAppConnectionHealth(event) {
   try { body = parseBody(event); } catch {
     return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
   }
-  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, body.organizationId)
+    : await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "whatsapp:manage");
-  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  const connections = dynamoMode
+    ? await dynamoWhatsApp.listWhatsAppConnections(organization.id)
+    : await listWhatsAppConnections(getDb(), organization.id);
   const version = process.env.GRAPH_API_VERSION || "v26.0";
   const checkedAt = new Date().toISOString();
   const results = await Promise.all(connections.filter((item) => item.connected).map(async (item) => {
     try {
-      const credentials = await getWhatsAppCredentials(getDb(), organization.id, item.phoneNumberId);
+      const credentials = dynamoMode
+        ? await dynamoWhatsApp.getWhatsAppCredentials(organization.id, item.phoneNumberId)
+        : await getWhatsAppCredentials(getDb(), organization.id, item.phoneNumberId);
       const response = await fetch(
         `https://graph.facebook.com/${version}/${encodeURIComponent(item.phoneNumberId)}?fields=id,display_phone_number,verified_name`,
         { headers: { Authorization: `Bearer ${credentials.accessToken}` } }
@@ -849,9 +878,14 @@ async function handleWhatsAppRegistrationPin(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
   const phoneNumberId = event.queryStringParameters?.phoneNumberId;
-  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, organizationId)
+    : await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "whatsapp:manage");
-  const credentials = await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
+  const credentials = dynamoMode
+    ? await dynamoWhatsApp.getWhatsAppCredentials(organization.id, phoneNumberId)
+    : await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
   if (!credentials.registrationPin) {
     return jsonResponse(event, 404, { error: "A saved WhatsApp registration PIN is not available for this number." });
   }
@@ -951,10 +985,15 @@ async function handleWhatsAppConnect(event) {
   try { body = parseBody(event); } catch {
     return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
   }
-  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, body.organizationId)
+    : await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "whatsapp:manage");
   if (getMethod(event) === "DELETE") {
-    const disconnected = await disconnectWhatsAppConnection(getDb(), organization, String(body.phoneNumberId || "").trim());
+    const disconnected = dynamoMode
+      ? await dynamoWhatsApp.disconnectWhatsAppConnection(organization.id, String(body.phoneNumberId || "").trim())
+      : await disconnectWhatsAppConnection(getDb(), organization, String(body.phoneNumberId || "").trim());
     return jsonResponse(event, 200, { connection: disconnected });
   }
   const phoneNumberId = String(body.phoneNumberId || "").trim();
@@ -976,18 +1015,28 @@ async function handleWhatsAppConnect(event) {
     });
   }
 
-  const connection = await saveWhatsAppConnection(getDb(), organization, {
-    phoneNumberId,
-    accessToken,
-    displayPhoneNumber: meta.display_phone_number,
-    verifiedName: meta.verified_name
-  });
+  const connection = dynamoMode
+    ? await dynamoWhatsApp.saveWhatsAppConnection(organization.id, {
+        phoneNumberId, accessToken,
+        displayPhoneNumber: meta.display_phone_number,
+        verifiedName: meta.verified_name
+      })
+    : await saveWhatsAppConnection(getDb(), organization, {
+        phoneNumberId, accessToken,
+        displayPhoneNumber: meta.display_phone_number,
+        verifiedName: meta.verified_name
+      });
   return jsonResponse(event, 200, { connection });
 }
 
 async function handleOrganizations(event) {
   const decoded = await authenticateUser(event);
+  const useDynamoDb = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
   if (getMethod(event) === "GET") {
+    if (useDynamoDb) {
+      const page = await listWorkspaces(decoded, { limit: 100 });
+      return jsonResponse(event, 200, { organizations: page.organizations, nextCursor: page.nextCursor });
+    }
     const organizations = await listOrganizations(getDb(), decoded);
     return jsonResponse(event, 200, { organizations });
   }
@@ -997,13 +1046,25 @@ async function handleOrganizations(event) {
   } catch {
     return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
   }
-  const organization = await createOrganization(getDb(), decoded, body);
+  const organization = useDynamoDb
+    ? await createWorkspace(decoded, body)
+    : await createOrganization(getDb(), decoded, body);
   return jsonResponse(event, 201, { organization });
 }
 
 async function handleOrganizationMemberAudit(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
+  if (process.env.JOY_INBOX_DATA_PLANE === "dynamodb") {
+    const organization = await getWorkspaceContext(decoded, organizationId);
+    requirePermission(organization, "members:manage");
+    const query = event.queryStringParameters || {};
+    const page = await listWorkspaceMemberAudit(organization.id, {
+      limit: query.limit === undefined ? 25 : Number(query.limit),
+      cursor: query.cursor || ""
+    });
+    return jsonResponse(event, 200, page);
+  }
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "members:manage");
   const page = await listOrganizationMemberAudit(getDb(), organization, {
@@ -1024,6 +1085,33 @@ async function handleOrganizationMembers(event) {
   const organizationId = method === "GET"
     ? event.queryStringParameters?.organizationId
     : body.organizationId;
+  if (process.env.JOY_INBOX_DATA_PLANE === "dynamodb") {
+    const organization = await getWorkspaceContext(decoded, organizationId);
+    requirePermission(organization, "members:manage");
+    const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };
+    if (method === "GET") {
+      const query = event.queryStringParameters || {};
+      const page = await listWorkspaceMembers(organization.id, {
+        limit: query.limit === undefined ? 25 : Number(query.limit),
+        cursor: query.cursor || ""
+      });
+      return jsonResponse(event, 200, page);
+    }
+    if (method === "PUT") {
+      const member = await updateWorkspaceMemberRole(organization, actor, body);
+      return jsonResponse(event, 200, { member });
+    }
+    if (method === "DELETE") {
+      const member = await removeWorkspaceMember(organization, actor, body);
+      return jsonResponse(event, 200, { member });
+    }
+    if (method === "POST") {
+      return jsonResponse(event, 501, {
+        error: "Adding team members in DynamoDB mode requires the invitation and seat-limit migration, which is not enabled yet."
+      });
+    }
+    return jsonResponse(event, 405, { error: "Method not allowed." });
+  }
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "members:manage");
   const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };
@@ -3845,6 +3933,21 @@ async function handleTenantInvitations(event) {
   }
   const params = event.queryStringParameters || {};
   const organizationId = method === "GET" ? params.organizationId : body.organizationId;
+  if (process.env.JOY_INBOX_DATA_PLANE === "dynamodb") {
+    const organization = await getWorkspaceContext(decoded, organizationId);
+    requirePermission(organization, "members:manage");
+    const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };
+    if (method === "GET") {
+      const invitations = await listWorkspaceInvitations(organization.id, params.limit);
+      return jsonResponse(event, 200, { invitations });
+    }
+    if (method === "POST") {
+      const invitation = await createWorkspaceInvitation(organization, actor, body);
+      return jsonResponse(event, 201, { invitation });
+    }
+    const result = await revokeWorkspaceInvitation(organization.id, actor, body.email);
+    return jsonResponse(event, 200, { invitation: result });
+  }
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "members:manage");
   if (method === "GET") {
@@ -3870,7 +3973,9 @@ async function handleAcceptTenantInvitation(event) {
   try { body = parseBody(event); }
   catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   const decoded = await authenticateUser(event);
-  const result = await acceptTenantInvitation(getDb(), body.organizationId, body.token, decoded);
+  const result = process.env.JOY_INBOX_DATA_PLANE === "dynamodb"
+    ? await acceptWorkspaceInvitation(body.organizationId, body.token, decoded)
+    : await acceptTenantInvitation(getDb(), body.organizationId, body.token, decoded);
   return jsonResponse(event, 200, { success: true, membership: result });
 }
 
@@ -3905,45 +4010,61 @@ async function handleTenantBilling(event) {
     catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   }
   const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
-  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, organizationId)
+    : await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "settings:manage");
-  const subscriptionRef = organization.ref.collection("billing").doc("subscription");
+  const subscriptionRef = dynamoMode ? null : organization.ref.collection("billing").doc("subscription");
 
   if (method === "GET") {
     const [snapshot, plans] = await Promise.all([
-      subscriptionRef.get(),
+      dynamoMode
+        ? require("./dynamodb").getItem("workspaces", require("./dynamodb").workspaceKey(organization.id), { consistentRead: true })
+        : subscriptionRef.get(),
       Promise.resolve(getConfiguredBillingPlans().map(({ key, name, monthlyPriceInr, annualPriceInr, priceId, annualPriceId, limits }) => ({ key, name, monthlyPriceInr, annualPriceInr, monthlyAvailable: Boolean(priceId), annualAvailable: Boolean(annualPriceId), currency: "INR", intervals: ["month", "year"], limits, trialDays: 7 })))
     ]);
-    const value = snapshot.exists ? snapshot.data() || {} : {};
-    const usage = snapshot.exists ? await getTenantMessageUsage(getDb(), organization.id, value).catch(error => ({ error: error.message })) : null;
+    const exists = dynamoMode ? Boolean(snapshot) : snapshot.exists;
+    const value = exists ? (dynamoMode ? snapshot : snapshot.data() || {}) : {};
+    const usage = exists && !dynamoMode ? await getTenantMessageUsage(getDb(), organization.id, value).catch(error => ({ error: error.message })) : null;
     const asIso = input => input?.toDate ? input.toDate().toISOString()
-      : input instanceof Date ? input.toISOString() : null;
+      : input instanceof Date ? input.toISOString()
+      : typeof input === "string" && !Number.isNaN(Date.parse(input)) ? new Date(input).toISOString() : null;
     return jsonResponse(event, 200, {
       billingEnabled: plans.length > 0,
       plans,
-      subscription: snapshot.exists ? {
+      subscription: exists ? {
         plan: String(value.plan || value.checkoutPlan || "unknown"),
-         interval: value.interval === "year" || value.billingInterval === "year" || value.checkoutInterval === "year" ? "year" : "month",
-        status: String(value.status || "incomplete"),
+        interval: value.interval === "year" || value.billingInterval === "year" || value.checkoutInterval === "year" ? "year" : "month",
+        status: String(value.subscriptionStatus || value.status || "incomplete"),
         currentPeriodEnd: asIso(value.currentPeriodEnd),
         trialEnd: asIso(value.trialEnd),
         cancelAtPeriodEnd: value.cancelAtPeriodEnd === true,
-         usage
+        usage
       } : null
     });
   }
   if (method !== "POST") return jsonResponse(event, 405, { error: "Method not allowed." });
   if (body.action === "checkout") {
-    const session = await createCheckoutSession({
-      organization,
-      decoded,
-      planKey: String(body.plan || ""),
-      interval: String(body.interval || "month")
-    });
+    const session = process.env.JOY_INBOX_DATA_PLANE === "dynamodb"
+      ? await createDynamoCheckoutSession({
+          organizationId: organization.id,
+          decoded,
+          planKey: String(body.plan || ""),
+          interval: String(body.interval || "month")
+        })
+      : await createCheckoutSession({
+          organization,
+          decoded,
+          planKey: String(body.plan || ""),
+          interval: String(body.interval || "month")
+        });
     return jsonResponse(event, 200, { success: true, checkout: session });
   }
   if (body.action === "portal") {
-    const session = await createPortalSession({ organization });
+    const session = process.env.JOY_INBOX_DATA_PLANE === "dynamodb"
+      ? await createDynamoPortalSession({ organizationId: organization.id })
+      : await createPortalSession({ organization });
     return jsonResponse(event, 200, { success: true, portal: session });
   }
   return jsonResponse(event, 400, { error: "Choose a valid billing action." });
@@ -3959,7 +4080,9 @@ async function handleStripeBillingWebhook(event) {
   try { payload = JSON.parse(rawBody.toString("utf8")); }
   catch { return textResponse(event, 400, "Invalid Stripe event JSON."); }
   try {
-    const result = await processStripeWebhookEvent(getDb(), payload);
+    const result = process.env.JOY_INBOX_DATA_PLANE === "dynamodb"
+      ? await processDynamoStripeWebhookEvent(payload)
+      : await processStripeWebhookEvent(getDb(), payload);
     if (result.inProgress) return textResponse(event, 503, "Stripe event is already being processed.");
     return textResponse(event, 200, "EVENT_RECEIVED");
   } catch (error) {
