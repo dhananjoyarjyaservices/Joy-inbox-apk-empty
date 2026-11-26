@@ -9,7 +9,7 @@ const workspaces = require("../src/dynamodbWorkspaces");
 test("DynamoDB workspace service validates names and verified Firebase identities", () => {
   assert.equal(workspaces.normalizeWorkspaceName("  My   Business  "), "My Business");
   assert.throws(() => workspaces.normalizeWorkspaceName("x"), { statusCode: 400 });
-  assert.throws(() => workspaces.createWorkspace({}, { name: "My Business" }), { statusCode: 401 });
+  return assert.rejects(workspaces.createWorkspace({}, { name: "My Business" }), { statusCode: 401 });
 });
 
 test("DynamoDB key builders create workspace-scoped PK/SK values", () => {
