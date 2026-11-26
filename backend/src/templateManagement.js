@@ -10,7 +10,12 @@ function httpError(message, statusCode = 400) {
 const NAME_PATTERN = /^[a-z0-9_]{1,512}$/;
 const LANGUAGE_PATTERN = /^[a-z]{2,3}(?:_[A-Z]{2})?$/;
 const TEMPLATE_ID_PATTERN = /^[0-9]{5,32}$/;
-const CATEGORIES = new Set(["UTILITY", "MARKETING", "AUTHENTICATION"]);
+const CATEGORIES = new Set(["UTILITY", "MARKETING"]);
+
+function countPlaceholders(value) {
+  const indexes = [...String(value || "").matchAll(/\\{\\{\\s*(\\d+)\\s*\\}\\}/g)].map(match => Number(match[1]));
+  return indexes.length ? Math.max(...indexes) : 0;
+}
 
 function cleanText(value, field, maxLength, required = true) {
   if (typeof value !== "string") throw httpError(field + " must be text.");
@@ -36,22 +41,24 @@ function normalizeTemplateComponents(input) {
     if (item.type === "HEADER") {
       if (item.format !== "TEXT") throw httpError("Only text headers are currently supported by the template manager.");
       const component = { type: "HEADER", format: "TEXT", text: cleanText(item.text, "Header text", 60) };
-      if (item.example !== undefined) {
+      const headerVariables = countPlaceholders(component.text);
+      if (item.example !== undefined || headerVariables > 0) {
         if (!item.example || !Array.isArray(item.example.header_text) ||
             item.example.header_text.length !== 1 || typeof item.example.header_text[0] !== "string") {
-          throw httpError("Header example must contain one header_text sample.");
+          throw httpError("A variable text header requires one header_text example.");
         }
         component.example = { header_text: [cleanText(item.example.header_text[0], "Header example", 60)] };
       }
       result.push(component);
     } else if (item.type === "BODY") {
       const component = { type: "BODY", text: cleanText(item.text, "Body text", 1024) };
-      if (item.example !== undefined) {
+      const bodyVariables = countPlaceholders(component.text);
+      if (item.example !== undefined || bodyVariables > 0) {
         const samples = item.example?.body_text;
         if (!Array.isArray(samples) || samples.length < 1 || samples.length > 5 ||
-            samples.some(row => !Array.isArray(row) || row.length < 1 || row.length > 100 ||
+            samples.some(row => !Array.isArray(row) || row.length !== bodyVariables ||
               row.some(value => typeof value !== "string" || !value.trim() || value.length > 1024))) {
-          throw httpError("Body example must contain 1–5 rows of non-empty text samples.");
+          throw httpError("A variable body requires 1–5 example rows with one sample per placeholder.");
         }
         component.example = { body_text: samples.map(row => row.map(value => value.trim())) };
       }
@@ -72,6 +79,7 @@ function normalizeTemplateComponents(input) {
           let parsed;
           try { parsed = new URL(url); } catch { throw httpError("Button URL must be a valid HTTPS URL."); }
           if (parsed.protocol !== "https:") throw httpError("Button URL must use HTTPS.");
+          if (url.includes("{{")) throw httpError("Dynamic URL buttons are not yet supported by the template manager.");
           return { type, text, url };
         }
         if (type === "PHONE_NUMBER") {
@@ -103,7 +111,7 @@ function normalizeTemplateDefinition(input, { allowPartial = false } = {}) {
   }
   if (!allowPartial || input.category !== undefined) {
     const category = typeof input.category === "string" ? input.category.trim().toUpperCase() : "";
-    if (!CATEGORIES.has(category)) throw httpError("Template category must be UTILITY, MARKETING or AUTHENTICATION.");
+    if (!CATEGORIES.has(category)) throw httpError("Template category must be UTILITY or MARKETING.");
     result.category = category;
   }
   if (!allowPartial || input.components !== undefined) result.components = normalizeTemplateComponents(input.components);
