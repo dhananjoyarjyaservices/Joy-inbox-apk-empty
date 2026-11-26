@@ -38,6 +38,7 @@ const {
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
 const { createWorkspace, listWorkspaces } = require("./dynamodbWorkspaces");
+const { getWorkspaceContext, listWorkspaceMembers, updateWorkspaceMemberRole, removeWorkspaceMember } = require("./dynamodbMembers");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -1032,6 +1033,33 @@ async function handleOrganizationMembers(event) {
   const organizationId = method === "GET"
     ? event.queryStringParameters?.organizationId
     : body.organizationId;
+  if (process.env.JOY_INBOX_DATA_PLANE === "dynamodb") {
+    const organization = await getWorkspaceContext(decoded, organizationId);
+    requirePermission(organization, "members:manage");
+    const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };
+    if (method === "GET") {
+      const query = event.queryStringParameters || {};
+      const page = await listWorkspaceMembers(organization.id, {
+        limit: query.limit === undefined ? 25 : Number(query.limit),
+        cursor: query.cursor || ""
+      });
+      return jsonResponse(event, 200, page);
+    }
+    if (method === "PUT") {
+      const member = await updateWorkspaceMemberRole(organization, actor, body);
+      return jsonResponse(event, 200, { member });
+    }
+    if (method === "DELETE") {
+      const member = await removeWorkspaceMember(organization, actor, body);
+      return jsonResponse(event, 200, { member });
+    }
+    if (method === "POST") {
+      return jsonResponse(event, 501, {
+        error: "Adding team members in DynamoDB mode requires the invitation and seat-limit migration, which is not enabled yet."
+      });
+    }
+    return jsonResponse(event, 405, { error: "Method not allowed." });
+  }
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "members:manage");
   const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };
