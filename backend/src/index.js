@@ -2934,7 +2934,7 @@ async function sendTenantTemplate(event) {
   const urlButtons = templateButtons.filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
   const isAuthenticationTemplate = String(approvedTemplate.category || "").toUpperCase() === "AUTHENTICATION" || otpButtons.length > 0;
   const requiredButtonVariables = isAuthenticationTemplate ? 1 : urlButtons.length;
-  if (isAuthenticationTemplate && (otpButtons.length !== 1 || urlButtons.length > 0 || mediaHeaderFormat || headerCount > 0 || headerMedia)) {
+  if (isAuthenticationTemplate && (otpButtons.length !== 1 || urlButtons.length > 0 || headerDefinition || headerMedia)) {
     return jsonResponse(event, 400, { error: "Authentication templates require one OTP button and cannot contain media, text headers or URL buttons." });
   }
   if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== requiredButtonVariables || (Boolean(mediaHeaderFormat) !== Boolean(headerMedia))) {
