@@ -874,9 +874,14 @@ async function handleWhatsAppRegistrationPin(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
   const phoneNumberId = event.queryStringParameters?.phoneNumberId;
-  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, organizationId)
+    : await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "whatsapp:manage");
-  const credentials = await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
+  const credentials = dynamoMode
+    ? await dynamoWhatsApp.getWhatsAppCredentials(organization.id, phoneNumberId)
+    : await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
   if (!credentials.registrationPin) {
     return jsonResponse(event, 404, { error: "A saved WhatsApp registration PIN is not available for this number." });
   }
