@@ -97,7 +97,12 @@ function messageKey(organizationId, conversationId, timestamp, messageId) {
     error.statusCode = 400;
     throw error;
   }
-  const id = validateId(messageId, "message ID");
+  if (typeof messageId !== "string" || !/^[A-Za-z0-9._:-]{1,256}$/.test(messageId)) {
+    const error = new Error("A valid message ID is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const id = messageId;
   return {
     PK: conversationPartition(organizationId, conversationId),
     SK: "MESSAGE#" + String(Math.trunc(Number(timestamp))).padStart(16, "0") + "#" + id
