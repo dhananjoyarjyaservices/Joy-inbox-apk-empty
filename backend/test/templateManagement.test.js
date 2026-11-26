@@ -42,7 +42,7 @@ test("accepts media header handles and rejects missing or malformed handles", ()
     { type: "HEADER", format: "VIDEO" }, { type: "BODY", text: "Hello" }
   ]), /uploaded Meta header_handle/);
   assert.throws(() => normalizeTemplateComponents([
-    { type: "HEADER", format: "IMAGE", example: { header_handle: ["bad\\nhandle"] } },
+    { type: "HEADER", format: "IMAGE", example: { header_handle: ["bad\nhandle"] } },
     { type: "BODY", text: "Hello" }
   ]), /invalid characters/);
   assert.throws(() => normalizeTemplateComponents([
