@@ -1,0 +1,132 @@
+"use strict";
+
+function httpError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.definitive = true;
+  return error;
+}
+
+const NAME_PATTERN = /^[a-z0-9_]{1,512}$/;
+const LANGUAGE_PATTERN = /^[a-z]{2,3}(?:_[A-Z]{2})?$/;
+const TEMPLATE_ID_PATTERN = /^[0-9]{5,32}$/;
+const CATEGORIES = new Set(["UTILITY", "MARKETING", "AUTHENTICATION"]);
+
+function cleanText(value, field, maxLength, required = true) {
+  if (typeof value !== "string") throw httpError(field + " must be text.");
+  const text = value.trim();
+  if ((required && !text) || text.length > maxLength) {
+    throw httpError(field + " must contain " + (required ? "1–" : "0–") + maxLength + " characters.");
+  }
+  return text;
+}
+
+function normalizeTemplateComponents(input) {
+  if (!Array.isArray(input) || input.length < 1 || input.length > 4) {
+    throw httpError("Template components must contain 1–4 supported components.");
+  }
+  const seen = new Set();
+  const result = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object" || Array.isArray(item) ||
+        !["HEADER", "BODY", "FOOTER", "BUTTONS"].includes(item.type) || seen.has(item.type)) {
+      throw httpError("Template components contain an unsupported or duplicate component.");
+    }
+    seen.add(item.type);
+    if (item.type === "HEADER") {
+      if (item.format !== "TEXT") throw httpError("Only text headers are currently supported by the template manager.");
+      const component = { type: "HEADER", format: "TEXT", text: cleanText(item.text, "Header text", 60) };
+      if (item.example !== undefined) {
+        if (!item.example || !Array.isArray(item.example.header_text) ||
+            item.example.header_text.length !== 1 || typeof item.example.header_text[0] !== "string") {
+          throw httpError("Header example must contain one header_text sample.");
+        }
+        component.example = { header_text: [cleanText(item.example.header_text[0], "Header example", 60)] };
+      }
+      result.push(component);
+    } else if (item.type === "BODY") {
+      const component = { type: "BODY", text: cleanText(item.text, "Body text", 1024) };
+      if (item.example !== undefined) {
+        const samples = item.example?.body_text;
+        if (!Array.isArray(samples) || samples.length < 1 || samples.length > 5 ||
+            samples.some(row => !Array.isArray(row) || row.length < 1 || row.length > 100 ||
+              row.some(value => typeof value !== "string" || !value.trim() || value.length > 1024))) {
+          throw httpError("Body example must contain 1–5 rows of non-empty text samples.");
+        }
+        component.example = { body_text: samples.map(row => row.map(value => value.trim())) };
+      }
+      result.push(component);
+    } else if (item.type === "FOOTER") {
+      result.push({ type: "FOOTER", text: cleanText(item.text, "Footer text", 60) });
+    } else {
+      if (!Array.isArray(item.buttons) || item.buttons.length < 1 || item.buttons.length > 3) {
+        throw httpError("Templates support 1–3 buttons.");
+      }
+      const buttons = item.buttons.map(button => {
+        if (!button || typeof button !== "object" || Array.isArray(button)) throw httpError("Template button is invalid.");
+        const type = button.type;
+        const text = cleanText(button.text, "Button text", 25);
+        if (type === "QUICK_REPLY") return { type, text };
+        if (type === "URL") {
+          const url = cleanText(button.url, "Button URL", 2000);
+          let parsed;
+          try { parsed = new URL(url); } catch { throw httpError("Button URL must be a valid HTTPS URL."); }
+          if (parsed.protocol !== "https:") throw httpError("Button URL must use HTTPS.");
+          return { type, text, url };
+        }
+        if (type === "PHONE_NUMBER") {
+          const phoneNumber = cleanText(button.phone_number, "Button phone number", 20);
+          if (!/^\\+[1-9][0-9]{7,14}$/.test(phoneNumber)) throw httpError("Button phone number must be in international format.");
+          return { type, text, phone_number: phoneNumber };
+        }
+        throw httpError("Only QUICK_REPLY, URL and PHONE_NUMBER template buttons are currently supported.");
+      });
+      result.push({ type: "BUTTONS", buttons });
+    }
+  }
+  if (!seen.has("BODY")) throw httpError("A BODY component is required.");
+  return result;
+}
+
+function normalizeTemplateDefinition(input, { allowPartial = false } = {}) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Template details are required.");
+  const result = {};
+  if (!allowPartial || input.name !== undefined) {
+    const name = typeof input.name === "string" ? input.name.trim() : "";
+    if (!NAME_PATTERN.test(name)) throw httpError("Template name must use lowercase letters, numbers and underscores.");
+    result.name = name;
+  }
+  if (!allowPartial || input.language !== undefined) {
+    const language = typeof input.language === "string" ? input.language.trim() : "";
+    if (!LANGUAGE_PATTERN.test(language)) throw httpError("Template language code is invalid.");
+    result.language = language;
+  }
+  if (!allowPartial || input.category !== undefined) {
+    const category = typeof input.category === "string" ? input.category.trim().toUpperCase() : "";
+    if (!CATEGORIES.has(category)) throw httpError("Template category must be UTILITY, MARKETING or AUTHENTICATION.");
+    result.category = category;
+  }
+  if (!allowPartial || input.components !== undefined) result.components = normalizeTemplateComponents(input.components);
+  if (input.allowCategoryChange !== undefined) {
+    if (typeof input.allowCategoryChange !== "boolean") throw httpError("allowCategoryChange must be boolean.");
+    result.allow_category_change = input.allowCategoryChange;
+  }
+  return result;
+}
+
+function normalizeTemplateMutationIdentity(input) {
+  const templateId = typeof input?.templateId === "string" ? input.templateId.trim() : "";
+  const templateName = typeof input?.templateName === "string" ? input.templateName.trim() : "";
+  if (!TEMPLATE_ID_PATTERN.test(templateId) || !NAME_PATTERN.test(templateName)) {
+    throw httpError("A valid templateId and templateName are required.");
+  }
+  return { templateId, templateName };
+}
+
+module.exports = {
+  normalizeTemplateComponents,
+  normalizeTemplateDefinition,
+  normalizeTemplateMutationIdentity,
+  TEMPLATE_ID_PATTERN,
+  NAME_PATTERN
+};
