@@ -13,6 +13,13 @@ test("Lambda entry points export the configured HTTP and scheduled handlers", ()
   assert.equal(typeof automation.handler, "function", "src/automationWorker.handler must be an exported Lambda handler");
 });
 
+test("Lambda health endpoint responds without initializing Firebase", async () => {
+  const { handler } = require("../src/index");
+  const response = await handler({ httpMethod: "GET", path: "/health", headers: {} });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(JSON.parse(response.body), { status: "ok", service: "joy-inbox-api" });
+});
+
 test("CRM API endpoints require Firebase authentication before workspace data access", async () => {
   const { handler } = require("../src/index");
   for (const [method, path] of [
