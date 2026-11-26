@@ -58,7 +58,7 @@ function workspaceKey(organizationId) {
   return { PK: "ORG#" + id, SK: "WORKSPACE" };
 }
 
-function membershipKey(organizationId, uid) {
+function userWorkspacePartition(uid) {\n  const userId = validateId(uid, "user ID");\n  return "USER#" + userId;\n}\n\nfunction userWorkspacePointerKey(uid, organizationId) {\n  return { PK: userWorkspacePartition(uid), SK: "ORG#" + validateId(organizationId, "organization ID") };\n}\n\nfunction membershipKey(organizationId, uid) {
   const orgId = validateId(organizationId, "organization ID");
   const userId = validateId(uid, "user ID");
   return { PK: "ORG#" + orgId, SK: "MEMBER#" + userId };
@@ -70,7 +70,7 @@ function customerKey(organizationId, customerId) {
   return { PK: "ORG#" + orgId, SK: "CUSTOMER#" + id };
 }
 
-function conversationPartition(organizationId, conversationId) {
+function conversationSummaryKey(organizationId, conversationId) {\n  const orgId = validateId(organizationId, "organization ID");\n  const id = validateId(conversationId, "conversation ID");\n  return { PK: "ORG#" + orgId, SK: "CONVERSATION#" + id };\n}\n\nfunction conversationPartition(organizationId, conversationId) {
   const orgId = validateId(organizationId, "organization ID");
   const id = validateId(conversationId, "conversation ID");
   return "ORG#" + orgId + "#CONVERSATION#" + id;
