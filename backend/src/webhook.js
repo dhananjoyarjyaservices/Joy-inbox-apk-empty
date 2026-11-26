@@ -14,6 +14,7 @@ const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 const dynamoWhatsApp = require("./dynamodbWhatsApp");
 const dynamodbRecords = require("./dynamodbRecords");
 const dynamoCampaignCompliance = require("./dynamodbCampaignCompliance");
+const dynamoUsage = require("./dynamodbUsage");
 
 async function processDynamoWhatsAppStatuses(phoneNumberId, statuses) {
   const organization = await dynamoWhatsApp.resolvePhoneNumberOrganization(String(phoneNumberId || ""));
@@ -77,6 +78,7 @@ async function processDynamoInboundMessages(phoneNumberId, value) {
       ...(Number.isSafeInteger(Number(extracted.media.file_size)) && Number(extracted.media.file_size) > 0
         ? { mediaSize: Number(extracted.media.file_size) } : {})
     });
+    await dynamoUsage.recordInboundMessageUsage(organization.id, messageId, new Date(timestamp));
 
     if (dynamoCampaignCompliance.isWhatsAppOptOutMessage(extracted.text)) {
       await dynamoCampaignCompliance.recordCampaignOptOut(organization.id, phone, messageId);
