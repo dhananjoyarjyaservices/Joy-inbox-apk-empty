@@ -486,7 +486,7 @@ type WhatsAppTemplateRequestBase = {
 
 async function requestWhatsAppTemplates(
   method: "POST" | "PUT" | "DELETE",
-  payload: WhatsAppTemplateRequestBase & Record<string, unknown>
+  payload: WhatsAppTemplateRequestBase & object
 ) {
   if (!API_URL) throw new Error("AWS API URL is not configured.");
   const idToken = await getIdToken();
