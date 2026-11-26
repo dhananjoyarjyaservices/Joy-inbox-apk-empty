@@ -89,6 +89,21 @@ test("builds authentication OTP body and button parameters for public template s
     { type: "body", parameters: [{ type: "text", text: "654321" }] },
     { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "654321" }] }
   ]);
+  const noButtonsTemplate = {
+    ...authTemplate,
+    components: [
+      { type: "BODY", text: "{{1}} is your verification code." },
+      { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "NO_BUTTONS" }] }
+    ]
+  };
+  assert.deepEqual(buildPublicTemplateComponents(noButtonsTemplate, {
+    variables: ["654321"]
+  }), [
+    { type: "body", parameters: [{ type: "text", text: "654321" }] }
+  ]);
+  assert.throws(() => buildPublicTemplateComponents(noButtonsTemplate, {
+    variables: ["654321"], buttonVariables: ["654321"]
+  }), /matching OTP/);
 });
 
 test("requires and normalizes explicit past template opt-in evidence", () => {
