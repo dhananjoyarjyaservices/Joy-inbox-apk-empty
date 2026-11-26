@@ -105,6 +105,36 @@ Authorization: Bearer YOUR_JOY_API_KEY
 
 Required scope: `templates:read`. The requested WABA ID must match the WABA ID stored for the connected phone number in the API key's workspace. The limit must be 1–100 (default 100). When the response has `pagination.nextCursor`, pass that opaque value as the `cursor` query parameter to retrieve the next Meta page. The API forwards it to Meta as the `after` cursor and returns `hasNext` to indicate whether another page exists.
 
+### Create a template
+
+```http
+POST /whatsapp/templates
+Authorization: Bearer FIREBASE_ID_TOKEN
+Content-Type: application/json
+```
+
+Requires an Owner or Admin workspace member with WhatsApp management permission. Include `organizationId`, `phoneNumberId`, `wabaId`, `name`, `language`, `category` and `components`. The API verifies that the WABA ID is the one stored for the connected number before calling Meta. The current builder supports UTILITY and MARKETING text templates with BODY, optional text HEADER/FOOTER, and up to three QUICK_REPLY, HTTPS URL or PHONE_NUMBER buttons. Variable text headers/bodies require examples. Media headers, AUTHENTICATION templates, dynamic URL buttons, carousel and Flow components are not supported by this endpoint yet. Meta reviews created templates; a successful create response commonly has PENDING status and does not mean approval.
+
+### Update a template
+
+```http
+PUT /whatsapp/templates
+Authorization: Bearer FIREBASE_ID_TOKEN
+Content-Type: application/json
+```
+
+Send `organizationId`, `phoneNumberId`, `wabaId`, `templateId`, `templateName`, and at least one of `category` or `components`. The server first verifies that the template ID/name pair is listed under the connected WABA, then updates the Meta template node. Template name and language cannot be changed.
+
+### Delete a template
+
+```http
+DELETE /whatsapp/templates
+Authorization: Bearer FIREBASE_ID_TOKEN
+Content-Type: application/json
+```
+
+Send `organizationId`, `phoneNumberId`, `wabaId`, `templateId` and `templateName`. The server verifies the ID/name pair against the connected WABA and asks Meta to delete that exact template ID. These operations require Owner/Admin permissions and a token with Meta's `whatsapp_business_management` permission.
+
 ## Send an approved WhatsApp template
 
 Use POST /public/v1/messages with messages:write. The API derives the WABA ID from the connected number, checks that the template is approved for the requested language, validates body/header/URL-button variable counts and sends through the connected WhatsApp number. Text-header templates are supported by this endpoint; templates with image/video/document headers must use the media template flow in the workspace inbox.
