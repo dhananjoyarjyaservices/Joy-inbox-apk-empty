@@ -283,14 +283,21 @@ async function handleWhatsAppConnectionHealth(event) {
   try { body = parseBody(event); } catch {
     return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
   }
-  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, body.organizationId)
+    : await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "whatsapp:manage");
-  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  const connections = dynamoMode
+    ? await dynamoWhatsApp.listWhatsAppConnections(organization.id)
+    : await listWhatsAppConnections(getDb(), organization.id);
   const version = process.env.GRAPH_API_VERSION || "v26.0";
   const checkedAt = new Date().toISOString();
   const results = await Promise.all(connections.filter((item) => item.connected).map(async (item) => {
     try {
-      const credentials = await getWhatsAppCredentials(getDb(), organization.id, item.phoneNumberId);
+      const credentials = dynamoMode
+        ? await dynamoWhatsApp.getWhatsAppCredentials(organization.id, item.phoneNumberId)
+        : await getWhatsAppCredentials(getDb(), organization.id, item.phoneNumberId);
       const response = await fetch(
         `https://graph.facebook.com/${version}/${encodeURIComponent(item.phoneNumberId)}?fields=id,display_phone_number,verified_name`,
         { headers: { Authorization: `Bearer ${credentials.accessToken}` } }
