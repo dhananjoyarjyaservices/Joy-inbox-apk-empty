@@ -8,6 +8,7 @@ const workspaces = require("../src/dynamodbWorkspaces");
 const records = require("../src/dynamodbRecords");
 const members = require("../src/dynamodbMembers");
 const invitations = require("../src/dynamodbInvitations");
+const billing = require("../src/dynamodbBilling");
 const crypto = require("node:crypto");
 
 test("DynamoDB workspace service validates names and verified Firebase identities", () => {
@@ -401,6 +402,58 @@ test("DynamoDB invitation acceptance atomically consumes invite, adds member and
     assert.equal(transaction.TransactItems[1].Put.Item.SK, "MEMBER#agent_1");
     assert.equal(transaction.TransactItems[2].Put.Item.SK, "ORG#workspace_1");
     assert.match(transaction.TransactItems[3].Update.UpdateExpression, /REMOVE tokenHash/);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+  }
+});
+
+
+test("DynamoDB billing validates Stripe event IDs and workspace IDs", () => {
+  assert.deepEqual(billing.eventKey("evt_12345678"), {
+    PK: "BILLING#STRIPE",
+    SK: "EVENT#evt_12345678"
+  });
+  assert.throws(() => billing.eventKey("bad_event"), { statusCode: 400 });
+  assert.throws(() => billing.writeWorkspaceSubscription("../other", {}), { statusCode: 400 });
+});
+
+test("DynamoDB billing subscription write enforces customer ownership and maps seat limits", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  const commands = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "GetCommand") {
+        return { Item: {
+          PK: "ORG#workspace_1", SK: "WORKSPACE", organizationId: "workspace_1",
+          status: "active", stripeCustomerId: "cus_existing", trialUsed: false
+        } };
+      }
+      return { Attributes: {} };
+    }
+  });
+  try {
+    await assert.rejects(billing.writeWorkspaceSubscription("workspace_1", {
+      id: "sub_12345678", customer: "cus_other", status: "active",
+      items: { data: [{ price: { id: "price_growth" } }] }
+    }, { plans: [{ key: "growth", priceId: "price_growth", annualPriceId: "" }] }), { statusCode: 409 });
+    assert.equal(commands.filter(command => command.constructor.name === "UpdateCommand").length, 0);
+
+    const result = await billing.writeWorkspaceSubscription("workspace_1", {
+      id: "sub_12345678", customer: "cus_existing", status: "active",
+      current_period_start: 1790000000, current_period_end: 1792592000,
+      trial_end: 1790600000,
+      items: { data: [{ price: { id: "price_growth" } }] }
+    }, { plans: [{ key: "growth", priceId: "price_growth", annualPriceId: "" }] });
+    assert.equal(result.seatLimit, 5);
+    const update = commands.find(command => command.constructor.name === "UpdateCommand").input;
+    assert.match(update.UpdateExpression, /seatLimit = :seatLimit/);
+    assert.equal(update.ExpressionAttributeValues[":status"], "active");
+    assert.equal(update.ExpressionAttributeValues[":true"], true);
   } finally {
     dynamodb.setDocumentClientForTests(null);
     if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
