@@ -6,6 +6,7 @@ const dynamodb = require("../src/dynamodb");
 const media = require("../src/s3Media");
 const workspaces = require("../src/dynamodbWorkspaces");
 const records = require("../src/dynamodbRecords");
+const members = require("../src/dynamodbMembers");
 
 test("DynamoDB workspace service validates names and verified Firebase identities", () => {
   assert.equal(workspaces.normalizeWorkspaceName("  My   Business  "), "My Business");
@@ -232,4 +233,63 @@ test("S3 object keys are generated under tenant prefixes and never use display f
     customerId: "customer_a",
     messageId: "message_a"
   }), { statusCode: 400 });
+});
+
+
+test("DynamoDB workspace context requires active workspace membership", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      if (command.input.Key.SK === "WORKSPACE") {
+        return { Item: { PK: "ORG#workspace_1", SK: "WORKSPACE", organizationId: "workspace_1", status: "active", createdBy: "owner_1" } };
+      }
+      return { Item: { PK: "ORG#workspace_1", SK: "MEMBER#user_1", uid: "user_1", role: "agent", status: "active" } };
+    }
+  });
+  try {
+    const context = await members.getWorkspaceContext({ uid: "user_1" }, "workspace_1");
+    assert.equal(context.id, "workspace_1");
+    assert.equal(context.role, "agent");
+    await assert.rejects(members.getWorkspaceContext({}, "workspace_1"), { statusCode: 401 });
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+  }
+});
+
+test("DynamoDB member role changes atomically update membership and reverse pointer", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  const commands = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "GetCommand") {
+        return { Item: { uid: "agent_1", role: "agent", status: "active" } };
+      }
+      return {};
+    }
+  });
+  try {
+    const result = await members.updateWorkspaceMemberRole(
+      { id: "workspace_1", createdBy: "owner_1" },
+      { uid: "owner_1", role: "owner" },
+      { uid: "agent_1", role: "admin" }
+    );
+    assert.deepEqual(result, { uid: "agent_1", role: "admin" });
+    const transaction = commands.find(command => command.constructor.name === "TransactWriteCommand");
+    assert.equal(transaction.input.TransactItems.length, 2);
+    assert.deepEqual(transaction.input.TransactItems.map(item => item.Update.Key), [
+      { PK: "ORG#workspace_1", SK: "MEMBER#agent_1" },
+      { PK: "USER#agent_1", SK: "ORG#workspace_1" }
+    ]);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+  }
 });
