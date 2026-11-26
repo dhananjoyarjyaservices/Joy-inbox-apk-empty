@@ -363,7 +363,7 @@ async function handleWhatsAppTemplates(event) {
   catch (error) { return jsonResponse(event, error.statusCode || 400, { error: error.message }); }
   // Resolve the ID against this WABA before changing or deleting anything.
   const lookupUrl = new URL(collectionUrl.toString());
-  lookupUrl.searchParams.set("fields", "id,name,language,status");
+  lookupUrl.searchParams.set("fields", "id,name,language,status,category");
   lookupUrl.searchParams.set("name", identity.templateName);
   lookupUrl.searchParams.set("limit", "100");
   const lookupResponse = await fetch(lookupUrl.toString(), { headers });
@@ -378,6 +378,9 @@ async function handleWhatsAppTemplates(event) {
   });
 
   if (method === "PUT") {
+    if (String(ownedTemplate.category || "").toUpperCase() === "AUTHENTICATION") {
+      return jsonResponse(event, 400, { error: "Authentication templates use Meta's fixed OTP content and cannot be edited with the generic template editor. Delete and recreate the template instead." });
+    }
     if (body.name !== undefined || body.language !== undefined || body.allowCategoryChange !== undefined) {
       return jsonResponse(event, 400, { error: "Template updates may change only category and/or components." });
     }
