@@ -272,6 +272,48 @@ async function getSignedMediaUrl(storagePath) {
   return { url, expiresAt };
 }
 
+async function uploadWhatsAppTemplateMedia(buffer, mimeType, filename, credentials, appId = process.env.META_APP_ID) {
+  const accessToken = credentials?.accessToken;
+  const normalizedType = validateMedia(mimeType, buffer?.length, MAX_UPLOAD_BYTES);
+  validateMediaContent(normalizedType, buffer);
+  if (!/^\\d{5,32}$/.test(String(appId || "")) || !accessToken) {
+    throw new Error("Meta app ID or WhatsApp access token is not configured.");
+  }
+  if (!["image/jpeg", "image/png", "video/mp4", "application/pdf"].includes(normalizedType)) {
+    throw new Error("Template media headers support JPEG, PNG, MP4 or PDF files.");
+  }
+  const safeFilename = String(filename || "template-media").split(/[\\\\/]/).pop()
+    .replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 180) || "template-media";
+  const version = GRAPH_API_VERSION;
+  const sessionUrl = new URL(`https://graph.facebook.com/${version}/${appId}/uploads`);
+  sessionUrl.searchParams.set("file_name", safeFilename);
+  sessionUrl.searchParams.set("file_length", String(buffer.length));
+  sessionUrl.searchParams.set("file_type", normalizedType);
+  sessionUrl.searchParams.set("access_token", accessToken);
+  const sessionResponse = await fetch(sessionUrl.toString(), { method: "POST", redirect: "error" });
+  const sessionPayload = await sessionResponse.json().catch(() => ({}));
+  const sessionId = String(sessionPayload.id || "");
+  if (!sessionResponse.ok || !/^upload:[A-Za-z0-9_-]{1,256}$/.test(sessionId)) {
+    const error = new Error(sessionPayload.error?.message || "Meta could not start the template media upload.");
+    error.statusCode = 502;
+    throw error;
+  }
+  const uploadUrl = new URL(`https://graph.facebook.com/${version}/${sessionId}`);
+  const uploadResponse = await fetch(uploadUrl.toString(), {
+    method: "POST",
+    headers: { Authorization: `OAuth ${accessToken}`, file_offset: "0", "Content-Type": "application/octet-stream" },
+    body: buffer,
+    redirect: "error"
+  });
+  const uploadPayload = await uploadResponse.json().catch(() => ({}));
+  if (!uploadResponse.ok || typeof uploadPayload.h !== "string" || !uploadPayload.h || uploadPayload.h.length > 4096) {
+    const error = new Error(uploadPayload.error?.message || "Meta could not finish the template media upload.");
+    error.statusCode = 502;
+    throw error;
+  }
+  return { handle: uploadPayload.h, mimeType: normalizedType, filename: safeFilename, size: buffer.length };
+}
+
 async function uploadWhatsAppMedia(buffer, mimeType, filename, credentials) {
   const accessToken = credentials?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = credentials?.phoneNumberId || process.env.PHONE_NUMBER_ID;
@@ -383,6 +425,7 @@ module.exports = {
   getSignedMediaUrl,
   saveMessageMedia,
   uploadWhatsAppMedia,
+  uploadWhatsAppTemplateMedia,
   validateMedia,
   validateMediaContent,
   fetchWhatsAppMediaForProxy
