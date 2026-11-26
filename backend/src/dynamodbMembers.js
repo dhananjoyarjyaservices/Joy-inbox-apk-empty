@@ -33,7 +33,36 @@ async function getWorkspaceContext(decoded, organizationId) {
   };
 }
 
-function auditRecord(organizationId, actor, action, target, details = {}) {\n  const createdAt = new Date().toISOString();\n  const id = crypto.randomUUID();\n  return {\n    PK: "ORG#" + organizationId,\n    SK: "AUDIT#" + createdAt + "#" + id,\n    id, action,\n    actorUid: String(actor?.uid || ""),\n    actorEmail: String(actor?.email || ""),\n    actorRole: String(actor?.role || ""),\n    targetUid: String(target?.uid || ""),\n    targetEmail: String(target?.email || ""),\n    details, createdAt\n  };\n}\n\nasync function listWorkspaceMemberAudit(organizationId, options = {}) {\n  const limit = options.limit === undefined ? 25 : Number(options.limit);\n  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw httpError("Activity page size must be between 1 and 100.", 400);\n  let exclusiveStartKey;\n  if (options.cursor) {\n    try { exclusiveStartKey = JSON.parse(Buffer.from(options.cursor, "base64url").toString("utf8")); }\n    catch { throw httpError("A valid activity page cursor is required.", 400); }\n    if (!exclusiveStartKey || exclusiveStartKey.PK !== "ORG#" + organizationId || typeof exclusiveStartKey.SK !== "string" || !exclusiveStartKey.SK.startsWith("AUDIT#")) throw httpError("A valid activity page cursor is required.", 400);\n  }\n  const page = await dynamodb.queryPartition("workspaces", organizationId, "ORG#" + organizationId, { limit, sortKeyBeginsWith: "AUDIT#", scanIndexForward: false, exclusiveStartKey });\n  return { events: page.items.map(item => ({ id: item.id, action: item.action, actorUid: item.actorUid || "", actorEmail: item.actorEmail || "", actorRole: item.actorRole || "", targetUid: item.targetUid || "", targetEmail: item.targetEmail || "", details: item.details || {}, createdAt: item.createdAt })), nextCursor: page.lastEvaluatedKey ? Buffer.from(JSON.stringify(page.lastEvaluatedKey)).toString("base64url") : null };\n}\n\nfunction requireManager(actor) {
+function auditRecord(organizationId, actor, action, target, details = {}) {
+  const createdAt = new Date().toISOString();
+  const id = crypto.randomUUID();
+  return {
+    PK: "ORG#" + organizationId,
+    SK: "AUDIT#" + createdAt + "#" + id,
+    id, action,
+    actorUid: String(actor?.uid || ""),
+    actorEmail: String(actor?.email || ""),
+    actorRole: String(actor?.role || ""),
+    targetUid: String(target?.uid || ""),
+    targetEmail: String(target?.email || ""),
+    details, createdAt
+  };
+}
+
+async function listWorkspaceMemberAudit(organizationId, options = {}) {
+  const limit = options.limit === undefined ? 25 : Number(options.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw httpError("Activity page size must be between 1 and 100.", 400);
+  let exclusiveStartKey;
+  if (options.cursor) {
+    try { exclusiveStartKey = JSON.parse(Buffer.from(options.cursor, "base64url").toString("utf8")); }
+    catch { throw httpError("A valid activity page cursor is required.", 400); }
+    if (!exclusiveStartKey || exclusiveStartKey.PK !== "ORG#" + organizationId || typeof exclusiveStartKey.SK !== "string" || !exclusiveStartKey.SK.startsWith("AUDIT#")) throw httpError("A valid activity page cursor is required.", 400);
+  }
+  const page = await dynamodb.queryPartition("workspaces", organizationId, "ORG#" + organizationId, { limit, sortKeyBeginsWith: "AUDIT#", scanIndexForward: false, exclusiveStartKey });
+  return { events: page.items.map(item => ({ id: item.id, action: item.action, actorUid: item.actorUid || "", actorEmail: item.actorEmail || "", actorRole: item.actorRole || "", targetUid: item.targetUid || "", targetEmail: item.targetEmail || "", details: item.details || {}, createdAt: item.createdAt })), nextCursor: page.lastEvaluatedKey ? Buffer.from(JSON.stringify(page.lastEvaluatedKey)).toString("base64url") : null };
+}
+
+function requireManager(actor) {
   if (!actor || !["owner", "admin"].includes(actor.role)) {
     throw httpError("Only organization owners and admins can manage members.", 403);
   }
