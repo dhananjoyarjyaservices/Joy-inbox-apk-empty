@@ -133,6 +133,43 @@ async function getWhatsAppMessagePointer(organizationId, messageId) {
   }, { consistentRead: true });
 }
 
+async function updateWhatsAppMessageStatus(organizationId, messageId, status, statusTimestamp = Date.now()) {
+  const orgId = requireWorkspaceId(organizationId);
+  const normalizedStatus = String(status || "").toLowerCase();
+  const statusRanks = { sent: 1, failed: 1, delivered: 2, read: 3 };
+  if (!Object.prototype.hasOwnProperty.call(statusRanks, normalizedStatus)) {
+    const error = new Error("A supported WhatsApp delivery status is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const timestamp = normalizeTimestamp(statusTimestamp);
+  const pointer = await getWhatsAppMessagePointer(orgId, messageId);
+  if (!pointer || pointer.organizationId !== orgId ||
+      typeof pointer.conversationId !== "string" || !pointer.conversationId ||
+      !Number.isSafeInteger(Number(pointer.timestamp))) return false;
+  const key = dynamodb.messageKey(orgId, pointer.conversationId, Number(pointer.timestamp), messageId);
+  try {
+    await dynamodb.updateItem(
+      "messages",
+      key,
+      "SET #status = :status, statusRank = :rank, statusUpdatedAt = :statusUpdatedAt",
+      {
+        ":status": normalizedStatus,
+        ":rank": statusRanks[normalizedStatus],
+        ":statusUpdatedAt": timestamp
+      },
+      { "#status": "status" },
+      {
+        conditionExpression: "attribute_exists(PK) AND (attribute_not_exists(statusRank) OR statusRank <= :rank)"
+      }
+    );
+    return true;
+  } catch (error) {
+    if (error?.name === "ConditionalCheckFailedException") return false;
+    throw error;
+  }
+}
+
 async function saveIncomingWhatsAppMessage(organizationId, message) {
   const orgId = requireWorkspaceId(organizationId);
   if (!message || typeof message !== "object" || Array.isArray(message)) {
