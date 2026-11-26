@@ -174,6 +174,24 @@ async function queryPartition(kind, organizationId, partitionKey, options = {}) 
   };
 }
 
+async function listUserWorkspacePointers(uid, options = {}) {
+  const userPartition = userWorkspacePartition(uid);
+  const limit = options.limit === undefined ? 50 : Number(options.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    const error = new Error("DynamoDB query limit must be between 1 and 100.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const result = await getDocumentClient().send(new QueryCommand({
+    TableName: getTableName("workspaces"),
+    KeyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
+    ExpressionAttributeValues: { ":pk": userPartition, ":skPrefix": "ORG#" },
+    Limit: limit,
+    ...(options.exclusiveStartKey ? { ExclusiveStartKey: options.exclusiveStartKey } : {})
+  }));
+  return { items: result.Items || [], lastEvaluatedKey: result.LastEvaluatedKey || null };
+}
+
 async function transactWrite(items) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 100) {
     throw new Error("DynamoDB transaction must contain 1–100 operations.");
