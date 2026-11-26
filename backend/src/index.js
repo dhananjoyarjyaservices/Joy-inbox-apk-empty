@@ -2911,7 +2911,7 @@ async function sendTenantTemplate(event) {
   const credentials = await getWhatsAppCredentials(db, organization.id, body.phoneNumberId);
   const version = process.env.GRAPH_API_VERSION || "v26.0";
   const templateUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
-  templateUrl.searchParams.set("fields", "name,status,language,components");
+  templateUrl.searchParams.set("fields", "name,status,language,category,components");
   templateUrl.searchParams.set("name", templateName);
   templateUrl.searchParams.set("limit", "100");
   const templateResponse = await fetch(templateUrl.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
