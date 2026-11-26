@@ -67,4 +67,29 @@ function buildPublicTemplateComponents(approvedTemplate, input = {}) {
   return components;
 }
 
-module.exports = { normalizeTemplateConsent, countTemplatePlaceholders, buildPublicTemplateComponents };
+function buildPublicTemplateListUrl({ version, wabaId, connectedWabaId, limit = 100, cursor = "" }) {
+  const requestedWabaId = String(wabaId || "");
+  const ownedWabaId = String(connectedWabaId || "");
+  const normalizedCursor = typeof cursor === "string" ? cursor.trim() : "";
+  if (!/^[0-9]{5,32}$/.test(requestedWabaId) || !/^[0-9]{5,32}$/.test(ownedWabaId) ||
+      requestedWabaId !== ownedWabaId) {
+    throw httpError("The requested WhatsApp Business Account does not match the connected number.", 403);
+  }
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
+      normalizedCursor.length > 2048 || /[\\u0000-\\u001f\\u007f]/.test(normalizedCursor)) {
+    throw httpError("Template limit must be 1–100 and cursor must be a valid Meta paging cursor.");
+  }
+  const graphVersion = typeof version === "string" && /^v[0-9]+\\.[0-9]+$/.test(version) ? version : "v26.0";
+  const url = new URL(`https://graph.facebook.com/${graphVersion}/${encodeURIComponent(requestedWabaId)}/message_templates`);
+  url.searchParams.set("fields", "id,name,status,language,category,components");
+  url.searchParams.set("limit", String(limit));
+  if (normalizedCursor) url.searchParams.set("after", normalizedCursor);
+  return url;
+}
+
+module.exports = {
+  normalizeTemplateConsent,
+  countTemplatePlaceholders,
+  buildPublicTemplateComponents,
+  buildPublicTemplateListUrl
+};
