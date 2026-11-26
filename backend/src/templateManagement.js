@@ -147,7 +147,7 @@ function normalizeAuthenticationTemplateDefinition(input) {
   if (!NAME_PATTERN.test(name)) throw httpError("Template name must use lowercase letters, numbers and underscores.");
   if (!LANGUAGE_PATTERN.test(language)) throw httpError("Template language code is invalid.");
   const otpType = String(input.otpType || "COPY_CODE").trim().toUpperCase();
-  if (!["COPY_CODE", "ONE_TAP", "ZERO_TAP"].includes(otpType)) throw httpError("OTP button type must be COPY_CODE, ONE_TAP or ZERO_TAP.");
+  if (!["COPY_CODE", "ONE_TAP", "ZERO_TAP", "NO_BUTTONS"].includes(otpType)) throw httpError("OTP type must be COPY_CODE, ONE_TAP, ZERO_TAP or NO_BUTTONS.");
   const addSecurityRecommendation = input.addSecurityRecommendation === undefined ? true : input.addSecurityRecommendation;
   if (typeof addSecurityRecommendation !== "boolean") throw httpError("addSecurityRecommendation must be boolean.");
   const components = [{ type: "BODY", add_security_recommendation: addSecurityRecommendation }];
@@ -209,12 +209,13 @@ function normalizeAuthenticationOtpCode(value) {
   return code;
 }
 
-function buildAuthenticationTemplateSendComponents(code) {
+function buildAuthenticationTemplateSendComponents(code, otpType = "COPY_CODE") {
   const otp = normalizeAuthenticationOtpCode(code);
-  return [
-    { type: "body", parameters: [{ type: "text", text: otp }] },
-    { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: otp }] }
-  ];
+  const components = [{ type: "body", parameters: [{ type: "text", text: otp }] }];
+  if (String(otpType).toUpperCase() !== "NO_BUTTONS") {
+    components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: otp }] });
+  }
+  return components;
 }
 
 function normalizeTemplateMutationIdentity(input) {
