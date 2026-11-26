@@ -53,6 +53,81 @@ test("DynamoDB key builders reject malformed IDs and timestamps", () => {
   assert.throws(() => dynamodb.messageKey("org_a", "conv_a", "not-a-time", "msg_a"), { statusCode: 400 });
 });
 
+
+test("DynamoDB workspace creation writes workspace, owner and reverse pointer atomically", async () => {
+  const previous = {
+    region: process.env.AWS_REGION,
+    workspaces: process.env.DYNAMODB_WORKSPACES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  let captured;
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      captured = command.input;
+      return {};
+    }
+  });
+  try {
+    const created = await workspaces.createWorkspace(
+      { uid: "firebase_user_1" },
+      { name: "Example Shop" },
+      { organizationId: "workspace_1" }
+    );
+    assert.deepEqual(created, {
+      id: "workspace_1",
+      name: "Example Shop",
+      role: "owner",
+      status: "active"
+    });
+    assert.equal(captured.TransactItems.length, 3);
+    const items = captured.TransactItems.map(entry => entry.Put.Item);
+    assert.deepEqual(items.map(item => [item.PK, item.SK]), [
+      ["ORG#workspace_1", "WORKSPACE"],
+      ["ORG#workspace_1", "MEMBER#firebase_user_1"],
+      ["USER#firebase_user_1", "ORG#workspace_1"]
+    ]);
+    assert.ok(captured.TransactItems.every(entry =>
+      entry.Put.ConditionExpression.includes("attribute_not_exists")
+    ));
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (previous.region === undefined) delete process.env.AWS_REGION;
+    else process.env.AWS_REGION = previous.region;
+    if (previous.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE;
+    else process.env.DYNAMODB_WORKSPACES_TABLE = previous.workspaces;
+  }
+});
+
+test("DynamoDB partition queries support safe sort-key prefix filtering", async () => {
+  const previous = {
+    region: process.env.AWS_REGION,
+    workspaces: process.env.DYNAMODB_WORKSPACES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  let captured;
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      captured = command.input;
+      return { Items: [] };
+    }
+  });
+  try {
+    await dynamodb.queryPartition("workspaces", "workspace_1", "ORG#workspace_1", {
+      sortKeyBeginsWith: "MEMBER#"
+    });
+    assert.equal(captured.KeyConditionExpression, "PK = :pk AND begins_with(SK, :skPrefix)");
+    assert.equal(captured.ExpressionAttributeValues[":skPrefix"], "MEMBER#");
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (previous.region === undefined) delete process.env.AWS_REGION;
+    else process.env.AWS_REGION = previous.region;
+    if (previous.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE;
+    else process.env.DYNAMODB_WORKSPACES_TABLE = previous.workspaces;
+  }
+});
+
 test("DynamoDB table names must be configured explicitly", () => {
   const prior = process.env.DYNAMODB_CUSTOMERS_TABLE;
   delete process.env.DYNAMODB_CUSTOMERS_TABLE;
