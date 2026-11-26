@@ -811,7 +811,8 @@ test("DynamoDB WhatsApp delivery status updates the indexed message without stat
     });
     assert.equal(calls[1].input.ExpressionAttributeValues[":status"], "delivered");
     assert.equal(calls[1].input.ExpressionAttributeValues[":rank"], 2);
-    assert.match(calls[1].input.ConditionExpression, /statusRank <= :rank/);
+    assert.match(calls[1].input.ConditionExpression, /statusRank < :rank/);
+    assert.match(calls[1].input.ConditionExpression, /#status = :status AND statusRank = :rank/);
     assert.equal(calls[1].input.ExpressionAttributeValues[":statusUpdatedAt"], 1760000005000);
     await assert.rejects(
       records.updateWhatsAppMessageStatus("workspace_1", "wamid.status:1", "queued"),
