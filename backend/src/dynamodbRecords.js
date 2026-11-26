@@ -282,5 +282,6 @@ module.exports = {
   saveMessage,
   saveIncomingWhatsAppMessage,
   getWhatsAppMessagePointer,
+  updateWhatsAppMessageStatus,
   listMessages
 };
