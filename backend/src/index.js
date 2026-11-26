@@ -4467,6 +4467,12 @@ exports.handler = async (event) => {
   const method = getMethod(event);
   const path = getPath(event);
 
+  // Public liveness probe for API Gateway / load balancer checks. It deliberately
+  // does not initialize Firebase or expose configuration/secrets.
+  if (method === "GET" && (path === "/health" || path.endsWith("/health"))) {
+    return jsonResponse(event, 200, { status: "ok", service: "joy-inbox-api" });
+  }
+
   if (method === "OPTIONS") {
     return emptyResponse(event, 204);
   }
