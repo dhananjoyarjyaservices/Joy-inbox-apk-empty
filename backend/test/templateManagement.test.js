@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const {
   normalizeTemplateComponents,
   normalizeTemplateDefinition,
+  normalizeAuthenticationTemplateDefinition,
   normalizeTemplateMutationIdentity
 } = require("../src/templateManagement");
 
@@ -95,6 +96,62 @@ test("rejects invalid WhatsApp CTA and quick-reply button combinations", () => {
       { type: "URL", text: "More", url: "https://example.org" }
     ] }
   ]), /one URL and one phone/);
+});
+
+test("builds a Meta authentication template with copy-code OTP and optional security settings", () => {
+  const value = normalizeAuthenticationTemplateDefinition({
+    name: "login_otp", language: "en_US", otpType: "COPY_CODE",
+    addSecurityRecommendation: true, codeExpirationMinutes: 10, messageSendTtlSeconds: 300
+  });
+  assert.deepEqual(value, {
+    name: "login_otp", language: "en_US", category: "AUTHENTICATION",
+    message_send_ttl_seconds: 300,
+    components: [
+      { type: "BODY", add_security_recommendation: true },
+      { type: "FOOTER", code_expiration_minutes: 10 },
+      { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "COPY_CODE" }] }
+    ]
+  });
+});
+
+test("builds one-tap OTP templates only with valid supported Android app identities", () => {
+  const value = normalizeAuthenticationTemplateDefinition({
+    name: "login_otp_android", language: "en_US", otpType: "ONE_TAP",
+    supportedApps: [
+      { packageName: "com.example.joyinbox", signatureHash: "K8a/AINcGX7" },
+      { packageName: "com.example.joyinbox.beta", signatureHash: "Abcdef123+/ " .trim() }
+    ]
+  });
+  assert.deepEqual(value.components[1], {
+    type: "BUTTONS", buttons: [{
+      type: "OTP", otp_type: "ONE_TAP",
+      supported_apps: [
+        { package_name: "com.example.joyinbox", signature_hash: "K8a/AINcGX7" },
+        { package_name: "com.example.joyinbox.beta", signature_hash: "Abcdef123+/" }
+      ]
+    }]
+  });
+});
+
+test("rejects invalid OTP modes, expiration, TTL and Android app metadata", () => {
+  const base = { name: "login_otp", language: "en_US" };
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, otpType: "ZERO_TAP" }), /COPY_CODE or ONE_TAP/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, codeExpirationMinutes: 0 }), /1 and 90/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, codeExpirationMinutes: 91 }), /1 and 90/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, messageSendTtlSeconds: 30 }), /60 and 600/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, otpType: "ONE_TAP" }), /1–5 supported Android apps/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({
+    ...base, otpType: "ONE_TAP", supportedApps: [{ packageName: "not a package", signatureHash: "K8a/AINcGX7" }]
+  }), /package name/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({
+    ...base, otpType: "ONE_TAP", supportedApps: [{ packageName: "com.example.app", signatureHash: "short" }]
+  }), /exactly 11/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({
+    ...base, otpType: "ONE_TAP", supportedApps: [
+      { packageName: "com.example.app", signatureHash: "K8a/AINcGX7" },
+      { packageName: "com.example.app", signatureHash: "Abcdef123+/" }
+    ]
+  }), /must be unique/);
 });
 
 test("validates categories, names, locales, and template mutation identity", () => {
