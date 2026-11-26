@@ -99,7 +99,7 @@ const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInte
 const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmSavedFilter, canAccessCrmLead, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { normalizeTemplateConsent, buildPublicTemplateComponents, buildPublicTemplateListUrl } = require("./publicTemplateMessages");
-const { normalizeTemplateDefinition, normalizeTemplateMutationIdentity } = require("./templateManagement");
+const { normalizeTemplateDefinition, normalizeAuthenticationTemplateDefinition, normalizeTemplateMutationIdentity } = require("./templateManagement");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const { listLeadForms, saveLeadForm, deleteLeadForm, listLeadFormSubmissions, getPublicLeadForm, submitPublicLeadForm } = require("./leadForms");
 const {
@@ -325,6 +325,23 @@ async function handleWhatsAppTemplates(event) {
   }
 
   if (method === "POST") {
+    if (String(body.category || "").trim().toUpperCase() === "AUTHENTICATION") {
+      let definition;
+      try { definition = normalizeAuthenticationTemplateDefinition(body); }
+      catch (error) { return jsonResponse(event, error.statusCode || 400, { error: error.message }); }
+      const response = await fetch(collectionUrl.toString(), {
+        method: "POST", headers, body: JSON.stringify(definition)
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !/^[0-9]{5,32}$/.test(String(payload.id || ""))) return jsonResponse(event, 502, {
+        error: payload.error?.message || "Meta did not confirm WhatsApp authentication template creation."
+      });
+      return jsonResponse(event, 201, {
+        success: true, templateId: String(payload.id), status: String(payload.status || "PENDING"),
+        category: "AUTHENTICATION", language: String(payload.language || definition.language),
+        otpType: definition.components.find(item => item.type === "BUTTONS").buttons[0].otp_type
+      });
+    }
     let definition;
     try { definition = normalizeTemplateDefinition(body); }
     catch (error) { return jsonResponse(event, error.statusCode || 400, { error: error.message }); }
