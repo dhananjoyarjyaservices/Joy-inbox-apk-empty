@@ -511,3 +511,11 @@ test("DynamoDB billing plan seat count follows configured catalog agent limits",
   assert.equal(billing.PLAN_SEATS.growth, 5);
   assert.equal(billing.PLAN_SEATS.pro, 10);
 });
+
+
+test("DynamoDB billing exports the handlers wired by the API router", () => {
+  assert.equal(typeof billing.processStripeWebhookEvent, "function");
+  assert.equal(typeof billing.createCheckoutSession, "function");
+  assert.equal(typeof billing.createPortalSession, "function");
+  assert.equal(typeof billing.writeWorkspaceSubscription, "function");
+});
