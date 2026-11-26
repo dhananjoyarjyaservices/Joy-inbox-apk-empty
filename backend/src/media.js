@@ -276,7 +276,7 @@ async function uploadWhatsAppTemplateMedia(buffer, mimeType, filename, credentia
   const accessToken = credentials?.accessToken;
   const normalizedType = validateMedia(mimeType, buffer?.length, MAX_UPLOAD_BYTES);
   validateMediaContent(normalizedType, buffer);
-  if (!/^\\d{5,32}$/.test(String(appId || "")) || !accessToken) {
+  if (!/^\d{5,32}$/.test(String(appId || "")) || !accessToken) {
     throw new Error("Meta app ID or WhatsApp access token is not configured.");
   }
   if (!["image/jpeg", "image/png", "video/mp4", "application/pdf"].includes(normalizedType)) {
