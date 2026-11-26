@@ -65,6 +65,19 @@ async function saveWhatsAppConnection(organizationId, input) {
   return { phoneNumberId: value.phoneNumberId, displayPhoneNumber: value.displayPhoneNumber, verifiedName: value.verifiedName, connected: true };
 }
 
+async function resolvePhoneNumberOrganization(phoneNumberId) {
+  if (!validPhoneNumberId(phoneNumberId)) throw httpError("A valid WhatsApp Phone Number ID is required.", 400);
+  const owner = await dynamodb.getItem("workspaces", phoneOwnerKey(phoneNumberId), { consistentRead: true });
+  if (!owner || owner.status !== "active" || !validId(owner.organizationId)) {
+    throw httpError("No active workspace owns this WhatsApp number.", 404);
+  }
+  const connection = await dynamodb.getItem("workspaces", connectionKey(owner.organizationId, phoneNumberId), { consistentRead: true });
+  if (!connection || connection.connected !== true || connection.organizationId !== owner.organizationId) {
+    throw httpError("The WhatsApp number ownership record is inconsistent.", 409);
+  }
+  return { id: owner.organizationId };
+}
+
 async function getWhatsAppCredentials(organizationId, phoneNumberId) {
   if (!validId(organizationId) || !validPhoneNumberId(phoneNumberId)) throw httpError("A valid organization and phone number ID are required.", 400);
   const [record, owner] = await Promise.all([
@@ -121,4 +134,4 @@ async function listWhatsAppConnections(organizationId) {
   }));
 }
 
-module.exports = { connectionKey, phoneOwnerKey, saveWhatsAppConnection, getWhatsAppCredentials, disconnectWhatsAppConnection, listWhatsAppConnections };
+module.exports = { connectionKey, phoneOwnerKey, saveWhatsAppConnection, resolvePhoneNumberOrganization, getWhatsAppCredentials, disconnectWhatsAppConnection, listWhatsAppConnections };
