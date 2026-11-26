@@ -64,5 +64,5 @@ test("Cognito verifier accepts a correctly signed access token and maps sub to u
 });
 
 test("Cognito verifier rejects expired tokens and Firebase-style tokens", async () => {
-  await assert.rejects(verifyCognitoAccessToken("not.a.jwt"), { statusCode: 503 });
+  await assert.rejects(verifyCognitoAccessToken("not.a.jwt"), { statusCode: 401 });
 });
