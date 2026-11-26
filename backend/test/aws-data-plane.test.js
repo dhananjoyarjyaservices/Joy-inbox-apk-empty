@@ -628,8 +628,8 @@ test("DynamoDB inbound WhatsApp writer atomically stores customer, conversation 
       text: "Hello Joy Inbox"
     });
     assert.equal(saved, true);
-    assert.equal(captured.TransactItems.length, 3);
-    const [customer, conversation, message] = captured.TransactItems;
+    assert.equal(captured.TransactItems.length, 4);
+    const [customer, conversation, message, pointer] = captured.TransactItems;
     assert.equal(customer.Update.Key.PK, "ORG#workspace_1");
     assert.equal(customer.Update.Key.SK, "CUSTOMER#919999999999");
     assert.match(customer.Update.UpdateExpression, /^SET /);
@@ -643,6 +643,12 @@ test("DynamoDB inbound WhatsApp writer atomically stores customer, conversation 
     assert.equal(message.Put.Item.timestamp, timestamp);
     assert.equal(message.Put.Item.text, "Hello Joy Inbox");
     assert.match(message.Put.ConditionExpression, /attribute_not_exists/);
+    assert.equal(pointer.Put.TableName, "JoyInboxCustomers");
+    assert.equal(pointer.Put.Item.PK, "ORG#workspace_1");
+    assert.equal(pointer.Put.Item.SK, "WHATSAPP_MESSAGE#wamid.HBgMOTE5OTk5OTk5OTk5FQIAEhgUM0VC");
+    assert.equal(pointer.Put.Item.conversationId, "919999999999");
+    assert.equal(pointer.Put.Item.timestamp, timestamp);
+    assert.match(pointer.Put.ConditionExpression, /attribute_not_exists/);
   } finally {
     dynamodb.setDocumentClientForTests(null);
     if (prior.region === undefined) delete process.env.AWS_REGION;
