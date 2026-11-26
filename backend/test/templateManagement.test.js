@@ -27,7 +27,7 @@ test("normalizes a supported text template and safe buttons", () => {
   assert.equal(value.category, "UTILITY");
   assert.equal(value.name, "order_update");
   assert.equal(value.allow_category_change, true);
-  assert.deepEqual(value.components[3].buttons.map(button => button.type), ["URL", "QUICK_REPLY"]);
+  assert.deepEqual(value.components[3].buttons.map(button => button.type), ["URL", "PHONE_NUMBER"]);
 });
 
 test("requires a body and rejects duplicate or unsupported components", () => {
