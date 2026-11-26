@@ -534,3 +534,63 @@ test("DynamoDB WhatsApp connection keys isolate tenant credentials from global p
   assert.equal(typeof whatsapp.disconnectWhatsAppConnection, "function");
   assert.equal(typeof whatsapp.listWhatsAppConnections, "function");
 });
+
+
+test("DynamoDB WhatsApp phone ownership resolver verifies both global owner and tenant connection", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  const reads = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      reads.push(command.input.Key);
+      if (command.constructor.name !== "GetCommand") return {};
+      if (command.input.Key.PK === "PHONE#123456789") {
+        return { Item: { PK: "PHONE#123456789", SK: "CONNECTION", organizationId: "workspace_1", status: "active" } };
+      }
+      return { Item: { PK: "ORG#workspace_1", SK: "WHATSAPP#PHONE#123456789", organizationId: "workspace_1", phoneNumberId: "123456789", connected: true } };
+    }
+  });
+  try {
+    assert.deepEqual(await whatsapp.resolvePhoneNumberOrganization("123456789"), { id: "workspace_1" });
+    assert.deepEqual(reads, [
+      { PK: "PHONE#123456789", SK: "CONNECTION" },
+      { PK: "ORG#workspace_1", SK: "WHATSAPP#PHONE#123456789" }
+    ]);
+    await assert.rejects(whatsapp.resolvePhoneNumberOrganization("bad"), { statusCode: 400 });
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+  }
+});
+
+test("DynamoDB WhatsApp connection save uses one transaction and prevents cross-tenant phone takeover", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  let transaction;
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      if (command.constructor.name === "TransactWriteCommand") transaction = command.input;
+      return {};
+    }
+  });
+  try {
+    const saved = await whatsapp.saveWhatsAppConnection("workspace_1", {
+      phoneNumberId: "123456789", accessToken: "EAA123456789abcdef", wabaId: "987654321",
+      registrationPin: "123456"
+    });
+    assert.equal(saved.connected, true);
+    assert.equal(transaction.TransactItems.length, 2);
+    assert.equal(transaction.TransactItems[0].Put.Item.entityType, "WHATSAPP_CONNECTION");
+    assert.match(transaction.TransactItems[1].Put.ConditionExpression, /organizationId = :org/);
+    assert.match(transaction.TransactItems[1].Put.ConditionExpression, /#status = :disconnected/);
+    assert.equal(transaction.TransactItems[0].Put.Item.accessToken.includes("EAA123456789abcdef"), false);
+    assert.equal(transaction.TransactItems[0].Put.Item.registrationPin, transaction.TransactItems[0].Put.Item.registrationPin);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+  }
+});
