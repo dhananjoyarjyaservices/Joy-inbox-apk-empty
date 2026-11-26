@@ -1230,7 +1230,7 @@ export default function TenantInbox() {
     }
     const variables = templateVariablesText.split("\n").map(value => value.trim()).filter(Boolean);
     const headerVariables = templateHeaderVariablesText.split("\n").map(value => value.trim()).filter(Boolean);
-    const authOtpType = String(selectedTemplate?.components?.flatMap(item => item.type === "BUTTONS" ? (item.buttons || []) : []).find(button => button.type === "OTP")?.otp_type || "COPY_CODE").toUpperCase();
+    const authOtpType = String(chosen.components.flatMap(item => item.type === "BUTTONS" ? (item.buttons || []) : []).find(button => button.type === "OTP")?.otp_type || "COPY_CODE").toUpperCase();
     const authHasButton = authOtpType !== "NO_BUTTONS";
     const buttonVariables = isAuthenticationTemplate ? (authHasButton ? variables : []) : templateButtonVariablesText.split("\n").map(value => value.trim()).filter(Boolean);
     if (variables.length !== bodyRequired || headerVariables.length !== headerRequired || buttonVariables.length !== (isAuthenticationTemplate ? (authHasButton ? 1 : 0) : buttons.length)) {
