@@ -37,6 +37,7 @@ const {
 } = require("./media");
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
+const { createWorkspace, listWorkspaces } = require("./dynamodbWorkspaces");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -987,7 +988,12 @@ async function handleWhatsAppConnect(event) {
 
 async function handleOrganizations(event) {
   const decoded = await authenticateUser(event);
+  const useDynamoDb = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
   if (getMethod(event) === "GET") {
+    if (useDynamoDb) {
+      const page = await listWorkspaces(decoded, { limit: 100 });
+      return jsonResponse(event, 200, { organizations: page.organizations, nextCursor: page.nextCursor });
+    }
     const organizations = await listOrganizations(getDb(), decoded);
     return jsonResponse(event, 200, { organizations });
   }
@@ -997,7 +1003,9 @@ async function handleOrganizations(event) {
   } catch {
     return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
   }
-  const organization = await createOrganization(getDb(), decoded, body);
+  const organization = useDynamoDb
+    ? await createWorkspace(decoded, body)
+    : await createOrganization(getDb(), decoded, body);
   return jsonResponse(event, 201, { organization });
 }
 
