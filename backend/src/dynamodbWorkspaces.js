@@ -48,7 +48,10 @@ async function createWorkspace(decoded, input, options = {}) {
     createdAt: now,
     updatedAt: now,
     plan: "free",
-    activeSeatCount: 1
+    subscriptionStatus: "inactive",
+    seatLimit: 1,
+    activeSeatCount: 1,
+    trialUsed: false
   };
   const membership = {
     ...dynamodb.membershipKey(organizationId, uid),
