@@ -76,10 +76,10 @@ function buildPublicTemplateListUrl({ version, wabaId, connectedWabaId, limit = 
     throw httpError("The requested WhatsApp Business Account does not match the connected number.", 403);
   }
   if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
-      normalizedCursor.length > 2048 || /[\\u0000-\\u001f\\u007f]/.test(normalizedCursor)) {
+      normalizedCursor.length > 2048 || normalizedCursor.split("").some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
     throw httpError("Template limit must be 1–100 and cursor must be a valid Meta paging cursor.");
   }
-  const graphVersion = typeof version === "string" && /^v[0-9]+\\.[0-9]+$/.test(version) ? version : "v26.0";
+  const graphVersion = typeof version === "string" && /^v[0-9]+[.][0-9]+$/.test(version) ? version : "v26.0";
   const url = new URL(`https://graph.facebook.com/${graphVersion}/${encodeURIComponent(requestedWabaId)}/message_templates`);
   url.searchParams.set("fields", "id,name,status,language,category,components");
   url.searchParams.set("limit", String(limit));
