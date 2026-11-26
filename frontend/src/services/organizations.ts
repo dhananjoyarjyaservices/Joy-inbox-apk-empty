@@ -151,8 +151,11 @@ export async function uploadWhatsAppTemplateMedia(input: {
 }
 export async function createWhatsAppTemplate(input: {
   organizationId: string; phoneNumberId: string; wabaId: string;
-  name: string; language: string; category: "UTILITY" | "MARKETING";
-  components: WhatsAppTemplateDraftComponent[]; allowCategoryChange?: boolean;
+  name: string; language: string; category: "UTILITY" | "MARKETING" | "AUTHENTICATION";
+  components?: WhatsAppTemplateDraftComponent[]; allowCategoryChange?: boolean;
+  otpType?: "COPY_CODE" | "ONE_TAP"; addSecurityRecommendation?: boolean;
+  codeExpirationMinutes?: number; messageSendTtlSeconds?: number;
+  supportedApps?: Array<{ packageName: string; signatureHash: string }>;
 }) {
   return request("/whatsapp/templates", "POST", input);
 }
