@@ -13,7 +13,7 @@ const TEMPLATE_ID_PATTERN = /^[0-9]{5,32}$/;
 const CATEGORIES = new Set(["UTILITY", "MARKETING"]);
 
 function countPlaceholders(value) {
-  const indexes = [...String(value || "").matchAll(/\\{\\{\\s*(\\d+)\\s*\\}\\}/g)].map(match => Number(match[1]));
+  const indexes = [...String(value || "").matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map(match => Number(match[1]));
   return indexes.length ? Math.max(...indexes) : 0;
 }
 
