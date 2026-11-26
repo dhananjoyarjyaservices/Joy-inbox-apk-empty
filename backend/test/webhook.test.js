@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { saveTenantIncomingMessage, verifyWebhook, isValidMetaWebhookPayload, getWebhookProcessingStatusCode } = require("../src/webhook");
+const { saveTenantIncomingMessage, verifyWebhook, isValidMetaWebhookPayload, getWebhookProcessingStatusCode, processDynamoWhatsAppStatuses, processDynamoWebhookPayload } = require("../src/webhook");
+const dynamodb = require("../src/dynamodb");
 const { handler } = require("../src/index");
 
 function createRef(path, id = path.split("/").pop()) {
@@ -203,4 +204,76 @@ test("HTTP Meta webhook route rejects an invalid signature before processing pay
   });
   assert.equal(response.statusCode, 401);
   assert.match(response.body, /invalid webhook signature/i);
+});
+
+
+test("DynamoDB webhook status path resolves the owning workspace and updates the indexed message", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    workspaces: process.env.DYNAMODB_WORKSPACES_TABLE,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  const calls = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      calls.push(command);
+      if (command.constructor.name === "GetCommand") {
+        const key = command.input.Key;
+        if (key.PK === "PHONE#123456789012" && key.SK === "CONNECTION") {
+          return { Item: { organizationId: "workspace_1", status: "active" } };
+        }
+        if (key.PK === "ORG#workspace_1" && key.SK === "WHATSAPP#PHONE#123456789012") {
+          return { Item: { organizationId: "workspace_1", connected: true } };
+        }
+        if (key.SK === "WHATSAPP_MESSAGE#wamid.webhook.status") {
+          return { Item: {
+            organizationId: "workspace_1",
+            conversationId: "919999999999",
+            timestamp: 1760000000000
+          } };
+        }
+      }
+      if (command.constructor.name === "UpdateCommand") return { Attributes: { status: "delivered" } };
+      throw new Error("Unexpected DynamoDB command: " + command.constructor.name);
+    }
+  });
+  try {
+    const result = await processDynamoWhatsAppStatuses("123456789012", [{
+      id: "wamid.webhook.status",
+      status: "delivered",
+      timestamp: "1760000010"
+    }]);
+    assert.deepEqual(result, [{ messageId: "wamid.webhook.status", status: "delivered", updated: true }]);
+    const update = calls.find(command => command.constructor.name === "UpdateCommand");
+    assert.equal(update.input.TableName, "JoyInboxMessages");
+    assert.equal(update.input.ExpressionAttributeValues[":status"], "delivered");
+    assert.equal(update.input.ExpressionAttributeValues[":statusUpdatedAt"], 1760000010000);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE; else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+    if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE; else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
+  }
+});
+
+test("DynamoDB webhook mode refuses to acknowledge inbound messages until compliance workflows are migrated", async () => {
+  await assert.rejects(
+    processDynamoWebhookPayload({
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{
+        field: "messages",
+        value: {
+          metadata: { phone_number_id: "123456789012" },
+          messages: [{ id: "wamid.inbound", from: "919999999999", type: "text", text: { body: "STOP" } }]
+        }
+      }] }]
+    }),
+    { statusCode: 503, retryable: true }
+  );
 });
