@@ -963,3 +963,53 @@ test("DynamoDB campaign consent stores only a tenant-scoped phone hash and suppo
     if (prior.hashKey === undefined) delete process.env.CAMPAIGN_SUPPRESSION_HASH_KEY; else process.env.CAMPAIGN_SUPPRESSION_HASH_KEY = prior.hashKey;
   }
 });
+
+
+test("DynamoDB inbound usage is idempotent and increments the correct tenant period", async () => {
+  const usage = require("../src/dynamodbUsage");
+  const prior = {
+    region: process.env.AWS_REGION,
+    workspaces: process.env.DYNAMODB_WORKSPACES_TABLE,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  const calls = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      calls.push(command);
+      if (command.constructor.name === "GetCommand") {
+        return { Item: {
+          status: "active",
+          subscriptionStatus: "active",
+          plan: "lite",
+          currentPeriodStart: "2026-01-01T00:00:00.000Z",
+          currentPeriodEnd: "2027-01-01T00:00:00.000Z"
+        } };
+      }
+      if (command.constructor.name === "TransactWriteCommand") return {};
+      throw new Error("Unexpected DynamoDB command: " + command.constructor.name);
+    }
+  });
+  try {
+    const result = await usage.recordInboundMessageUsage(
+      "workspace_1", "wamid.usage.once", new Date("2026-03-10T12:00:00.000Z")
+    );
+    assert.equal(result.recorded, true);
+    const transaction = calls.find(command => command.constructor.name === "TransactWriteCommand");
+    assert.ok(transaction);
+    const [marker, counter] = transaction.input.TransactItems;
+    assert.equal(marker.Put.TableName, "JoyInboxCustomers");
+    assert.equal(marker.Put.Item.PK, "ORG#workspace_1");
+    assert.match(marker.Put.Item.SK, /^INBOUND_USAGE#[a-f0-9]{64}$/);
+    assert.equal(counter.Update.Key.SK, "USAGE#month_1769904000000");
+    assert.match(counter.Update.UpdateExpression, /ADD messagesUsed :one/);
+    assert.equal(counter.Update.ExpressionAttributeValues[":limit"], 10000);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE; else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+  }
+});
