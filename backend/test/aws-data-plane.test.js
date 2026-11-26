@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const dynamodb = require("../src/dynamodb");
 const media = require("../src/s3Media");
 const workspaces = require("../src/dynamodbWorkspaces");
+const records = require("../src/dynamodbRecords");
 
 test("DynamoDB workspace service validates names and verified Firebase identities", () => {
   assert.equal(workspaces.normalizeWorkspaceName("  My   Business  "), "My Business");
@@ -125,6 +126,84 @@ test("DynamoDB partition queries support safe sort-key prefix filtering", async 
     else process.env.AWS_REGION = previous.region;
     if (previous.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE;
     else process.env.DYNAMODB_WORKSPACES_TABLE = previous.workspaces;
+  }
+});
+
+
+test("DynamoDB customer and conversation repositories enforce tenant keys", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  const writes = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      writes.push(command.input);
+      return {};
+    }
+  });
+  try {
+    const customer = await records.saveCustomer("workspace_1", "customer_1", {
+      name: "Customer One",
+      organizationId: "attacker_workspace"
+    });
+    assert.equal(customer.PK, "ORG#workspace_1");
+    assert.equal(customer.organizationId, "workspace_1");
+    assert.equal(customer.SK, "CUSTOMER#customer_1");
+    const conversation = await records.saveConversationSummary("workspace_1", "conversation_1", {
+      status: "open",
+      PK: "ORG#attacker"
+    });
+    assert.equal(conversation.PK, "ORG#workspace_1");
+    assert.equal(conversation.SK, "CONVERSATION#conversation_1");
+    assert.equal(writes.length, 2);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION;
+    else process.env.AWS_REGION = prior.region;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE;
+    else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+  }
+});
+
+test("DynamoDB message repository writes idempotently with validated tenant partition", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  let captured;
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      captured = command.input;
+      return {};
+    }
+  });
+  try {
+    const message = await records.saveMessage("workspace_1", "conversation_1", {
+      id: "provider_message_1",
+      timestamp: 1760000000000,
+      text: "Hello",
+      organizationId: "spoofed_workspace",
+      PK: "ORG#spoofed"
+    });
+    assert.equal(message.PK, "ORG#workspace_1#CONVERSATION#conversation_1");
+    assert.equal(message.organizationId, "workspace_1");
+    assert.equal(message.messageId, "provider_message_1");
+    assert.match(captured.ConditionExpression, /attribute_not_exists/);
+    await assert.rejects(
+      records.saveMessage("workspace_1", "conversation_1", { id: "bad", timestamp: -1 }),
+      { statusCode: 400 }
+    );
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION;
+    else process.env.AWS_REGION = prior.region;
+    if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE;
+    else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
   }
 });
 
