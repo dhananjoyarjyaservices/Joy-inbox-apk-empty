@@ -4,6 +4,13 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const dynamodb = require("../src/dynamodb");
 const media = require("../src/s3Media");
+const workspaces = require("../src/dynamodbWorkspaces");
+
+test("DynamoDB workspace service validates names and verified Firebase identities", () => {
+  assert.equal(workspaces.normalizeWorkspaceName("  My   Business  "), "My Business");
+  assert.throws(() => workspaces.normalizeWorkspaceName("x"), { statusCode: 400 });
+  assert.throws(() => workspaces.createWorkspace({}, { name: "My Business" }), { statusCode: 401 });
+});
 
 test("DynamoDB key builders create workspace-scoped PK/SK values", () => {
   assert.deepEqual(dynamodb.workspaceKey("workspace_1"), { PK: "ORG#workspace_1", SK: "WORKSPACE" });
