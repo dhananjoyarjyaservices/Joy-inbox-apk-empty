@@ -671,3 +671,53 @@ test("DynamoDB inbound WhatsApp writer rejects malformed tenant, message ID and 
     { statusCode: 400 }
   );
 });
+
+
+test("DynamoDB inbound WhatsApp writer treats an existing provider message as an idempotent retry", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  const calls = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      calls.push(command);
+      if (command.constructor.name === "TransactWriteCommand") {
+        const error = new Error("Conditional write already exists");
+        error.name = "TransactionCanceledException";
+        throw error;
+      }
+      if (command.constructor.name === "GetCommand") {
+        assert.equal(command.input.ConsistentRead, true);
+        return { Item: { entityType: "MESSAGE", messageId: "wamid.retry" } };
+      }
+      throw new Error("Unexpected DynamoDB command.");
+    }
+  });
+  try {
+    const saved = await records.saveIncomingWhatsAppMessage("workspace_1", {
+      conversationId: "919999999999",
+      customerId: "919999999999",
+      messageId: "wamid.retry",
+      timestamp: 1760000000000,
+      type: "text",
+      text: "Retry"
+    });
+    assert.equal(saved, false);
+    assert.deepEqual(calls.map(command => command.constructor.name), [
+      "TransactWriteCommand", "GetCommand"
+    ]);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION;
+    else process.env.AWS_REGION = prior.region;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE;
+    else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+    if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE;
+    else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
+  }
+});
