@@ -282,11 +282,42 @@ test("DynamoDB member role changes atomically update membership and reverse poin
     );
     assert.deepEqual(result, { uid: "agent_1", role: "admin" });
     const transaction = commands.find(command => command.constructor.name === "TransactWriteCommand");
-    assert.equal(transaction.input.TransactItems.length, 2);
-    assert.deepEqual(transaction.input.TransactItems.map(item => item.Update.Key), [
+    assert.equal(transaction.input.TransactItems.length, 3);
+    assert.deepEqual(transaction.input.TransactItems.slice(0, 2).map(item => item.Update.Key), [
       { PK: "ORG#workspace_1", SK: "MEMBER#agent_1" },
       { PK: "USER#agent_1", SK: "ORG#workspace_1" }
     ]);
+    assert.equal(transaction.input.TransactItems[2].Put.Item.action, "member.role_changed");
+    assert.equal(transaction.input.TransactItems[2].Put.Item.targetUid, "agent_1");
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+  }
+});
+
+
+test("DynamoDB member audit history is tenant-scoped, newest-first and cursor-paginated", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  let captured;
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      captured = command.input;
+      return { Items: [{ id: "event_1", action: "member.removed", targetUid: "agent_1", createdAt: "2026-11-26T10:00:00.000Z" }], LastEvaluatedKey: { PK: "ORG#workspace_1", SK: "AUDIT#2026-11-26T10:00:00.000Z#event_1" } };
+    }
+  });
+  try {
+    const page = await members.listWorkspaceMemberAudit("workspace_1", { limit: 10 });
+    assert.equal(page.events[0].action, "member.removed");
+    assert.ok(page.nextCursor);
+    assert.equal(captured.ScanIndexForward, false);
+    assert.equal(captured.ExpressionAttributeValues[":skPrefix"], "AUDIT#");
+    await assert.rejects(
+      members.listWorkspaceMemberAudit("workspace_1", { cursor: Buffer.from(JSON.stringify({ PK: "ORG#other", SK: "AUDIT#bad" })).toString("base64url") }),
+      { statusCode: 400 }
+    );
   } finally {
     dynamodb.setDocumentClientForTests(null);
     if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
