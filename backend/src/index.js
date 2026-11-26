@@ -41,6 +41,7 @@ const { createWorkspace, listWorkspaces } = require("./dynamodbWorkspaces");
 const { getWorkspaceContext, listWorkspaceMembers, listWorkspaceMemberAudit, updateWorkspaceMemberRole, removeWorkspaceMember } = require("./dynamodbMembers");
 const { createWorkspaceInvitation, listWorkspaceInvitations, revokeWorkspaceInvitation, acceptWorkspaceInvitation } = require("./dynamodbInvitations");
 const { processStripeWebhookEvent: processDynamoStripeWebhookEvent } = require("./dynamodbBilling");
+const { createCheckoutSession: createDynamoCheckoutSession, createPortalSession: createDynamoPortalSession } = require("./dynamodbBilling");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -3975,40 +3976,54 @@ async function handleTenantBilling(event) {
   const subscriptionRef = organization.ref.collection("billing").doc("subscription");
 
   if (method === "GET") {
+    const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
     const [snapshot, plans] = await Promise.all([
-      subscriptionRef.get(),
+      dynamoMode
+        ? require("./dynamodb").getItem("workspaces", require("./dynamodb").workspaceKey(organization.id), { consistentRead: true })
+        : subscriptionRef.get(),
       Promise.resolve(getConfiguredBillingPlans().map(({ key, name, monthlyPriceInr, annualPriceInr, priceId, annualPriceId, limits }) => ({ key, name, monthlyPriceInr, annualPriceInr, monthlyAvailable: Boolean(priceId), annualAvailable: Boolean(annualPriceId), currency: "INR", intervals: ["month", "year"], limits, trialDays: 7 })))
     ]);
-    const value = snapshot.exists ? snapshot.data() || {} : {};
-    const usage = snapshot.exists ? await getTenantMessageUsage(getDb(), organization.id, value).catch(error => ({ error: error.message })) : null;
+    const exists = dynamoMode ? Boolean(snapshot) : snapshot.exists;
+    const value = exists ? (dynamoMode ? snapshot : snapshot.data() || {}) : {};
+    const usage = exists ? await getTenantMessageUsage(getDb(), organization.id, value).catch(error => ({ error: error.message })) : null;
     const asIso = input => input?.toDate ? input.toDate().toISOString()
-      : input instanceof Date ? input.toISOString() : null;
+      : input instanceof Date ? input.toISOString()
+      : typeof input === "string" && !Number.isNaN(Date.parse(input)) ? new Date(input).toISOString() : null;
     return jsonResponse(event, 200, {
       billingEnabled: plans.length > 0,
       plans,
-      subscription: snapshot.exists ? {
+      subscription: exists ? {
         plan: String(value.plan || value.checkoutPlan || "unknown"),
-         interval: value.interval === "year" || value.billingInterval === "year" || value.checkoutInterval === "year" ? "year" : "month",
-        status: String(value.status || "incomplete"),
+        interval: value.interval === "year" || value.billingInterval === "year" || value.checkoutInterval === "year" ? "year" : "month",
+        status: String(value.subscriptionStatus || value.status || "incomplete"),
         currentPeriodEnd: asIso(value.currentPeriodEnd),
         trialEnd: asIso(value.trialEnd),
         cancelAtPeriodEnd: value.cancelAtPeriodEnd === true,
-         usage
+        usage
       } : null
     });
   }
   if (method !== "POST") return jsonResponse(event, 405, { error: "Method not allowed." });
   if (body.action === "checkout") {
-    const session = await createCheckoutSession({
-      organization,
-      decoded,
-      planKey: String(body.plan || ""),
-      interval: String(body.interval || "month")
-    });
+    const session = process.env.JOY_INBOX_DATA_PLANE === "dynamodb"
+      ? await createDynamoCheckoutSession({
+          organizationId: organization.id,
+          decoded,
+          planKey: String(body.plan || ""),
+          interval: String(body.interval || "month")
+        })
+      : await createCheckoutSession({
+          organization,
+          decoded,
+          planKey: String(body.plan || ""),
+          interval: String(body.interval || "month")
+        });
     return jsonResponse(event, 200, { success: true, checkout: session });
   }
   if (body.action === "portal") {
-    const session = await createPortalSession({ organization });
+    const session = process.env.JOY_INBOX_DATA_PLANE === "dynamodb"
+      ? await createDynamoPortalSession({ organizationId: organization.id })
+      : await createPortalSession({ organization });
     return jsonResponse(event, 200, { success: true, portal: session });
   }
   return jsonResponse(event, 400, { error: "Choose a valid billing action." });
