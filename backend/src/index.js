@@ -2936,7 +2936,9 @@ async function sendTenantTemplate(event) {
   const otpButtons = templateButtons.filter(button => button.type === "OTP");
   const urlButtons = templateButtons.filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
   const isAuthenticationTemplate = String(approvedTemplate.category || "").toUpperCase() === "AUTHENTICATION" || otpButtons.length > 0;
-  const requiredButtonVariables = isAuthenticationTemplate ? 1 : urlButtons.length;
+  const authenticationOtpType = String(otpButtons[0]?.otp_type || "COPY_CODE").toUpperCase();
+  const noAuthenticationButton = isAuthenticationTemplate && authenticationOtpType === "NO_BUTTONS";
+  const requiredButtonVariables = isAuthenticationTemplate ? (noAuthenticationButton ? 0 : 1) : urlButtons.length;
   if (isAuthenticationTemplate && (otpButtons.length !== 1 || urlButtons.length > 0 || headerDefinition || headerMedia)) {
     return jsonResponse(event, 400, { error: "Authentication templates require one OTP button and cannot contain media, text headers or URL buttons." });
   }
@@ -2944,7 +2946,7 @@ async function sendTenantTemplate(event) {
     return jsonResponse(event, 400, { error: `This template needs ${bodyCount} body, ${headerCount} header and ${requiredButtonVariables} button variable(s).` });
   }
   if (isAuthenticationTemplate) {
-    if (bodyCount !== 1 || variables.length !== 1 || variables[0] !== buttonVariables[0]) {
+    if (bodyCount !== 1 || variables.length !== 1 || (!noAuthenticationButton && variables[0] !== buttonVariables[0])) {
       return jsonResponse(event, 400, { error: "Enter the same OTP code once for the message body and OTP button." });
     }
     try { normalizeAuthenticationOtpCode(variables[0]); }
@@ -2985,7 +2987,7 @@ async function sendTenantTemplate(event) {
     components.push({ type: "header", parameters: [{ type: mediaType, [mediaType]: { id: uploaded.mediaId } }] });
   }
   if (isAuthenticationTemplate) {
-    components.push(...buildAuthenticationTemplateSendComponents(variables[0]));
+    components.push(...buildAuthenticationTemplateSendComponents(variables[0], authenticationOtpType));
   } else {
     if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text: text.trim() })) });
     if (variables.length) components.push({ type: "body", parameters: variables.map(text => ({ type: "text", text: text.trim() })) });
