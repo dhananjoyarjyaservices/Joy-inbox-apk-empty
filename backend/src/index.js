@@ -39,6 +39,7 @@ const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
 const { createWorkspace, listWorkspaces } = require("./dynamodbWorkspaces");
 const { getWorkspaceContext, listWorkspaceMembers, listWorkspaceMemberAudit, updateWorkspaceMemberRole, removeWorkspaceMember } = require("./dynamodbMembers");
+const { createWorkspaceInvitation, listWorkspaceInvitations, revokeWorkspaceInvitation } = require("./dynamodbInvitations");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -3891,6 +3892,21 @@ async function handleTenantInvitations(event) {
   }
   const params = event.queryStringParameters || {};
   const organizationId = method === "GET" ? params.organizationId : body.organizationId;
+  if (process.env.JOY_INBOX_DATA_PLANE === "dynamodb") {
+    const organization = await getWorkspaceContext(decoded, organizationId);
+    requirePermission(organization, "members:manage");
+    const actor = { uid: decoded.uid, email: decoded.email || "", role: organization.role };
+    if (method === "GET") {
+      const invitations = await listWorkspaceInvitations(organization.id, params.limit);
+      return jsonResponse(event, 200, { invitations });
+    }
+    if (method === "POST") {
+      const invitation = await createWorkspaceInvitation(organization, actor, body);
+      return jsonResponse(event, 201, { invitation });
+    }
+    const result = await revokeWorkspaceInvitation(organization.id, actor, body.email);
+    return jsonResponse(event, 200, { invitation: result });
+  }
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "members:manage");
   if (method === "GET") {
