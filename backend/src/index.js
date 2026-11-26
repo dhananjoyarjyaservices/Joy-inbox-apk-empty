@@ -232,15 +232,22 @@ async function handleWhatsAppTemplates(event) {
   const organizationId = event.queryStringParameters?.organizationId;
   const phoneNumberId = event.queryStringParameters?.phoneNumberId;
   const wabaId = event.queryStringParameters?.wabaId;
-  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, organizationId)
+    : await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "chats:read");
   if (typeof phoneNumberId !== "string" || !/^[0-9]{5,32}$/.test(phoneNumberId) || typeof wabaId !== "string" || !/^[0-9]{5,32}$/.test(wabaId)) {
     return jsonResponse(event, 400, { error: "A valid connected phone number and WhatsApp Business Account ID are required." });
   }
-  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  const connections = dynamoMode
+    ? await dynamoWhatsApp.listWhatsAppConnections(organization.id)
+    : await listWhatsAppConnections(getDb(), organization.id);
   const connection = connections.find(item => item.phoneNumberId === phoneNumberId && item.connected);
   if (!connection) return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the workspace." });
-  const credentials = await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
+  const credentials = dynamoMode
+    ? await dynamoWhatsApp.getWhatsAppCredentials(organization.id, phoneNumberId)
+    : await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
   const version = process.env.GRAPH_API_VERSION || "v26.0";
   const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
   url.searchParams.set("fields", "id,name,status,language,category,components");
