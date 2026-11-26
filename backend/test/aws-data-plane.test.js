@@ -460,3 +460,48 @@ test("DynamoDB billing subscription write enforces customer ownership and maps s
     if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
   }
 });
+
+
+test("DynamoDB Stripe webhook persists subscription and marks event processed", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  const commands = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "GetCommand") {
+        return { Item: {
+          PK: "ORG#workspace_1", SK: "WORKSPACE", organizationId: "workspace_1",
+          status: "active", stripeCustomerId: "cus_1", trialUsed: false
+        } };
+      }
+      return {};
+    }
+  });
+  try {
+    const result = await billing.processStripeWebhookEvent({
+      id: "evt_12345678",
+      type: "customer.subscription.updated",
+      data: { object: {
+        id: "sub_12345678", customer: "cus_1", status: "active",
+        metadata: { organizationId: "workspace_1" },
+        items: { data: [{ price: { id: "price_lite" } }] }
+      } }
+    }, {
+      plans: [{ key: "lite", priceId: "price_lite", annualPriceId: "" }],
+      now: () => new Date("2026-11-26T10:00:00.000Z")
+    });
+    assert.equal(result.processed, true);
+    assert.equal(result.eventId, "evt_12345678");
+    assert.ok(commands.some(command => command.constructor.name === "PutCommand" && command.input.Item.entityType === "STRIPE_EVENT"));
+    const updates = commands.filter(command => command.constructor.name === "UpdateCommand");
+    assert.equal(updates.length, 2);
+    assert.ok(updates.some(command => command.input.UpdateExpression.includes("stripeSubscriptionId")));
+    assert.ok(updates.some(command => command.input.UpdateExpression.includes("processedAt")));
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+  }
+});
