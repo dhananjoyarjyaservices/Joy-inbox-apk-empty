@@ -96,6 +96,15 @@ Reply buttons (1–3 buttons):
 
 Lists support 1–10 sections and up to 10 rows total. CTA URL messages use type: "cta_url", displayText and an HTTPS url. Carousel messages support 2–10 cards with HTTPS image URLs, card text and HTTPS CTA links. Button/row IDs must be unique; text lengths follow WhatsApp limits. Meta's Cloud API availability and account eligibility for each interactive format still apply.
 
+## List approved WhatsApp templates
+
+```http
+GET /public/v1/templates?phoneNumberId=123456789012345&wabaId=123456789012345&limit=50
+Authorization: Bearer YOUR_JOY_API_KEY
+```
+
+Required scope: `templates:read`. The requested WABA ID must match the WABA ID stored for the connected phone number in the API key's workspace. The limit must be 1–100 (default 100). When the response has `pagination.nextCursor`, pass that opaque value as the `cursor` query parameter to retrieve the next Meta page. The API forwards it to Meta as the `after` cursor and returns `hasNext` to indicate whether another page exists.
+
 ## Send an approved WhatsApp template
 
 Use POST /public/v1/messages with messages:write. The API derives the WABA ID from the connected number, checks that the template is approved for the requested language, validates body/header/URL-button variable counts and sends through the connected WhatsApp number. Text-header templates are supported by this endpoint; templates with image/video/document headers must use the media template flow in the workspace inbox.
