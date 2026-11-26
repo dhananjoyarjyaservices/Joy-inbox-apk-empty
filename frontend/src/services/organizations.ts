@@ -153,7 +153,7 @@ export async function createWhatsAppTemplate(input: {
   organizationId: string; phoneNumberId: string; wabaId: string;
   name: string; language: string; category: "UTILITY" | "MARKETING" | "AUTHENTICATION";
   components?: WhatsAppTemplateDraftComponent[]; allowCategoryChange?: boolean;
-  otpType?: "COPY_CODE" | "ONE_TAP"; addSecurityRecommendation?: boolean;
+  otpType?: "COPY_CODE" | "ONE_TAP" | "ZERO_TAP"; zeroTapTermsAccepted?: boolean; addSecurityRecommendation?: boolean;
   codeExpirationMinutes?: number; messageSendTtlSeconds?: number;
   supportedApps?: Array<{ packageName: string; signatureHash: string }>;
 }) {
