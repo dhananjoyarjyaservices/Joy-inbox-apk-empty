@@ -48,7 +48,14 @@ jobs:
           VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
 
-      - name: Upload frontend preview build artifact\n        uses: actions/upload-artifact@v4\n        with:\n          name: joy-inbox-frontend-preview\n          path: frontend/dist\n          retention-days: 7\n\n      - name: Deploy preview to Cloudflare Pages
+      - name: Upload frontend preview build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: joy-inbox-frontend-preview
+          path: frontend/dist
+          retention-days: 7
+
+      - name: Deploy preview to Cloudflare Pages
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
