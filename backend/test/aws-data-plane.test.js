@@ -505,3 +505,9 @@ test("DynamoDB Stripe webhook persists subscription and marks event processed", 
     if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
   }
 });
+
+
+test("DynamoDB billing plan seat count follows configured catalog agent limits", () => {
+  assert.equal(billing.PLAN_SEATS.growth, 5);
+  assert.equal(billing.PLAN_SEATS.pro, 10);
+});
