@@ -120,6 +120,61 @@ async function listMessages(organizationId, conversationId, options = {}) {
 }
 
 
+async function saveOutgoingWhatsAppMessage(organizationId, conversationId, message) {
+  const orgId = requireWorkspaceId(organizationId);
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    const error = new Error("An outgoing WhatsApp message is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const messageId = String(message.messageId || message.id || "");
+  const timestamp = normalizeTimestamp(message.timestamp);
+  const itemKey = dynamodb.messageKey(orgId, conversationId, timestamp, messageId);
+  const pointerKey = { PK: "ORG#" + orgId, SK: "WHATSAPP_MESSAGE#" + messageId };
+  const now = new Date().toISOString();
+  const record = {
+    ...itemKey,
+    entityType: "MESSAGE",
+    organizationId: orgId,
+    conversationId,
+    messageId,
+    timestamp,
+    direction: "outgoing",
+    type: String(message.type || "text").slice(0, 40),
+    text: typeof message.text === "string" ? message.text.slice(0, 4096) : "",
+    status: "sent",
+    statusRank: 1,
+    source: "whatsapp",
+    ...(message.phoneNumberId ? { phoneNumberId: String(message.phoneNumberId).slice(0, 32) } : {}),
+    createdAt: now
+  };
+  await dynamodb.transactWrite([
+    {
+      Put: {
+        TableName: dynamodb.getTableName("messages"),
+        Item: record,
+        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+      }
+    },
+    {
+      Put: {
+        TableName: dynamodb.getTableName("customers"),
+        Item: {
+          ...pointerKey,
+          entityType: "WHATSAPP_MESSAGE_POINTER",
+          organizationId: orgId,
+          conversationId,
+          messageId,
+          timestamp,
+          updatedAt: now
+        },
+        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+      }
+    }
+  ]);
+  return record;
+}
+
 async function getWhatsAppMessagePointer(organizationId, messageId) {
   const orgId = requireWorkspaceId(organizationId);
   if (typeof messageId !== "string" || !/^[A-Za-z0-9._:-]{1,256}$/.test(messageId)) {
@@ -281,6 +336,7 @@ module.exports = {
   listConversationSummaries,
   saveMessage,
   saveIncomingWhatsAppMessage,
+  saveOutgoingWhatsAppMessage,
   getWhatsAppMessagePointer,
   updateWhatsAppMessageStatus,
   listMessages
