@@ -52,11 +52,13 @@ function buildPublicTemplateComponents(approvedTemplate, input = {}) {
   const urlButtons = allButtons.filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
   const isAuthenticationTemplate = String(approvedTemplate.category || "").toUpperCase() === "AUTHENTICATION" || otpButtons.length > 0;
   if (isAuthenticationTemplate) {
+    const noButtons = otpButtons.length === 1 && String(otpButtons[0].otp_type || "").toUpperCase() === "NO_BUTTONS";
     if (otpButtons.length !== 1 || header || headerVariables.length || urlButtons.length ||
-        bodyCount !== 1 || variables.length !== 1 || buttonVariables.length !== 1 || variables[0] !== buttonVariables[0]) {
+        bodyCount !== 1 || variables.length !== 1 || buttonVariables.length !== (noButtons ? 0 : 1) ||
+        (!noButtons && variables[0] !== buttonVariables[0])) {
       throw httpError("Authentication templates require one matching OTP body and button code and cannot contain headers or URL buttons.");
     }
-    return buildAuthenticationTemplateSendComponents(normalizeAuthenticationOtpCode(variables[0]));
+    return buildAuthenticationTemplateSendComponents(normalizeAuthenticationOtpCode(variables[0]), otpButtons[0].otp_type);
   }
   if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length) {
     throw httpError(`Template variables do not match the approved definition (body ${bodyCount}, header ${headerCount}, URL buttons ${urlButtons.length}).`);
