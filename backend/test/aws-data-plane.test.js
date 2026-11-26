@@ -91,6 +91,10 @@ test("DynamoDB workspace creation writes workspace, owner and reverse pointer at
       ["ORG#workspace_1", "MEMBER#firebase_user_1"],
       ["USER#firebase_user_1", "ORG#workspace_1"]
     ]);
+    assert.equal(items[0].subscriptionStatus, "inactive");
+    assert.equal(items[0].seatLimit, 1);
+    assert.equal(items[0].activeSeatCount, 1);
+    assert.equal(items[0].trialUsed, false);
     assert.ok(captured.TransactItems.every(entry =>
       entry.Put.ConditionExpression.includes("attribute_not_exists")
     ));
