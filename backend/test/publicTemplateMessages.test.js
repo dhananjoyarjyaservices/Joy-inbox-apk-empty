@@ -71,8 +71,8 @@ test("builds authentication OTP body and button parameters for public template s
     variables: ["123456"], buttonVariables: ["654321"]
   }), /matching OTP/);
   assert.throws(() => buildPublicTemplateComponents(authTemplate, {
-    variables: ["12 34"], buttonVariables: ["12 34"]
-  }), /4–15/);
+    variables: ["1234567890123456"], buttonVariables: ["1234567890123456"]
+  }), /1–15/);
 });
 
 test("requires and normalizes explicit past template opt-in evidence", () => {
