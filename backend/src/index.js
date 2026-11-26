@@ -39,7 +39,7 @@ const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
 const { createWorkspace, listWorkspaces } = require("./dynamodbWorkspaces");
 const { getWorkspaceContext, listWorkspaceMembers, listWorkspaceMemberAudit, updateWorkspaceMemberRole, removeWorkspaceMember } = require("./dynamodbMembers");
-const { createWorkspaceInvitation, listWorkspaceInvitations, revokeWorkspaceInvitation } = require("./dynamodbInvitations");
+const { createWorkspaceInvitation, listWorkspaceInvitations, revokeWorkspaceInvitation, acceptWorkspaceInvitation } = require("./dynamodbInvitations");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -3932,7 +3932,9 @@ async function handleAcceptTenantInvitation(event) {
   try { body = parseBody(event); }
   catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   const decoded = await authenticateUser(event);
-  const result = await acceptTenantInvitation(getDb(), body.organizationId, body.token, decoded);
+  const result = process.env.JOY_INBOX_DATA_PLANE === "dynamodb"
+    ? await acceptWorkspaceInvitation(body.organizationId, body.token, decoded)
+    : await acceptTenantInvitation(getDb(), body.organizationId, body.token, decoded);
   return jsonResponse(event, 200, { success: true, membership: result });
 }
 
