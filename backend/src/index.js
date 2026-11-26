@@ -38,7 +38,7 @@ const {
 const { OWNER_UID } = require("./owner");
 const { createOrganization, listOrganizations } = require("./organizations");
 const { createWorkspace, listWorkspaces } = require("./dynamodbWorkspaces");
-const { getWorkspaceContext, listWorkspaceMembers, updateWorkspaceMemberRole, removeWorkspaceMember } = require("./dynamodbMembers");
+const { getWorkspaceContext, listWorkspaceMembers, listWorkspaceMemberAudit, updateWorkspaceMemberRole, removeWorkspaceMember } = require("./dynamodbMembers");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -1013,6 +1013,16 @@ async function handleOrganizations(event) {
 async function handleOrganizationMemberAudit(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
+  if (process.env.JOY_INBOX_DATA_PLANE === "dynamodb") {
+    const organization = await getWorkspaceContext(decoded, organizationId);
+    requirePermission(organization, "members:manage");
+    const query = event.queryStringParameters || {};
+    const page = await listWorkspaceMemberAudit(organization.id, {
+      limit: query.limit === undefined ? 25 : Number(query.limit),
+      cursor: query.cursor || ""
+    });
+    return jsonResponse(event, 200, page);
+  }
   const organization = await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "members:manage");
   const page = await listOrganizationMemberAudit(getDb(), organization, {
