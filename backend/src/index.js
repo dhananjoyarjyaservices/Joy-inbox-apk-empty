@@ -3987,7 +3987,7 @@ async function handleTenantBilling(event) {
     ]);
     const exists = dynamoMode ? Boolean(snapshot) : snapshot.exists;
     const value = exists ? (dynamoMode ? snapshot : snapshot.data() || {}) : {};
-    const usage = exists ? await getTenantMessageUsage(getDb(), organization.id, value).catch(error => ({ error: error.message })) : null;
+    const usage = exists && !dynamoMode ? await getTenantMessageUsage(getDb(), organization.id, value).catch(error => ({ error: error.message })) : null;
     const asIso = input => input?.toDate ? input.toDate().toISOString()
       : input instanceof Date ? input.toISOString()
       : typeof input === "string" && !Number.isNaN(Date.parse(input)) ? new Date(input).toISOString() : null;
