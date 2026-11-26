@@ -137,7 +137,7 @@ test("builds one-tap OTP templates only with valid supported Android app identit
 
 test("rejects invalid OTP modes, expiration, TTL and Android app metadata", () => {
   const base = { name: "login_otp", language: "en_US" };
-  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, otpType: "INVALID" }), /COPY_CODE, ONE_TAP or ZERO_TAP/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, otpType: "INVALID" }), /COPY_CODE, ONE_TAP, ZERO_TAP or NO_BUTTONS/);
   assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, otpType: "ZERO_TAP", supportedApps: [{ packageName: "com.example.app", signatureHash: "K8a/AINcGX7" }] }), /explicit acceptance/);
   const zeroTap = normalizeAuthenticationTemplateDefinition({
     ...base, otpType: "ZERO_TAP", zeroTapTermsAccepted: true,
@@ -179,6 +179,9 @@ test("validates OTP codes and builds Meta authentication send components", () =>
   assert.deepEqual(buildAuthenticationTemplateSendComponents("123456"), [
     { type: "body", parameters: [{ type: "text", text: "123456" }] },
     { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "123456" }] }
+  ]);
+  assert.deepEqual(buildAuthenticationTemplateSendComponents("123456", "NO_BUTTONS"), [
+    { type: "body", parameters: [{ type: "text", text: "123456" }] }
   ]);
 });
 
