@@ -3069,7 +3069,7 @@ async function retryTenantFailedTemplate(event) {
   if (!/^\d{5,32}$/.test(wabaId)) return jsonResponse(event, 400, { error: "The original WABA ID is missing. Please send this template again manually." });
   const version = process.env.GRAPH_API_VERSION || "v26.0";
   const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
-  url.searchParams.set("fields", "name,status,language,components");
+  url.searchParams.set("fields", "name,status,language,category,components");
   url.searchParams.set("name", templateName);
   const check = await fetch(url.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
   const checkPayload = await check.json().catch(() => ({}));
@@ -3081,8 +3081,18 @@ async function retryTenantFailedTemplate(event) {
   const bodyCount = count(templateComponents.find(item => item.type === "BODY")?.text);
   const header = templateComponents.find(item => item.type === "HEADER");
   const headerCount = header?.format === "TEXT" ? count(header.text) : 0;
-  const urlButtons = templateComponents.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button,index)=>({...button,index})) : []).filter(button=>button.type==="URL" && String(button.url||"").includes("{{"));
-  if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length || (["IMAGE","VIDEO","DOCUMENT"].includes(header?.format) && (!mediaId || !mediaFormat))) {
+  const templateButtons = templateComponents.flatMap(item => item.type === "BUTTONS" && Array.isArray(item.buttons) ? item.buttons.map((button,index)=>({...button,index})) : []);
+  const otpButtons = templateButtons.filter(button => button.type === "OTP");
+  const urlButtons = templateButtons.filter(button=>button.type==="URL" && String(button.url||"").includes("{{"));
+  const isAuthenticationTemplate = String(approved.category || "").toUpperCase() === "AUTHENTICATION" || otpButtons.length > 0;
+  if (isAuthenticationTemplate) {
+    if (otpButtons.length !== 1 || header || mediaId || bodyCount !== 1 || variables.length !== 1 ||
+        buttonVariables.length !== 1 || variables[0] !== buttonVariables[0] || headerVariables.length) {
+      return jsonResponse(event, 400, { error: "The original authentication OTP parameters are incomplete. Please send the template again manually." });
+    }
+    try { normalizeAuthenticationOtpCode(variables[0]); }
+    catch (error) { return jsonResponse(event, 400, { error: error.message }); }
+  } else if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length || (["IMAGE","VIDEO","DOCUMENT"].includes(header?.format) && (!mediaId || !mediaFormat))) {
     return jsonResponse(event, 400, { error: "The original template parameters are incomplete. Please send the template again manually." });
   }
   const clientMessageId = getClientMessageId(body.clientMessageId);
@@ -3095,10 +3105,14 @@ async function retryTenantFailedTemplate(event) {
   if (claim.state === "pending") return jsonResponse(event, 202, { success: true, pending: true, clientMessageId });
   const quotaReservation = await reserveTenantMessageQuota(db, organization.id, clientMessageId, claim.ref);
   const components = [];
-  if (mediaId) components.push({ type: "header", parameters: [{ type: mediaFormat, [mediaFormat]: { id: mediaId } }] });
-  if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text })) });
-  if (variables.length) components.push({ type: "body", parameters: variables.map(text => ({ type: "text", text })) });
-  buttonVariables.forEach((value,index)=>components.push({ type:"button",sub_type:"url",index:String(urlButtons[index].index),parameters:[{type:"text",text:value}]}));
+  if (isAuthenticationTemplate) {
+    components.push(...buildAuthenticationTemplateSendComponents(variables[0]));
+  } else {
+    if (mediaId) components.push({ type: "header", parameters: [{ type: mediaFormat, [mediaFormat]: { id: mediaId } }] });
+    if (headerVariables.length) components.push({ type: "header", parameters: headerVariables.map(text => ({ type: "text", text })) });
+    if (variables.length) components.push({ type: "body", parameters: variables.map(text => ({ type: "text", text })) });
+    buttonVariables.forEach((value,index)=>components.push({ type:"button",sub_type:"url",index:String(urlButtons[index].index),parameters:[{type:"text",text:value}]}));
+  }
   try {
     const response = await fetch(`https://graph.facebook.com/${version}/${encodeURIComponent(phoneNumberId)}/messages`, {
       method:"POST", headers:{Authorization:`Bearer ${credentials.accessToken}`,"Content-Type":"application/json"},
