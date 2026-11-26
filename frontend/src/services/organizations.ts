@@ -130,6 +130,7 @@ export interface WhatsAppTemplate {
 }
 export type WhatsAppTemplateDraftComponent =
   | { type: "HEADER"; format: "TEXT"; text: string; example?: { header_text: string[] } }
+  | { type: "HEADER"; format: "IMAGE" | "VIDEO" | "DOCUMENT"; example: { header_handle: string[] } }
   | { type: "BODY"; text: string; example?: { body_text: string[][] } }
   | { type: "FOOTER"; text: string }
   | { type: "BUTTONS"; buttons: Array<
@@ -141,6 +142,12 @@ export async function listWhatsAppTemplates(organizationId: string, phoneNumberI
   const query = new URLSearchParams({ organizationId, phoneNumberId, wabaId });
   const result = await request(`/whatsapp/templates?${query.toString()}`);
   return Array.isArray(result.templates) ? result.templates : [];
+}
+export async function uploadWhatsAppTemplateMedia(input: {
+  organizationId: string; phoneNumberId: string; wabaId: string;
+  format: "IMAGE" | "VIDEO" | "DOCUMENT"; mimeType: string; filename: string; base64: string;
+}): Promise<{ handle: string; format: string; mimeType: string; filename: string; size: number }> {
+  return request("/whatsapp/templates/media", "POST", input);
 }
 export async function createWhatsAppTemplate(input: {
   organizationId: string; phoneNumberId: string; wabaId: string;
