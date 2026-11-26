@@ -40,6 +40,7 @@ const { createOrganization, listOrganizations } = require("./organizations");
 const { createWorkspace, listWorkspaces } = require("./dynamodbWorkspaces");
 const { getWorkspaceContext, listWorkspaceMembers, listWorkspaceMemberAudit, updateWorkspaceMemberRole, removeWorkspaceMember } = require("./dynamodbMembers");
 const { createWorkspaceInvitation, listWorkspaceInvitations, revokeWorkspaceInvitation, acceptWorkspaceInvitation } = require("./dynamodbInvitations");
+const { processStripeWebhookEvent: processDynamoStripeWebhookEvent } = require("./dynamodbBilling");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -4023,7 +4024,9 @@ async function handleStripeBillingWebhook(event) {
   try { payload = JSON.parse(rawBody.toString("utf8")); }
   catch { return textResponse(event, 400, "Invalid Stripe event JSON."); }
   try {
-    const result = await processStripeWebhookEvent(getDb(), payload);
+    const result = process.env.JOY_INBOX_DATA_PLANE === "dynamodb"
+      ? await processDynamoStripeWebhookEvent(payload)
+      : await processStripeWebhookEvent(getDb(), payload);
     if (result.inProgress) return textResponse(event, 503, "Stripe event is already being processed.");
     return textResponse(event, 200, "EVENT_RECEIVED");
   } catch (error) {
