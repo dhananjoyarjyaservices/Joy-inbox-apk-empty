@@ -197,6 +197,73 @@ async function processStripeWebhookEvent(event, dependencies = {}) {
   }
 }
 
+
+async function createCheckoutSession({ organizationId, decoded, planKey, interval = "month", env = process.env, plans }) {
+  const id = validateOrganizationId(organizationId);
+  const billing = require("./billing");
+  const configuredPlans = plans || billing.getConfiguredBillingPlans(env);
+  const plan = configuredPlans.find(item => item.key === planKey);
+  if (!plan) throw billingError("This billing plan is not configured.", 400);
+  if (!["month", "year"].includes(interval)) throw billingError("Choose monthly or annual billing.", 400);
+  const selectedPriceId = interval === "year" ? plan.annualPriceId : plan.priceId;
+  if (!selectedPriceId) throw billingError("This billing interval is not configured for the selected plan.", 400);
+  if (!billing.validReturnUrl(env.BILLING_SUCCESS_URL) || !billing.validReturnUrl(env.BILLING_CANCEL_URL)) {
+    throw billingError("BILLING_SUCCESS_URL and BILLING_CANCEL_URL must be configured as trusted HTTPS URLs.", 503);
+  }
+  const key = dynamodb.workspaceKey(id);
+  const workspace = await dynamodb.getItem("workspaces", key, { consistentRead: true });
+  if (!workspace || workspace.status !== "active") throw billingError("Workspace was not found.", 404);
+  if (["active", "trialing", "past_due", "unpaid"].includes(String(workspace.subscriptionStatus || ""))) {
+    throw billingError("This workspace already has a subscription. Use the Stripe Billing Portal to change or update it.", 409);
+  }
+  const customerId = String(workspace.stripeCustomerId || "");
+  const trialAlreadyUsed = workspace.trialUsed === true || Boolean(workspace.trialUsedAt);
+  const params = {
+    mode: "subscription",
+    "line_items[0][price]": selectedPriceId,
+    "line_items[0][quantity]": "1",
+    success_url: env.BILLING_SUCCESS_URL,
+    cancel_url: env.BILLING_CANCEL_URL,
+    client_reference_id: id,
+    "metadata[organizationId]": id,
+    "metadata[planKey]": plan.key,
+    "metadata[billingInterval]": interval,
+    "subscription_data[metadata][organizationId]": id,
+    "subscription_data[metadata][planKey]": plan.key,
+    "subscription_data[metadata][billingInterval]": interval
+  };
+  if (!trialAlreadyUsed) params["subscription_data[trial_period_days]"] = String(billing.TRIAL_PERIOD_DAYS);
+  if (customerId) params.customer = customerId;
+  else if (decoded?.email) params.customer_email = String(decoded.email).slice(0, 254);
+  const session = await billing.stripeRequest("/checkout/sessions", {
+    method: "POST",
+    params,
+    idempotencyKey: `joy-inbox-${id}-${plan.key}-${interval}-${Math.floor(Date.now() / 300000)}`
+  });
+  if (!session.id || !billing.validReturnUrl(session.url)) throw billingError("Stripe did not return a valid checkout URL.", 502);
+  await dynamodb.updateItem("workspaces", key,
+    "SET checkoutSessionId = :session, checkoutPlan = :plan, checkoutInterval = :interval, checkoutStartedAt = :now, updatedAt = :now",
+    { ":session": session.id, ":plan": plan.key, ":interval": interval, ":now": new Date().toISOString() });
+  return { id: session.id, url: session.url, plan: plan.key, interval, trialDays: trialAlreadyUsed ? 0 : billing.TRIAL_PERIOD_DAYS };
+}
+
+async function createPortalSession({ organizationId, env = process.env }) {
+  const id = validateOrganizationId(organizationId);
+  const billing = require("./billing");
+  if (!billing.validReturnUrl(env.BILLING_PORTAL_RETURN_URL)) {
+    throw billingError("BILLING_PORTAL_RETURN_URL must be configured as a trusted HTTPS URL.", 503);
+  }
+  const workspace = await dynamodb.getItem("workspaces", dynamodb.workspaceKey(id), { consistentRead: true });
+  const customerId = String(workspace?.stripeCustomerId || "");
+  if (!customerId) throw billingError("No Stripe customer is linked to this workspace yet.", 404);
+  const session = await billing.stripeRequest("/billing_portal/sessions", {
+    method: "POST",
+    params: { customer: customerId, return_url: env.BILLING_PORTAL_RETURN_URL }
+  });
+  if (!session.url || !billing.validReturnUrl(session.url)) throw billingError("Stripe did not return a valid billing portal URL.", 502);
+  return { url: session.url };
+}
+
 module.exports = {
   EVENT_LEASE_SECONDS,
   PLAN_SEATS,
