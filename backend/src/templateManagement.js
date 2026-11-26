@@ -57,7 +57,7 @@ function normalizeTemplateComponents(input) {
           throw httpError("A media header requires one uploaded Meta header_handle.");
         }
         const handle = cleanText(handles[0], "Header media handle", 4096);
-        if (/[\\x00-\\x1f\\x7f]/.test(handle)) throw httpError("Header media handle contains invalid characters.");
+        if (/[\x00-\x1f\x7f]/.test(handle)) throw httpError("Header media handle contains invalid characters.");
         result.push({ type: "HEADER", format: item.format, example: { header_handle: [handle] } });
       } else {
         throw httpError("Header format must be TEXT, IMAGE, VIDEO or DOCUMENT.");
