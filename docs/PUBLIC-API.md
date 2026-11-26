@@ -105,6 +105,16 @@ Authorization: Bearer YOUR_JOY_API_KEY
 
 Required scope: `templates:read`. The requested WABA ID must match the WABA ID stored for the connected phone number in the API key's workspace. The limit must be 1–100 (default 100). When the response has `pagination.nextCursor`, pass that opaque value as the `cursor` query parameter to retrieve the next Meta page. The API forwards it to Meta as the `after` cursor and returns `hasNext` to indicate whether another page exists.
 
+### Upload template header media
+
+```http
+POST /whatsapp/templates/media
+Authorization: Bearer FIREBASE_ID_TOKEN
+Content-Type: application/json
+```
+
+Requires Owner/Admin WhatsApp management permission and a connected number/WABA pair. Send `organizationId`, `phoneNumberId`, `wabaId`, `format` (`IMAGE`, `VIDEO` or `DOCUMENT`), `mimeType`, `filename` and base64-encoded `base64`. Supported files are JPEG/PNG, MP4 and PDF, up to 3 MB. The backend verifies tenant/WABA ownership and uploads the bytes to Meta's Resumable Upload API. The response contains a Meta `handle`; pass it in the template HEADER component's `example.header_handle` array. Joy Inbox does not persist these uploaded bytes.
+
 ### Create a template
 
 ```http
@@ -113,7 +123,7 @@ Authorization: Bearer FIREBASE_ID_TOKEN
 Content-Type: application/json
 ```
 
-Requires an Owner or Admin workspace member with WhatsApp management permission. Include `organizationId`, `phoneNumberId`, `wabaId`, `name`, `language`, `category` and `components`. The API verifies that the WABA ID is the one stored for the connected number before calling Meta. The current builder supports UTILITY and MARKETING text templates with BODY, optional text HEADER/FOOTER, and up to three QUICK_REPLY, HTTPS URL or PHONE_NUMBER buttons. Variable text headers/bodies require examples. Media headers, AUTHENTICATION templates, dynamic URL buttons, carousel and Flow components are not supported by this endpoint yet. Meta reviews created templates; a successful create response commonly has PENDING status and does not mean approval.
+Requires an Owner or Admin workspace member with WhatsApp management permission. Include `organizationId`, `phoneNumberId`, `wabaId`, `name`, `language`, `category` and `components`. The API verifies that the WABA ID is the one stored for the connected number before calling Meta. The current builder supports UTILITY and MARKETING templates with BODY, optional text/media HEADER and text FOOTER, and supported QUICK_REPLY, HTTPS URL or PHONE_NUMBER buttons. Media headers require a previously uploaded Meta header handle. Variable text headers/bodies require examples. Media headers, AUTHENTICATION templates, dynamic URL buttons, carousel and Flow components are not supported by this endpoint yet. Meta reviews created templates; a successful create response commonly has PENDING status and does not mean approval.
 
 ### Update a template
 
