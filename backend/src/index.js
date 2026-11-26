@@ -2941,7 +2941,7 @@ async function sendTenantTemplate(event) {
     return jsonResponse(event, 400, { error: `This template needs ${bodyCount} body, ${headerCount} header and ${requiredButtonVariables} button variable(s).` });
   }
   if (isAuthenticationTemplate) {
-    if (variables.length !== 1 || variables[0] !== buttonVariables[0]) {
+    if (bodyCount !== 1 || variables.length !== 1 || variables[0] !== buttonVariables[0]) {
       return jsonResponse(event, 400, { error: "Enter the same OTP code once for the message body and OTP button." });
     }
     try { normalizeAuthenticationOtpCode(variables[0]); }
