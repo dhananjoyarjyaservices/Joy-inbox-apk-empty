@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeTemplateConsent, countTemplatePlaceholders, buildPublicTemplateComponents } = require("../src/publicTemplateMessages");
+const { normalizeTemplateConsent, countTemplatePlaceholders, buildPublicTemplateComponents, buildPublicTemplateListUrl } = require("../src/publicTemplateMessages");
 
 const approved = {
   status: "APPROVED",
@@ -72,4 +72,34 @@ test("requires and normalizes explicit past template opt-in evidence", () => {
   assert.throws(() => normalizeTemplateConsent({
     optedIn: true, consentAt: "2026-11-24T10:00:00.000Z", consentSource: "x"
   }, now), { statusCode: 400 });
+});
+
+
+test("builds a Meta template URL with limit and forwards the after cursor", () => {
+  const url = buildPublicTemplateListUrl({
+    version: "v26.0",
+    wabaId: "123456789012345",
+    connectedWabaId: "123456789012345",
+    limit: 40,
+    cursor: "opaque_cursor-123="
+  });
+  assert.equal(url.pathname, "/v26.0/123456789012345/message_templates");
+  assert.equal(url.searchParams.get("limit"), "40");
+  assert.equal(url.searchParams.get("after"), "opaque_cursor-123=");
+  assert.equal(url.searchParams.get("fields"), "id,name,status,language,category,components");
+});
+
+test("rejects a WABA ID that does not belong to the connected phone number", () => {
+  assert.throws(() => buildPublicTemplateListUrl({
+    version: "v26.0", wabaId: "123456789012345",
+    connectedWabaId: "999999999999999", limit: 100
+  }), { statusCode: 403 });
+});
+
+test("validates public template pagination bounds and cursor controls", () => {
+  const base = { version: "v26.0", wabaId: "123456789012345", connectedWabaId: "123456789012345" };
+  assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 0 }), { statusCode: 400 });
+  assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 101 }), { statusCode: 400 });
+  assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 10, cursor: "bad\\ncursor" }), { statusCode: 400 });
+  assert.throws(() => buildPublicTemplateListUrl({ ...base, limit: 10, cursor: "x".repeat(2049) }), { statusCode: 400 });
 });
