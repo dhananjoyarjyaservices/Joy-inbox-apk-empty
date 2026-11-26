@@ -15,6 +15,24 @@ test("DynamoDB key builders create workspace-scoped PK/SK values", () => {
   });
 });
 
+test("DynamoDB key builders support user workspace pointers and conversation summaries", () => {
+  assert.equal(dynamodb.userWorkspacePartition("user_1"), "USER#user_1");
+  assert.deepEqual(dynamodb.userWorkspacePointerKey("user_1", "workspace_1"), {
+    PK: "USER#user_1",
+    SK: "ORG#workspace_1"
+  });
+  assert.deepEqual(dynamodb.conversationSummaryKey("workspace_1", "conversation_1"), {
+    PK: "ORG#workspace_1",
+    SK: "CONVERSATION#conversation_1"
+  });
+});
+
+test("DynamoDB user and conversation key builders reject malformed IDs", () => {
+  assert.throws(() => dynamodb.userWorkspacePartition("../user"), { statusCode: 400 });
+  assert.throws(() => dynamodb.userWorkspacePointerKey("user_1", "../workspace"), { statusCode: 400 });
+  assert.throws(() => dynamodb.conversationSummaryKey("workspace_1", "bad/conversation"), { statusCode: 400 });
+});
+
 test("DynamoDB tenant partition guard rejects cross-tenant and unscoped partitions", () => {
   assert.doesNotThrow(() => dynamodb.assertTenantPartition("org_a", "ORG#org_a"));
   assert.doesNotThrow(() => dynamodb.assertTenantPartition("org_a", "ORG#org_a#CONVERSATION#c1"));
