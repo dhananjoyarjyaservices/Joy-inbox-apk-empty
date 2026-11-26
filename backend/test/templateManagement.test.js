@@ -158,9 +158,9 @@ test("rejects invalid OTP modes, expiration, TTL and Android app metadata", () =
 
 test("validates OTP codes and builds Meta authentication send components", () => {
   assert.equal(normalizeAuthenticationOtpCode("A1b2C3"), "A1b2C3");
-  assert.throws(() => normalizeAuthenticationOtpCode("123"), /4–15/);
-  assert.throws(() => normalizeAuthenticationOtpCode("1234567890123456"), /4–15/);
-  assert.throws(() => normalizeAuthenticationOtpCode("12 34"), /4–15/);
+  assert.equal(normalizeAuthenticationOtpCode("7"), "7");
+  assert.throws(() => normalizeAuthenticationOtpCode("1234567890123456"), /1–15/);
+  assert.throws(() => normalizeAuthenticationOtpCode("12 34"), /1–15/);
   assert.deepEqual(buildAuthenticationTemplateSendComponents("123456"), [
     { type: "body", parameters: [{ type: "text", text: "123456" }] },
     { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "123456" }] }
