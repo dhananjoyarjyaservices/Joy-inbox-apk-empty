@@ -137,7 +137,22 @@ test("builds one-tap OTP templates only with valid supported Android app identit
 
 test("rejects invalid OTP modes, expiration, TTL and Android app metadata", () => {
   const base = { name: "login_otp", language: "en_US" };
-  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, otpType: "ZERO_TAP" }), /COPY_CODE or ONE_TAP/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, otpType: "INVALID" }), /COPY_CODE, ONE_TAP or ZERO_TAP/);
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, otpType: "ZERO_TAP", supportedApps: [{ packageName: "com.example.app", signatureHash: "K8a/AINcGX7" }] }), /explicit acceptance/);
+  const zeroTap = normalizeAuthenticationTemplateDefinition({
+    ...base, otpType: "ZERO_TAP", zeroTapTermsAccepted: true,
+    supportedApps: [{ packageName: "com.example.app", signatureHash: "K8a/AINcGX7" }]
+  });
+  assert.deepEqual(zeroTap.components[1], {
+    type: "BUTTONS", buttons: [{
+      type: "OTP", otp_type: "ZERO_TAP", zero_tap_terms_accepted: true,
+      supported_apps: [{ package_name: "com.example.app", signature_hash: "K8a/AINcGX7" }]
+    }]
+  });
+  assert.throws(() => normalizeAuthenticationTemplateDefinition({
+    ...base, otpType: "ZERO_TAP", zeroTapTermsAccepted: true,
+    supportedApps: [{ packageName: "bad package", signatureHash: "K8a/AINcGX7" }]
+  }), /package name/);
   assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, codeExpirationMinutes: 0 }), /1 and 90/);
   assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, codeExpirationMinutes: 91 }), /1 and 90/);
   assert.throws(() => normalizeAuthenticationTemplateDefinition({ ...base, messageSendTtlSeconds: 30 }), /60 and 600/);
