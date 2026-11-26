@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("crypto");
 const dynamodb = require("./dynamodb");
 
 function httpError(message, statusCode) {
@@ -32,7 +33,7 @@ async function getWorkspaceContext(decoded, organizationId) {
   };
 }
 
-function requireManager(actor) {
+function auditRecord(organizationId, actor, action, target, details = {}) {\n  const createdAt = new Date().toISOString();\n  const id = crypto.randomUUID();\n  return {\n    PK: "ORG#" + organizationId,\n    SK: "AUDIT#" + createdAt + "#" + id,\n    id, action,\n    actorUid: String(actor?.uid || ""),\n    actorEmail: String(actor?.email || ""),\n    actorRole: String(actor?.role || ""),\n    targetUid: String(target?.uid || ""),\n    targetEmail: String(target?.email || ""),\n    details, createdAt\n  };\n}\n\nasync function listWorkspaceMemberAudit(organizationId, options = {}) {\n  const limit = options.limit === undefined ? 25 : Number(options.limit);\n  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw httpError("Activity page size must be between 1 and 100.", 400);\n  let exclusiveStartKey;\n  if (options.cursor) {\n    try { exclusiveStartKey = JSON.parse(Buffer.from(options.cursor, "base64url").toString("utf8")); }\n    catch { throw httpError("A valid activity page cursor is required.", 400); }\n    if (!exclusiveStartKey || exclusiveStartKey.PK !== "ORG#" + organizationId || typeof exclusiveStartKey.SK !== "string" || !exclusiveStartKey.SK.startsWith("AUDIT#")) throw httpError("A valid activity page cursor is required.", 400);\n  }\n  const page = await dynamodb.queryPartition("workspaces", organizationId, "ORG#" + organizationId, { limit, sortKeyBeginsWith: "AUDIT#", scanIndexForward: false, exclusiveStartKey });\n  return { events: page.items.map(item => ({ id: item.id, action: item.action, actorUid: item.actorUid || "", actorEmail: item.actorEmail || "", actorRole: item.actorRole || "", targetUid: item.targetUid || "", targetEmail: item.targetEmail || "", details: item.details || {}, createdAt: item.createdAt })), nextCursor: page.lastEvaluatedKey ? Buffer.from(JSON.stringify(page.lastEvaluatedKey)).toString("base64url") : null };\n}\n\nfunction requireManager(actor) {
   if (!actor || !["owner", "admin"].includes(actor.role)) {
     throw httpError("Only organization owners and admins can manage members.", 403);
   }
@@ -94,6 +95,7 @@ async function updateWorkspaceMemberRole(organization, actor, input) {
     throw httpError("Only the organization owner can change another admin's role.", 403);
   }
   const now = new Date().toISOString();
+  const audit = auditRecord(organization.id, actor, "member.role_changed", { uid, email: existing.email }, { role });
   await dynamodb.transactWrite([
     { Update: {
       TableName: dynamodb.getTableName("workspaces"),
@@ -110,7 +112,8 @@ async function updateWorkspaceMemberRole(organization, actor, input) {
       ConditionExpression: "#status = :active",
       ExpressionAttributeNames: { "#role": "role", "#status": "status" },
       ExpressionAttributeValues: { ":role": role, ":now": now, ":active": "active" }
-    } }
+    } },
+    { Put: { TableName: dynamodb.getTableName("workspaces"), Item: audit, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } }
   ]);
   return { uid, role };
 }
@@ -131,6 +134,7 @@ async function removeWorkspaceMember(organization, actor, input) {
     throw httpError("Only the organization owner can remove another admin.", 403);
   }
   const now = new Date().toISOString();
+  const audit = auditRecord(organization.id, actor, "member.removed", { uid, email: existing.email });
   await dynamodb.transactWrite([
     { Update: {
       TableName: dynamodb.getTableName("workspaces"),
@@ -147,7 +151,8 @@ async function removeWorkspaceMember(organization, actor, input) {
       ConditionExpression: "#status = :active",
       ExpressionAttributeNames: { "#status": "status" },
       ExpressionAttributeValues: { ":removed": "removed", ":now": now, ":active": "active" }
-    } }
+    } },
+    { Put: { TableName: dynamodb.getTableName("workspaces"), Item: audit, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } }
   ]);
   return { uid, status: "removed" };
 }
@@ -155,6 +160,7 @@ async function removeWorkspaceMember(organization, actor, input) {
 module.exports = {
   getWorkspaceContext,
   listWorkspaceMembers,
+  listWorkspaceMemberAudit,
   updateWorkspaceMemberRole,
   removeWorkspaceMember
 };
