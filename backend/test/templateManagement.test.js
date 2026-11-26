@@ -18,7 +18,7 @@ test("normalizes a supported text template and safe buttons", () => {
       { type: "BODY", text: "Hi {{1}}, your order {{2}} is ready.", example: { body_text: [["Asha", "A-100"]] } },
       { type: "FOOTER", text: "Thank you" },
       { type: "BUTTONS", buttons: [
-        { type: "URL", text: "Track order", url: "https://example.com/orders/{{1}}" },
+        { type: "URL", text: "Track order", url: "https://example.com/orders" },
         { type: "QUICK_REPLY", text: "Need help" }
       ] }
     ],
@@ -48,6 +48,16 @@ test("rejects unsupported media headers and unsafe button URLs", () => {
     { type: "BODY", text: "Hello" },
     { type: "BUTTONS", buttons: [{ type: "URL", text: "Open", url: "http://example.com" }] }
   ]), /HTTPS/);
+  assert.throws(() => normalizeTemplateComponents([
+    { type: "BODY", text: "Hello {{1}}" }
+  ]), /example rows/);
+  assert.throws(() => normalizeTemplateComponents([
+    { type: "BODY", text: "Hello {{1}} and {{2}}", example: { body_text: [["only one"]] } }
+  ]), /one sample per placeholder/);
+  assert.throws(() => normalizeTemplateComponents([
+    { type: "BODY", text: "Hello" },
+    { type: "BUTTONS", buttons: [{ type: "URL", text: "Open", url: "https://example.com/{{1}}" }] }
+  ]), /Dynamic URL/);
 });
 
 test("validates categories, names, locales, and template mutation identity", () => {
@@ -61,6 +71,10 @@ test("validates categories, names, locales, and template mutation identity", () 
   }), /language/);
   assert.throws(() => normalizeTemplateDefinition({
     name: "hello", language: "en_US", category: "UNKNOWN",
+    components: [{ type: "BODY", text: "Hello" }]
+  }), /category/);
+  assert.throws(() => normalizeTemplateDefinition({
+    name: "hello", language: "en_US", category: "AUTHENTICATION",
     components: [{ type: "BODY", text: "Hello" }]
   }), /category/);
   assert.deepEqual(normalizeTemplateMutationIdentity({
