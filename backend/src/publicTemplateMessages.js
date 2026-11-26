@@ -1,5 +1,7 @@
 "use strict";
 
+const { normalizeAuthenticationOtpCode, buildAuthenticationTemplateSendComponents } = require("./templateManagement");
+
 function httpError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -41,11 +43,21 @@ function buildPublicTemplateComponents(approvedTemplate, input = {}) {
     throw httpError("Media-header templates must use the media template send flow.");
   }
   const headerCount = header?.format === "TEXT" ? countTemplatePlaceholders(header.text) : 0;
-  const urlButtons = definitions.flatMap(item =>
+  const allButtons = definitions.flatMap(item =>
     item.type === "BUTTONS" && Array.isArray(item.buttons)
       ? item.buttons.map((button, index) => ({ ...button, index }))
       : []
-  ).filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
+  );
+  const otpButtons = allButtons.filter(button => button.type === "OTP");
+  const urlButtons = allButtons.filter(button => button.type === "URL" && String(button.url || "").includes("{{"));
+  const isAuthenticationTemplate = String(approvedTemplate.category || "").toUpperCase() === "AUTHENTICATION" || otpButtons.length > 0;
+  if (isAuthenticationTemplate) {
+    if (otpButtons.length !== 1 || header || headerVariables.length || urlButtons.length ||
+        variables.length !== 1 || buttonVariables.length !== 1 || variables[0] !== buttonVariables[0]) {
+      throw httpError("Authentication templates require one matching OTP body and button code and cannot contain headers or URL buttons.");
+    }
+    return buildAuthenticationTemplateSendComponents(normalizeAuthenticationOtpCode(variables[0]));
+  }
   if (variables.length !== bodyCount || headerVariables.length !== headerCount || buttonVariables.length !== urlButtons.length) {
     throw httpError(`Template variables do not match the approved definition (body ${bodyCount}, header ${headerCount}, URL buttons ${urlButtons.length}).`);
   }
