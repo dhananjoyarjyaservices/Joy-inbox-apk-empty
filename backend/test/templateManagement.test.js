@@ -30,6 +30,26 @@ test("normalizes a supported text template and safe buttons", () => {
   assert.deepEqual(value.components[3].buttons.map(button => button.type), ["URL", "PHONE_NUMBER"]);
 });
 
+test("accepts media header handles and rejects missing or malformed handles", () => {
+  const components = normalizeTemplateComponents([
+    { type: "HEADER", format: "IMAGE", example: { header_handle: ["2:uploaded-media-handle+/="] } },
+    { type: "BODY", text: "Your receipt is attached." }
+  ]);
+  assert.deepEqual(components[0], {
+    type: "HEADER", format: "IMAGE", example: { header_handle: ["2:uploaded-media-handle+/="] }
+  });
+  assert.throws(() => normalizeTemplateComponents([
+    { type: "HEADER", format: "VIDEO" }, { type: "BODY", text: "Hello" }
+  ]), /uploaded Meta header_handle/);
+  assert.throws(() => normalizeTemplateComponents([
+    { type: "HEADER", format: "IMAGE", example: { header_handle: ["bad\\nhandle"] } },
+    { type: "BODY", text: "Hello" }
+  ]), /invalid characters/);
+  assert.throws(() => normalizeTemplateComponents([
+    { type: "HEADER", format: "LOCATION" }, { type: "BODY", text: "Hello" }
+  ]), /Header format/);
+});
+
 test("requires a body and rejects duplicate or unsupported components", () => {
   assert.throws(() => normalizeTemplateComponents([{ type: "FOOTER", text: "Footer" }]), /BODY component/);
   assert.throws(() => normalizeTemplateComponents([
