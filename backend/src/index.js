@@ -98,6 +98,7 @@ const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInte
 const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmSavedFilter, canAccessCrmLead, normalizeCrmLead } = require("./crm");
 const { normalizeInteractiveMessage, buildWhatsAppInteractivePayload, getInteractivePreview } = require("./tenantInteractive");
 const { normalizeTemplateConsent, buildPublicTemplateComponents, buildPublicTemplateListUrl } = require("./publicTemplateMessages");
+const { normalizeTemplateDefinition, normalizeTemplateMutationIdentity } = require("./templateManagement");
 const { createTenantInvitation, listTenantInvitations, revokeTenantInvitation, acceptTenantInvitation } = require("./tenantInvitations");
 const { listLeadForms, saveLeadForm, deleteLeadForm, listLeadFormSubmissions, getPublicLeadForm, submitPublicLeadForm } = require("./leadForms");
 const {
@@ -217,46 +218,134 @@ async function handleWhatsAppConnections(event) {
 }
 
 async function handleWhatsAppTemplates(event) {
+  const method = getMethod(event);
   const decoded = await authenticateUser(event);
-  const organizationId = event.queryStringParameters?.organizationId;
-  const phoneNumberId = event.queryStringParameters?.phoneNumberId;
-  const wabaId = event.queryStringParameters?.wabaId;
+  let body = {};
+  if (method !== "GET") {
+    try { body = parseBody(event); }
+    catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  }
+  if (!["GET", "POST", "PUT", "DELETE"].includes(method)) {
+    return jsonResponse(event, 405, { error: "Method not allowed." });
+  }
+  const params = event.queryStringParameters || {};
+  const organizationId = method === "GET" ? params.organizationId : body.organizationId;
   const organization = await requireOrganization(getDb(), decoded, organizationId);
-  requirePermission(organization, "chats:read");
-  if (typeof phoneNumberId !== "string" || !/^[0-9]{5,32}$/.test(phoneNumberId) || typeof wabaId !== "string" || !/^[0-9]{5,32}$/.test(wabaId)) {
+  requirePermission(organization, method === "GET" ? "chats:read" : "whatsapp:manage");
+  const phoneNumberId = String(method === "GET" ? params.phoneNumberId || "" : body.phoneNumberId || "");
+  const wabaId = String(method === "GET" ? params.wabaId || "" : body.wabaId || "");
+  if (!/^[0-9]{5,32}$/.test(phoneNumberId) || !/^[0-9]{5,32}$/.test(wabaId)) {
     return jsonResponse(event, 400, { error: "A valid connected phone number and WhatsApp Business Account ID are required." });
   }
-  const connections = await listWhatsAppConnections(getDb(), organization.id);
-  const connection = connections.find(item => item.phoneNumberId === phoneNumberId && item.connected);
-  if (!connection) return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the workspace." });
-  const credentials = await getWhatsAppCredentials(getDb(), organization.id, phoneNumberId);
-  const version = process.env.GRAPH_API_VERSION || "v26.0";
-  const url = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
-  url.searchParams.set("fields", "id,name,status,language,category,components");
-  const limit = params.limit === undefined ? 50 : Number(params.limit);
-  const cursor = typeof params.cursor === "string" ? params.cursor.trim() : "";
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100 || cursor.length > 512 || (cursor && !/^[A-Za-z0-9_=-]+$/.test(cursor))) {
-    return jsonResponse(event, 400, { error: "Template limit must be 1–100 and cursor must be a valid Meta paging cursor." });
+  const db = getDb();
+  const connections = await listWhatsAppConnections(db, organization.id);
+  if (!connections.some(item => item.phoneNumberId === phoneNumberId && item.connected)) {
+    return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the workspace." });
   }
-  url.searchParams.set("limit", String(limit));
-  if (cursor) url.searchParams.set("after", cursor);
-  const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${credentials.accessToken}` } });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    console.warn("Meta template list request failed:", response.status, payload.error?.code);
-    return jsonResponse(event, response.status === 401 || response.status === 403 ? 502 : 502, {
-      error: payload.error?.message || "Meta could not load message templates. Check the WhatsApp Business Account ID and token permissions."
+  const credentials = await getWhatsAppCredentials(db, organization.id, phoneNumberId);
+  if (!credentials.wabaId || String(credentials.wabaId) !== wabaId) {
+    return jsonResponse(event, 403, { error: "The requested WhatsApp Business Account does not match this connected number." });
+  }
+  const version = process.env.GRAPH_API_VERSION || "v26.0";
+  const collectionUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(wabaId)}/message_templates`);
+  const headers = { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" };
+
+  if (method === "GET") {
+    const limit = params.limit === undefined ? 50 : Number(params.limit);
+    const cursor = typeof params.cursor === "string" ? params.cursor.trim() : "";
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || cursor.length > 2048 ||
+        cursor.split("").some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
+      return jsonResponse(event, 400, { error: "Template limit must be 1–100 and cursor must be a valid Meta paging cursor." });
+    }
+    collectionUrl.searchParams.set("fields", "id,name,status,language,category,components");
+    collectionUrl.searchParams.set("limit", String(limit));
+    if (cursor) collectionUrl.searchParams.set("after", cursor);
+    const response = await fetch(collectionUrl.toString(), { headers });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return jsonResponse(event, 502, {
+      error: payload.error?.message || "Meta could not load message templates. Check WhatsApp permissions."
+    });
+    return jsonResponse(event, 200, {
+      templates: Array.isArray(payload.data) ? payload.data.map(item => ({
+        id: String(item.id || ""), name: String(item.name || ""), status: String(item.status || "UNKNOWN"),
+        language: String(item.language || ""), category: String(item.category || ""),
+        components: Array.isArray(item.components) ? item.components : []
+      })) : [],
+      pagination: {
+        nextCursor: typeof payload.paging?.cursors?.after === "string" && payload.paging?.next
+          ? payload.paging.cursors.after : null
+      },
+      hasNext: Boolean(payload.paging?.next)
     });
   }
-  const templates = Array.isArray(payload.data) ? payload.data.map(item => ({
-    id: String(item.id || ""),
-    name: String(item.name || ""),
-    status: String(item.status || "UNKNOWN"),
-    language: String(item.language || ""),
-    category: String(item.category || ""),
-    components: Array.isArray(item.components) ? item.components : []
-  })) : [];
-  return jsonResponse(event, 200, { templates, paging: payload.paging?.cursors ? { hasNext: Boolean(payload.paging?.next) } : { hasNext: false } });
+
+  if (method === "POST") {
+    let definition;
+    try { definition = normalizeTemplateDefinition(body); }
+    catch (error) { return jsonResponse(event, error.statusCode || 400, { error: error.message }); }
+    const response = await fetch(collectionUrl.toString(), {
+      method: "POST", headers, body: JSON.stringify(definition)
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return jsonResponse(event, 502, {
+      error: payload.error?.message || "Meta could not create the WhatsApp template."
+    });
+    return jsonResponse(event, 201, {
+      success: true, templateId: String(payload.id || ""),
+      status: String(payload.status || "PENDING"), category: String(payload.category || definition.category)
+    });
+  }
+
+  let identity;
+  try { identity = normalizeTemplateMutationIdentity(body); }
+  catch (error) { return jsonResponse(event, error.statusCode || 400, { error: error.message }); }
+  // Resolve the ID against this WABA before changing or deleting anything.
+  const lookupUrl = new URL(collectionUrl.toString());
+  lookupUrl.searchParams.set("fields", "id,name,language,status");
+  lookupUrl.searchParams.set("name", identity.templateName);
+  lookupUrl.searchParams.set("limit", "100");
+  const lookupResponse = await fetch(lookupUrl.toString(), { headers });
+  const lookupPayload = await lookupResponse.json().catch(() => ({}));
+  if (!lookupResponse.ok) return jsonResponse(event, 502, {
+    error: lookupPayload.error?.message || "Meta could not verify template ownership."
+  });
+  const ownedTemplate = (Array.isArray(lookupPayload.data) ? lookupPayload.data : [])
+    .find(item => String(item.id || "") === identity.templateId && item.name === identity.templateName);
+  if (!ownedTemplate) return jsonResponse(event, 404, {
+    error: "The selected template does not belong to this connected WhatsApp Business Account."
+  });
+
+  if (method === "PUT") {
+    if (body.name !== undefined || body.language !== undefined || body.allowCategoryChange !== undefined) {
+      return jsonResponse(event, 400, { error: "Template updates may change only category and/or components." });
+    }
+    let update;
+    try { update = normalizeTemplateDefinition({
+      ...(body.category !== undefined ? { category: body.category } : {}),
+      ...(body.components !== undefined ? { components: body.components } : {})
+    }, { allowPartial: true }); }
+    catch (error) { return jsonResponse(event, error.statusCode || 400, { error: error.message }); }
+    if (!Object.keys(update).length) return jsonResponse(event, 400, { error: "Provide a category or components update." });
+    const updateUrl = new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(identity.templateId)}`);
+    const response = await fetch(updateUrl.toString(), {
+      method: "POST", headers, body: JSON.stringify(update)
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return jsonResponse(event, 502, {
+      error: payload.error?.message || "Meta could not update the WhatsApp template."
+    });
+    return jsonResponse(event, 200, { success: payload.success !== false, templateId: identity.templateId, name: identity.templateName });
+  }
+
+  const deleteUrl = new URL(collectionUrl.toString());
+  deleteUrl.searchParams.set("name", identity.templateName);
+  deleteUrl.searchParams.set("hsm_id", identity.templateId);
+  const response = await fetch(deleteUrl.toString(), { method: "DELETE", headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success !== true) return jsonResponse(event, 502, {
+    error: payload.error?.message || "Meta could not delete the WhatsApp template."
+  });
+  return jsonResponse(event, 200, { success: true, templateId: identity.templateId, name: identity.templateName });
 }
 
 async function handleWhatsAppConnectionHealth(event) {
@@ -4408,7 +4497,7 @@ exports.handler = async (event) => {
     }
   }
 
-  if (method === "GET" && path.endsWith("/whatsapp/templates")) {
+  if (["GET", "POST", "PUT", "DELETE"].includes(method) && path.endsWith("/whatsapp/templates")) {
     try { return await handleWhatsAppTemplates(event); }
     catch (error) {
       console.error("WhatsApp templates could not load:", error);
