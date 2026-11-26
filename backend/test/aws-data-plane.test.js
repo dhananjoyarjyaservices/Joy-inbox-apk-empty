@@ -824,3 +824,45 @@ test("DynamoDB WhatsApp delivery status updates the indexed message without stat
     if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE; else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
   }
 });
+
+
+test("DynamoDB outgoing WhatsApp writer atomically stores message and delivery pointer", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  let captured;
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      captured = command.input;
+      return {};
+    }
+  });
+  try {
+    const saved = await records.saveOutgoingWhatsAppMessage("workspace_1", "919999999999", {
+      messageId: "wamid.outgoing.1",
+      timestamp: 1760000001000,
+      text: "Reply from Joy Inbox",
+      phoneNumberId: "123456789012"
+    });
+    assert.equal(saved.status, "sent");
+    assert.equal(saved.direction, "outgoing");
+    assert.equal(captured.TransactItems.length, 2);
+    const [message, pointer] = captured.TransactItems;
+    assert.equal(message.Put.TableName, "JoyInboxMessages");
+    assert.equal(message.Put.Item.messageId, "wamid.outgoing.1");
+    assert.equal(message.Put.Item.statusRank, 1);
+    assert.equal(pointer.Put.TableName, "JoyInboxCustomers");
+    assert.equal(pointer.Put.Item.SK, "WHATSAPP_MESSAGE#wamid.outgoing.1");
+    assert.equal(pointer.Put.Item.conversationId, "919999999999");
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE; else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+    if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE; else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
+  }
+});
