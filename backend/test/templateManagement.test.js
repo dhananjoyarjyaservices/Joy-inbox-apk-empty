@@ -63,7 +63,7 @@ test("requires a body and rejects duplicate or unsupported components", () => {
 test("rejects unsupported media headers and unsafe button URLs", () => {
   assert.throws(() => normalizeTemplateComponents([
     { type: "HEADER", format: "IMAGE" }, { type: "BODY", text: "Hello" }
-  ]), /Only text headers/);
+  ]), /uploaded Meta header_handle/);
   assert.throws(() => normalizeTemplateComponents([
     { type: "BODY", text: "Hello" },
     { type: "BUTTONS", buttons: [{ type: "URL", text: "Open", url: "http://example.com" }] }
