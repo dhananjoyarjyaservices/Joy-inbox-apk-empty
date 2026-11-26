@@ -150,7 +150,7 @@ For Android one-tap autofill, set `otpType: "ONE_TAP"` and provide `supportedApp
 
 Optional `codeExpirationMinutes` must be 1–90. Optional `messageSendTtlSeconds` must be 60–600. Meta reviews authentication templates just like other templates; only APPROVED templates can be sent. Creating a template does not guarantee approval or delivery.
 
-To send an approved authentication template through `POST /public/v1/messages`, use `type: "template"`, provide the OTP once in `variables` and again in `buttonVariables` with the exact same value, and include the normal explicit opt-in evidence. The OTP must be 4–15 alphanumeric characters. Joy Inbox validates that the approved template has exactly one OTP button and one body placeholder before sending. The workspace inbox asks for the code once and applies it to both positions.
+To send an approved authentication template through `POST /public/v1/messages`, use `type: "template"`, provide the OTP once in `variables` and again in `buttonVariables` with the exact same value, and include the normal explicit opt-in evidence. The OTP must be 1–15 alphanumeric characters. Joy Inbox validates that the approved template has exactly one OTP button and one body placeholder before sending. The workspace inbox asks for the code once and applies it to both positions.
 
 ### Update a template
 
