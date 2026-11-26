@@ -198,14 +198,18 @@ async function authenticateUser(event) {
     error.statusCode = 401;
     throw error;
   }
-  const idToken = authorization.slice(7).trim();
-  if (!idToken) {
-    const error = new Error("Firebase ID token is missing.");
+  const token = authorization.slice(7).trim();
+  if (!token) {
+    const error = new Error("Bearer token is missing.");
     error.statusCode = 401;
     throw error;
   }
+  if (process.env.AUTH_PROVIDER === "cognito") {
+    const { verifyCognitoAccessToken } = require("./cognitoAuth");
+    return verifyCognitoAccessToken(token);
+  }
   try {
-    return await getFirebaseAdmin().auth().verifyIdToken(idToken, true);
+    return await getFirebaseAdmin().auth().verifyIdToken(token, true);
   } catch {
     const error = new Error("Firebase ID token is invalid or expired.");
     error.statusCode = 401;
