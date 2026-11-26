@@ -177,8 +177,8 @@ async function queryPartition(kind, organizationId, partitionKey, options = {}) 
   }
   const result = await getDocumentClient().send(new QueryCommand({
     TableName: getTableName(kind),
-    KeyConditionExpression: "PK = :pk",
-    ExpressionAttributeValues: { ":pk": partitionKey },
+    KeyConditionExpression: options.sortKeyBeginsWith ? "PK = :pk AND begins_with(SK, :skPrefix)" : "PK = :pk",
+    ExpressionAttributeValues: options.sortKeyBeginsWith ? { ":pk": partitionKey, ":skPrefix": options.sortKeyBeginsWith } : { ":pk": partitionKey },
     Limit: limit,
     ...(options.exclusiveStartKey ? { ExclusiveStartKey: options.exclusiveStartKey } : {}),
     ...(options.scanIndexForward === undefined ? {} : { ScanIndexForward: options.scanIndexForward })
