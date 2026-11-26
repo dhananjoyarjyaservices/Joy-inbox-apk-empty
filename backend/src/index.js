@@ -3971,12 +3971,14 @@ async function handleTenantBilling(event) {
     catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
   }
   const organizationId = method === "GET" ? event.queryStringParameters?.organizationId : body.organizationId;
-  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, organizationId)
+    : await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "settings:manage");
-  const subscriptionRef = organization.ref.collection("billing").doc("subscription");
+  const subscriptionRef = dynamoMode ? null : organization.ref.collection("billing").doc("subscription");
 
   if (method === "GET") {
-    const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
     const [snapshot, plans] = await Promise.all([
       dynamoMode
         ? require("./dynamodb").getItem("workspaces", require("./dynamodb").workspaceKey(organization.id), { consistentRead: true })
