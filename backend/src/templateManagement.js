@@ -167,7 +167,7 @@ function normalizeAuthenticationTemplateDefinition(input) {
       if (!app || typeof app !== "object" || Array.isArray(app)) throw httpError("Supported Android app " + (index + 1) + " is invalid.");
       const packageName = typeof app.packageName === "string" ? app.packageName.trim() : "";
       const signatureHash = typeof app.signatureHash === "string" ? app.signatureHash.trim() : "";
-      if (!/^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+$/.test(packageName)) {
+      if (!/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/.test(packageName)) {
         throw httpError("Supported Android app package name is invalid.");
       }
       if (!/^[A-Za-z0-9+/]{11}$/.test(signatureHash)) {
