@@ -119,6 +119,67 @@ async function listMessages(organizationId, conversationId, options = {}) {
     });
 }
 
+
+async function saveIncomingWhatsAppMessage(organizationId, message) {
+  const orgId = requireWorkspaceId(organizationId);
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    const error = new Error("An incoming WhatsApp message is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const conversationId = String(message.conversationId || message.from || "");
+  const customerId = String(message.customerId || conversationId);
+  const messageId = String(message.messageId || message.id || "");
+  const timestamp = normalizeTimestamp(message.timestamp);
+  const customerKey = dynamodb.customerKey(orgId, customerId);
+  const conversationKey = dynamodb.conversationSummaryKey(orgId, conversationId);
+  const itemKey = dynamodb.messageKey(orgId, conversationId, timestamp, messageId);
+  const now = new Date().toISOString();
+  const text = typeof message.text === "string" ? message.text.slice(0, 4096) : "";
+  const customer = {
+    ...customerKey, entityType: "CUSTOMER", organizationId: orgId, customerId,
+    phone: customerId, name: String(message.customerName || customerId).slice(0, 100),
+    updatedAt: now
+  };
+  const summary = {
+    ...conversationKey, entityType: "CONVERSATION", organizationId: orgId, conversationId,
+    customerId, customerPhone: customerId,
+    customerName: String(message.customerName || customerId).slice(0, 100),
+    lastMessage: text || (String(message.type || "unknown") + " message"),
+    lastMessageAt: timestamp, lastMessageDirection: "incoming",
+    phoneNumberId: String(message.phoneNumberId || "").slice(0, 32),
+    updatedAt: now
+  };
+  const record = {
+    ...itemKey, entityType: "MESSAGE", organizationId: orgId, conversationId, messageId,
+    timestamp, direction: "incoming", type: String(message.type || "unknown").slice(0, 40),
+    text, status: "received", source: "whatsapp",
+    ...(message.mediaId ? { mediaId: String(message.mediaId).slice(0, 256) } : {}),
+    ...(message.mediaMimeType ? { mediaMimeType: String(message.mediaMimeType).slice(0, 128) } : {}),
+    ...(message.mediaFilename ? { mediaFilename: String(message.mediaFilename).slice(0, 180) } : {}),
+    ...(message.mediaSize ? { mediaSize: Number(message.mediaSize) } : {}),
+    phoneNumberId: String(message.phoneNumberId || "").slice(0, 32),
+    createdAt: now
+  };
+  try {
+    await dynamodb.transactWrite([
+      { Put: { TableName: dynamodb.getTableName("customers"), Item: customer } },
+      { Put: { TableName: dynamodb.getTableName("customers"), Item: summary } },
+      { Put: {
+        TableName: dynamodb.getTableName("messages"), Item: record,
+        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+      } }
+    ]);
+    return true;
+  } catch (error) {
+    if (error?.name === "TransactionCanceledException" || error?.name === "ConditionalCheckFailedException") {
+      const existing = await dynamodb.getItem("messages", itemKey, { consistentRead: true });
+      if (existing) return false;
+    }
+    throw error;
+  }
+}
+
 module.exports = {
   saveCustomer,
   getCustomer,
