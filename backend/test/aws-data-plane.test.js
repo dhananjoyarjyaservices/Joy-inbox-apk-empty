@@ -7,6 +7,8 @@ const media = require("../src/s3Media");
 const workspaces = require("../src/dynamodbWorkspaces");
 const records = require("../src/dynamodbRecords");
 const members = require("../src/dynamodbMembers");
+const invitations = require("../src/dynamodbInvitations");
+const crypto = require("node:crypto");
 
 test("DynamoDB workspace service validates names and verified Firebase identities", () => {
   assert.equal(workspaces.normalizeWorkspaceName("  My   Business  "), "My Business");
@@ -318,6 +320,83 @@ test("DynamoDB member audit history is tenant-scoped, newest-first and cursor-pa
       members.listWorkspaceMemberAudit("workspace_1", { cursor: Buffer.from(JSON.stringify({ PK: "ORG#other", SK: "AUDIT#bad" })).toString("base64url") }),
       { statusCode: 400 }
     );
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+  }
+});
+
+
+test("DynamoDB workspace invitation creation stores only a token hash and enforces role permissions", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE, frontend: process.env.FRONTEND_BASE_URL };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  process.env.FRONTEND_BASE_URL = "https://joy.example.com";
+  const commands = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name === "GetCommand") return {};
+      return {};
+    }
+  });
+  try {
+    const invitation = await invitations.createWorkspaceInvitation(
+      { id: "workspace_1" },
+      { uid: "owner_1", role: "owner" },
+      { email: "TeSt@example.com", role: "agent" },
+      { now: () => new Date("2026-11-26T10:00:00.000Z") }
+    );
+    assert.equal(invitation.email, "test@example.com");
+    assert.equal(invitation.status, "pending");
+    assert.equal(invitation.token.length, 43);
+    const put = commands.find(command => command.constructor.name === "PutCommand").input;
+    assert.equal(put.Item.PK, "ORG#workspace_1");
+    assert.match(put.Item.SK, /^INVITATION#/);
+    assert.equal(put.Item.tokenHash, crypto.createHash("sha256").update(invitation.token).digest("hex"));
+    assert.equal(put.Item.token, undefined);
+    assert.match(put.ConditionExpression, /expiresAt <= :now/);
+    await assert.rejects(
+      invitations.createWorkspaceInvitation({ id: "workspace_1" }, { uid: "admin_1", role: "admin" }, { email: "new@example.com", role: "admin" }),
+      { statusCode: 403 }
+    );
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.workspaces === undefined) delete process.env.DYNAMODB_WORKSPACES_TABLE; else process.env.DYNAMODB_WORKSPACES_TABLE = prior.workspaces;
+    if (prior.frontend === undefined) delete process.env.FRONTEND_BASE_URL; else process.env.FRONTEND_BASE_URL = prior.frontend;
+  }
+});
+
+test("DynamoDB invitation acceptance atomically consumes invite, adds member and enforces seat capacity", async () => {
+  const prior = { region: process.env.AWS_REGION, workspaces: process.env.DYNAMODB_WORKSPACES_TABLE };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_WORKSPACES_TABLE = "JoyInboxWorkspaces";
+  const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const commands = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      commands.push(command);
+      if (command.constructor.name !== "GetCommand") return {};
+      const sk = command.input.Key.SK;
+      if (sk === "WORKSPACE") return { Item: { PK: "ORG#workspace_1", SK: "WORKSPACE", name: "Example", status: "active", subscriptionStatus: "trialing", seatLimit: 3, activeSeatCount: 1 } };
+      if (sk.startsWith("INVITATION#")) return { Item: { PK: "ORG#workspace_1", SK: sk, email: "agent@example.com", role: "agent", status: "pending", tokenHash, expiresAt: "2026-11-30T00:00:00.000Z", invitedBy: "owner_1" } };
+      return {};
+    }
+  });
+  try {
+    const result = await invitations.acceptWorkspaceInvitation("workspace_1", token, {
+      uid: "agent_1", email: "agent@example.com", email_verified: true
+    }, { now: () => new Date("2026-11-26T10:00:00.000Z") });
+    assert.deepEqual(result, { organizationId: "workspace_1", role: "agent", status: "active" });
+    const transaction = commands.find(command => command.constructor.name === "TransactWriteCommand").input;
+    assert.equal(transaction.TransactItems.length, 4);
+    assert.match(transaction.TransactItems[0].Update.ConditionExpression, /activeSeatCount < seatLimit/);
+    assert.equal(transaction.TransactItems[1].Put.Item.SK, "MEMBER#agent_1");
+    assert.equal(transaction.TransactItems[2].Put.Item.SK, "ORG#workspace_1");
+    assert.match(transaction.TransactItems[3].Update.UpdateExpression, /REMOVE tokenHash/);
   } finally {
     dynamodb.setDocumentClientForTests(null);
     if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
