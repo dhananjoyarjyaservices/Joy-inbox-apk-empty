@@ -464,3 +464,98 @@ export async function saveGreetingSettings(settings: { enabled: boolean; text: s
     trigger: "first_inbound" as const,
   };
 }
+
+
+export type WhatsAppTemplateComponent =
+  | { type: "HEADER"; format: "TEXT"; text: string; example?: { header_text: string[] } }
+  | { type: "BODY"; text: string; example?: { body_text: string[][] } }
+  | { type: "FOOTER"; text: string }
+  | { type: "BUTTONS"; buttons: Array<
+      | { type: "QUICK_REPLY"; text: string }
+      | { type: "URL"; text: string; url: string }
+      | { type: "PHONE_NUMBER"; text: string; phone_number: string }
+    > };
+
+export type WhatsAppTemplateCategory = "UTILITY" | "MARKETING";
+
+type WhatsAppTemplateRequestBase = {
+  organizationId: string;
+  phoneNumberId: string;
+  wabaId: string;
+};
+
+async function requestWhatsAppTemplates(
+  method: "POST" | "PUT" | "DELETE",
+  payload: WhatsAppTemplateRequestBase & Record<string, unknown>
+) {
+  if (!API_URL) throw new Error("AWS API URL is not configured.");
+  const idToken = await getIdToken();
+  const response = await fetch(`${API_URL.replace(/\\/$/, "")}/whatsapp/templates`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "WhatsApp template operation failed.");
+  return result;
+}
+
+export async function getWhatsAppTemplates(
+  input: WhatsAppTemplateRequestBase & { limit?: number; cursor?: string }
+) {
+  if (!API_URL) throw new Error("AWS API URL is not configured.");
+  const idToken = await getIdToken();
+  const query = new URLSearchParams({
+    organizationId: input.organizationId,
+    phoneNumberId: input.phoneNumberId,
+    wabaId: input.wabaId,
+    limit: String(input.limit ?? 50),
+    ...(input.cursor ? { cursor: input.cursor } : {}),
+  });
+  const response = await fetch(
+    `${API_URL.replace(/\\/$/, "")}/whatsapp/templates?${query.toString()}`,
+    { headers: { Authorization: `Bearer ${idToken}` } }
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "WhatsApp templates could not be loaded.");
+  return result as {
+    templates: Array<{
+      id: string; name: string; status: string; language: string;
+      category: string; components: WhatsAppTemplateComponent[];
+    }>;
+    pagination: { nextCursor: string | null };
+    hasNext: boolean;
+  };
+}
+
+export async function createWhatsAppTemplate(
+  input: WhatsAppTemplateRequestBase & {
+    name: string;
+    language: string;
+    category: WhatsAppTemplateCategory;
+    components: WhatsAppTemplateComponent[];
+    allowCategoryChange?: boolean;
+  }
+) {
+  return requestWhatsAppTemplates("POST", input);
+}
+
+export async function updateWhatsAppTemplate(
+  input: WhatsAppTemplateRequestBase & {
+    templateId: string;
+    templateName: string;
+    category?: WhatsAppTemplateCategory;
+    components?: WhatsAppTemplateComponent[];
+  }
+) {
+  return requestWhatsAppTemplates("PUT", input);
+}
+
+export async function deleteWhatsAppTemplate(
+  input: WhatsAppTemplateRequestBase & { templateId: string; templateName: string }
+) {
+  return requestWhatsAppTemplates("DELETE", input);
+}
