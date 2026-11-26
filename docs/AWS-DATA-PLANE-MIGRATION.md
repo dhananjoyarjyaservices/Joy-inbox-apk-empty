@@ -10,6 +10,15 @@
 - AWS Lambda remains the API and worker runtime. Cloudflare Pages remains the frontend host.
 - Firestore and Firebase Storage are not to be removed until the DynamoDB/S3 implementation passes staging acceptance and a rollback rehearsal.
 
+## Implemented incremental cutover (2026-11-26)
+
+The `/organizations` handler now supports an explicit, opt-in workspace data-plane switch:
+- Default/unset `JOY_INBOX_DATA_PLANE`: existing Firestore workspace behavior remains unchanged.
+- `JOY_INBOX_DATA_PLANE=dynamodb`: workspace GET uses the authenticated Firebase UID's reverse pointers in `JoyInboxWorkspaces`; workspace POST atomically creates the workspace, owner membership and reverse pointer in that same table.
+- Configure `AWS_REGION=ap-south-1`, `DYNAMODB_WORKSPACES_TABLE=JoyInboxWorkspaces`, `DYNAMODB_CUSTOMERS_TABLE=JoyInboxCustomers`, and `DYNAMODB_MESSAGES_TABLE=JoyInboxMessages` before enabling the switch.
+- The switch affects workspace listing/creation only. It does not migrate existing Firestore organizations or other Firestore-backed modules. Do not enable it on a production environment until the table is confirmed empty or a deliberate backfill/ID-collision plan is complete, AWS IAM permissions are least-privilege tested, and the staging smoke test passes.
+- Rollback for this isolated route is to unset `JOY_INBOX_DATA_PLANE`; this does not reverse any DynamoDB writes already made.
+
 ## Existing implementation that must be replaced
 
 The current branch still uses `firebase-admin/firestore` throughout the API, tenancy, billing, CRM, campaigns, automations, messaging and retention modules. `backend/src/media.js` uses Firebase Admin Storage through `FIREBASE_STORAGE_BUCKET`. Workspace creation in `backend/src/organizations.js` is a Firestore transaction. The existing retention worker in `backend/src/historyRetention.js` scans Firestore organization/chat/message collections and deletes message documents only.
