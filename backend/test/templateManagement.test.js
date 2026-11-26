@@ -171,6 +171,15 @@ test("rejects invalid OTP modes, expiration, TTL and Android app metadata", () =
   }), /must be unique/);
 });
 
+test("creates NO_BUTTONS authentication OTP configuration", () => {
+  const value = normalizeAuthenticationTemplateDefinition({
+    name: "login_otp_no_buttons", language: "en_US", otpType: "NO_BUTTONS"
+  });
+  assert.deepEqual(value.components[1], {
+    type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "NO_BUTTONS" }]
+  });
+});
+
 test("validates OTP codes and builds Meta authentication send components", () => {
   assert.equal(normalizeAuthenticationOtpCode("A1b2C3"), "A1b2C3");
   assert.equal(normalizeAuthenticationOtpCode("7"), "7");
