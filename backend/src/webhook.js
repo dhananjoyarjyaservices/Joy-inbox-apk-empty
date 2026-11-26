@@ -11,6 +11,53 @@ const { findMatchingFaqEntry } = require("./faqKnowledge");
 const { reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage } = require("./tenantUsage");
 const { enqueueOrganizationWebhookEvent } = require("./publicWebhooks");
 
+const dynamoWhatsApp = require("./dynamodbWhatsApp");
+const dynamodbRecords = require("./dynamodbRecords");
+
+async function processDynamoWhatsAppStatuses(phoneNumberId, statuses) {
+  const organization = await dynamoWhatsApp.resolvePhoneNumberOrganization(String(phoneNumberId || ""));
+  const results = [];
+  for (const status of statuses) {
+    if (!status || typeof status !== "object" || Array.isArray(status)) continue;
+    const messageId = String(status.id || "");
+    if (!/^[A-Za-z0-9._:-]{1,256}$/.test(messageId)) continue;
+    const normalizedStatus = String(status.status || "").toLowerCase();
+    const seconds = Number(status.timestamp);
+    const statusTimestamp = Number.isFinite(seconds) && seconds > 0
+      ? Math.trunc(seconds * 1000) : Date.now();
+    const updated = await dynamodbRecords.updateWhatsAppMessageStatus(
+      organization.id, messageId, normalizedStatus, statusTimestamp
+    );
+    results.push({ messageId, status: normalizedStatus, updated });
+  }
+  return results;
+}
+
+async function processDynamoWebhookPayload(payload) {
+  if (!isValidMetaWebhookPayload(payload)) {
+    throw Object.assign(new Error("Invalid Meta webhook payload structure."), { statusCode: 400 });
+  }
+  for (const entry of payload.entry) {
+    if (!entry || typeof entry !== "object" || !Array.isArray(entry.changes)) continue;
+    for (const change of entry.changes) {
+      if (!change || change.field !== "messages" || !change.value || typeof change.value !== "object") continue;
+      const value = change.value;
+      const phoneNumberId = value.metadata?.phone_number_id;
+      if (!phoneNumberId) throw Object.assign(new Error("WhatsApp status webhook is missing its phone number ID."), { statusCode: 400 });
+      const statuses = Array.isArray(value.statuses) ? value.statuses : [];
+      if (statuses.length) await processDynamoWhatsAppStatuses(phoneNumberId, statuses);
+      if (Array.isArray(value.messages) && value.messages.length) {
+        // Do not acknowledge inbound messages until compliance, usage and automation
+        // workflows have DynamoDB implementations; Meta must retry this event.
+        throw Object.assign(new Error("Inbound WhatsApp webhook processing is not yet enabled for the DynamoDB data plane."), {
+          statusCode: 503,
+          retryable: true
+        });
+      }
+    }
+  }
+}
+
 function getVerifyToken() {
   return (
     process.env.WHATSAPP_VERIFY_TOKEN ||
@@ -486,6 +533,9 @@ function isIgnorableWebhookRoutingError(error) {
 }
 
 async function processWebhookPayload(payload) {
+  if (process.env.JOY_INBOX_DATA_PLANE === "dynamodb") {
+    return processDynamoWebhookPayload(payload);
+  }
   if (!isValidMetaWebhookPayload(payload)) {
     throw Object.assign(new Error("Invalid Meta webhook payload structure."), { statusCode: 400 });
   }
@@ -676,5 +726,7 @@ module.exports = {
   isValidMetaWebhookPayload,
   isIgnorableWebhookRoutingError,
   processWebhookPayload,
+  processDynamoWhatsAppStatuses,
+  processDynamoWebhookPayload,
   getWebhookProcessingStatusCode
 };
