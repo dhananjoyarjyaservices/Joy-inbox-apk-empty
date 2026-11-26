@@ -19,6 +19,18 @@ The `/organizations` handler now supports an explicit, opt-in workspace data-pla
 - The switch affects workspace listing/creation only. It does not migrate existing Firestore organizations or other Firestore-backed modules. Do not enable it on a production environment until the table is confirmed empty or a deliberate backfill/ID-collision plan is complete, AWS IAM permissions are least-privilege tested, and the staging smoke test passes.
 - Rollback for this isolated route is to unset `JOY_INBOX_DATA_PLANE`; this does not reverse any DynamoDB writes already made.
 
+## Membership migration progress (2026-11-26)
+
+The opt-in DynamoDB data-plane switch now also routes workspace member listing, role changes and removal through `JoyInboxWorkspaces`:
+- Every operation first reads the canonical workspace and the caller's membership record using the verified Firebase UID.
+- Member listing queries only the `ORG#{organizationId}` partition with `SK begins_with MEMBER#`, with a validated opaque pagination cursor.
+- Role changes update the membership and the member's reverse user pointer in one transaction.
+- Removal marks both records removed in one transaction; the workspace owner cannot be changed or removed.
+- The DynamoDB-mode member-add (`POST`) endpoint intentionally returns HTTP 501 until invitation acceptance, Firebase account lookup, subscription/seat-limit enforcement and invitation storage are migrated together. It must not silently write new members to Firestore.
+- Member audit history remains Firestore-backed and is not part of this route cutover yet.
+
+This is a partial, opt-in migration. Existing Firestore behavior remains the default when `JOY_INBOX_DATA_PLANE` is unset. Do not enable DynamoDB mode in production until workspace backfill/ID collision policy, invitation/seat-limit migration, IAM least-privilege, audit parity and staging tests are complete.
+
 ## Existing implementation that must be replaced
 
 The current branch still uses `firebase-admin/firestore` throughout the API, tenancy, billing, CRM, campaigns, automations, messaging and retention modules. `backend/src/media.js` uses Firebase Admin Storage through `FIREBASE_STORAGE_BUCKET`. Workspace creation in `backend/src/organizations.js` is a Firestore transaction. The existing retention worker in `backend/src/historyRetention.js` scans Firestore organization/chat/message collections and deletes message documents only.
