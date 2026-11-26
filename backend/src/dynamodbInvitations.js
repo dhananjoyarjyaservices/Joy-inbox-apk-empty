@@ -2,6 +2,7 @@
 
 const crypto = require("crypto");
 const dynamodb = require("./dynamodb");
+const { UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 const {
   INVITATION_TTL_MS,
   normalizeInvitationEmail,
@@ -60,7 +61,7 @@ async function createWorkspaceInvitation(organization, actor, input, options = {
     expiresAt: new Date(now.getTime() + INVITATION_TTL_MS).toISOString(),
     updatedAt: now.toISOString()
   };
-  await dynamodb.putItem("workspaces", item, { ifAbsent: !existing });
+  await dynamodb.getDocumentClient().send(new (require("@aws-sdk/lib-dynamodb").PutCommand)({\n    TableName: dynamodb.getTableName("workspaces"),\n    Item: item,\n    ConditionExpression: "attribute_not_exists(PK) OR (#status <> :pending OR expiresAt <= :now)",\n    ExpressionAttributeNames: { "#status": "status" },\n    ExpressionAttributeValues: { ":pending": "pending", ":now": now.toISOString() }\n  }));
   return {
     email, role, status: "pending",
     expiresAt: item.expiresAt,
@@ -97,7 +98,7 @@ async function revokeWorkspaceInvitation(organizationId, actor, email) {
     throw invitationError("A pending invitation for this email was not found.", 404);
   }
   const now = new Date().toISOString();
-  await dynamodb.getDocumentClient().send(new (require("@aws-sdk/lib-dynamodb").UpdateCommand)({
+  await dynamodb.getDocumentClient().send(new UpdateCommand({
     TableName: dynamodb.getTableName("workspaces"),
     Key: key,
     UpdateExpression: "SET #status = :revoked, revokedBy = :actor, revokedAt = :now, updatedAt = :now",
