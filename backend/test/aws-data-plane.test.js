@@ -730,3 +730,40 @@ test("DynamoDB inbound WhatsApp writer treats an existing provider message as an
     else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
   }
 });
+
+
+test("DynamoDB WhatsApp message pointer lookup is tenant-scoped and strongly consistent", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  let captured;
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      captured = command.input;
+      return { Item: { entityType: "WHATSAPP_MESSAGE_POINTER", organizationId: "workspace_1" } };
+    }
+  });
+  try {
+    const pointer = await records.getWhatsAppMessagePointer("workspace_1", "wamid.status:1");
+    assert.equal(pointer.organizationId, "workspace_1");
+    assert.equal(captured.TableName, "JoyInboxCustomers");
+    assert.deepEqual(captured.Key, {
+      PK: "ORG#workspace_1",
+      SK: "WHATSAPP_MESSAGE#wamid.status:1"
+    });
+    assert.equal(captured.ConsistentRead, true);
+    await assert.rejects(
+      records.getWhatsAppMessagePointer("workspace_1", "../invalid"),
+      { statusCode: 400 }
+    );
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION;
+    else process.env.AWS_REGION = prior.region;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE;
+    else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+  }
+});
