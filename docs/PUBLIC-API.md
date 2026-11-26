@@ -146,11 +146,11 @@ Copy-code example:
 }
 ```
 
-For Android one-tap autofill, set `otpType: "ONE_TAP"` and provide `supportedApps` with 1–5 unique app package names and their exact 11-character signing key hashes. These values must come from the actual Android app signing certificate; do not guess them. One-tap requires the recipient Android app to integrate Meta's current WhatsApp OTP SDK/handshake. Without a valid handshake, WhatsApp may fall back to Copy code; on iOS 26 and later, keyboard OTP suggestions are handled by iOS.
+For Android one-tap autofill, set `otpType: "ONE_TAP"` and provide `supportedApps` with 1–5 unique app package names and their exact 11-character signing key hashes. For zero-tap, set `otpType: "ZERO_TAP"`, provide the same `supportedApps`, and set `zeroTapTermsAccepted: true`. This flag is an explicit acceptance of Meta's zero-tap terms; the workspace UI requires an affirmative checkbox before sending the create request. These app identities must come from the actual Android app signing certificate; do not guess them. Both one-tap and zero-tap require the recipient Android app to integrate Meta's current WhatsApp OTP SDK/handshake. Zero-tap is Android-only and may fall back to a visible OTP option when eligibility or handshake checks fail. On iOS 26 and later, keyboard OTP suggestions are handled by iOS.
 
 Optional `codeExpirationMinutes` must be 1–90. Optional `messageSendTtlSeconds` must be 60–600. Meta reviews authentication templates just like other templates; only APPROVED templates can be sent. Creating a template does not guarantee approval or delivery.
 
-To send an approved authentication template through `POST /public/v1/messages`, use `type: "template"`, provide the OTP once in `variables` and again in `buttonVariables` with the exact same value, and include the normal explicit opt-in evidence. The OTP must be 1–15 alphanumeric characters. Joy Inbox validates that the approved template has exactly one OTP button and one body placeholder before sending. The workspace inbox asks for the code once and applies it to both positions.
+To send an approved authentication template through `POST /public/v1/messages`, use `type: "template"`, provide the OTP once in `variables` and again in `buttonVariables` with the exact same value, and include the normal explicit opt-in evidence. The OTP must be 1–15 alphanumeric characters. Joy Inbox validates that the approved template has exactly one OTP button and one body placeholder before sending. The send payload includes the same code in the body and OTP button parameter for COPY_CODE, ONE_TAP and ZERO_TAP templates. The workspace inbox asks for the code once and applies it to both positions.
 
 ### Update a template
 
