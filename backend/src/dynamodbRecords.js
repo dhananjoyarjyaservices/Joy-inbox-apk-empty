@@ -120,6 +120,19 @@ async function listMessages(organizationId, conversationId, options = {}) {
 }
 
 
+async function getWhatsAppMessagePointer(organizationId, messageId) {
+  const orgId = requireWorkspaceId(organizationId);
+  if (typeof messageId !== "string" || !/^[A-Za-z0-9._:-]{1,256}$/.test(messageId)) {
+    const error = new Error("A valid WhatsApp message ID is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return dynamodb.getItem("customers", {
+    PK: "ORG#" + orgId,
+    SK: "WHATSAPP_MESSAGE#" + messageId
+  }, { consistentRead: true });
+}
+
 async function saveIncomingWhatsAppMessage(organizationId, message) {
   const orgId = requireWorkspaceId(organizationId);
   if (!message || typeof message !== "object" || Array.isArray(message)) {
@@ -231,5 +244,6 @@ module.exports = {
   listConversationSummaries,
   saveMessage,
   saveIncomingWhatsAppMessage,
+  getWhatsAppMessagePointer,
   listMessages
 };
