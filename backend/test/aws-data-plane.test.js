@@ -866,3 +866,47 @@ test("DynamoDB outgoing WhatsApp writer atomically stores message and delivery p
     if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE; else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
   }
 });
+
+
+test("DynamoDB outgoing WhatsApp writer returns the existing message on a duplicate retry", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  const existing = {
+    PK: "ORG#workspace_1#CONVERSATION#919999999999",
+    SK: "MESSAGE#0001760000001000#wamid.outgoing.duplicate",
+    organizationId: "workspace_1",
+    messageId: "wamid.outgoing.duplicate",
+    status: "sent"
+  };
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      if (command.constructor.name === "TransactWriteCommand") {
+        const error = new Error("Conditional transaction conflict");
+        error.name = "TransactionCanceledException";
+        throw error;
+      }
+      if (command.constructor.name === "GetCommand") return { Item: existing };
+      throw new Error("Unexpected DynamoDB command.");
+    }
+  });
+  try {
+    const saved = await records.saveOutgoingWhatsAppMessage("workspace_1", "919999999999", {
+      messageId: "wamid.outgoing.duplicate",
+      timestamp: 1760000001000,
+      text: "same send retry"
+    });
+    assert.equal(saved, existing);
+    assert.equal(saved.status, "sent");
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE; else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+    if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE; else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
+  }
+});
