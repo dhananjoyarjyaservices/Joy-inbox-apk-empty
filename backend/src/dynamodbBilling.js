@@ -47,11 +47,29 @@ async function claimStripeEvent(eventId, now = new Date()) {
     if (existing?.status === "processing" && Number(existing.leaseUntil) > nowSeconds) {
       return { claimed: false, reason: "processing", key };
     }
-    await dynamodb.updateItem("workspaces", key,
-      "SET #status = :processing, leaseUntil = :lease, attempts = if_not_exists(attempts, :zero) + :one, updatedAt = :updated",
-      { ":processing": "processing", ":lease": nowSeconds + EVENT_LEASE_SECONDS, ":zero": 0, ":one": 1, ":updated": now.toISOString() },
-      { "#status": "status" });
-    return { claimed: true, key };
+    try {
+      await dynamodb.transactWrite([{
+        Update: {
+          TableName: dynamodb.getTableName("workspaces"),
+          Key: key,
+          UpdateExpression: "SET #status = :processing, leaseUntil = :lease, attempts = if_not_exists(attempts, :zero) + :one, updatedAt = :updated",
+          ConditionExpression: "#status <> :processing OR leaseUntil <= :now",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: {
+            ":processing": "processing",
+            ":lease": nowSeconds + EVENT_LEASE_SECONDS,
+            ":zero": 0,
+            ":one": 1,
+            ":updated": now.toISOString(),
+            ":now": nowSeconds
+          }
+        }
+      }]);
+      return { claimed: true, key };
+    } catch (claimError) {
+      if (claimError.name !== "TransactionCanceledException") throw claimError;
+      return { claimed: false, reason: "processing", key };
+    }
   }
 }
 
