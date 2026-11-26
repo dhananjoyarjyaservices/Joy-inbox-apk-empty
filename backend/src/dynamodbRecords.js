@@ -187,5 +187,6 @@ module.exports = {
   saveConversationSummary,
   listConversationSummaries,
   saveMessage,
+  saveIncomingWhatsAppMessage,
   listMessages
 };
