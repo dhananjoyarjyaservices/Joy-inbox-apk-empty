@@ -178,8 +178,10 @@ function normalizeAuthenticationTemplateDefinition(input) {
     if (new Set(button.supported_apps.map(app => app.package_name)).size !== button.supported_apps.length) {
       throw httpError("Supported Android app package names must be unique.");
     }
-  } else if (input.supportedApps !== undefined && input.supportedApps !== null && input.supportedApps.length) {
-    throw httpError("Supported Android apps are only used with one-tap autofill.");
+  } else if (input.supportedApps !== undefined && input.supportedApps !== null) {
+    if (!Array.isArray(input.supportedApps) || input.supportedApps.length > 0) {
+      throw httpError("Supported Android apps are only used with one-tap autofill.");
+    }
   }
   components.push({ type: "BUTTONS", buttons: [button] });
   const result = { name, language, category: "AUTHENTICATION", components };
