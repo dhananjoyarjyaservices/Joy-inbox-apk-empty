@@ -197,8 +197,8 @@ function normalizeAuthenticationTemplateDefinition(input) {
 
 function normalizeAuthenticationOtpCode(value) {
   const code = typeof value === "string" ? value.trim() : "";
-  if (!/^[A-Za-z0-9]{4,15}$/.test(code)) {
-    throw httpError("OTP code must contain 4–15 letters or numbers.");
+  if (!/^[A-Za-z0-9]{1,15}$/.test(code)) {
+    throw httpError("OTP code must contain 1–15 letters or numbers.");
   }
   return code;
 }
