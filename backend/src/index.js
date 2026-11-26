@@ -27,6 +27,7 @@ const {
   getSignedMediaUrl,
   saveMessageMedia,
   uploadWhatsAppMedia,
+  uploadWhatsAppTemplateMedia,
   validateMedia,
   validateMediaContent,
   fetchWhatsAppMediaForProxy,
@@ -215,6 +216,50 @@ async function handleWhatsAppConnections(event) {
   requirePermission(organization, "chats:read");
   const connections = await listWhatsAppConnections(getDb(), organization.id);
   return jsonResponse(event, 200, { connections });
+}
+
+async function handleWhatsAppTemplateMediaUpload(event) {
+  const decoded = await authenticateUser(event);
+  let body;
+  try { body = parseBody(event); }
+  catch { return jsonResponse(event, 400, { error: "A valid JSON request body is required." }); }
+  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  requirePermission(organization, "whatsapp:manage");
+  const phoneNumberId = String(body.phoneNumberId || "");
+  const wabaId = String(body.wabaId || "");
+  const format = String(body.format || "").toUpperCase();
+  const mimeType = String(body.mimeType || "");
+  const filename = typeof body.filename === "string" ? body.filename : "";
+  if (!/^[0-9]{5,32}$/.test(phoneNumberId) || !/^[0-9]{5,32}$/.test(wabaId)) {
+    return jsonResponse(event, 400, { error: "A valid connected phone number and WABA ID are required." });
+  }
+  if (!["IMAGE", "VIDEO", "DOCUMENT"].includes(format) || !isAllowedTemplateMedia(mimeType, format)) {
+    return jsonResponse(event, 400, { error: "Choose a JPEG/PNG image, MP4 video or PDF document matching the selected header format." });
+  }
+  if (!isValidBase64(body.base64)) {
+    return jsonResponse(event, 400, { error: "Template media must be valid base64 data." });
+  }
+  const buffer = Buffer.from(body.base64, "base64");
+  const db = getDb();
+  const connections = await listWhatsAppConnections(db, organization.id);
+  if (!connections.some(item => item.phoneNumberId === phoneNumberId && item.connected)) {
+    return jsonResponse(event, 404, { error: "This WhatsApp number is not connected to the workspace." });
+  }
+  const credentials = await getWhatsAppCredentials(db, organization.id, phoneNumberId);
+  if (!credentials.wabaId || String(credentials.wabaId) !== wabaId) {
+    return jsonResponse(event, 403, { error: "The requested WABA does not match this connected number." });
+  }
+  try {
+    const uploaded = await uploadWhatsAppTemplateMedia(buffer, mimeType, filename, credentials);
+    return jsonResponse(event, 200, {
+      handle: uploaded.handle, format, mimeType: uploaded.mimeType,
+      filename: uploaded.filename, size: uploaded.size
+    });
+  } catch (error) {
+    return jsonResponse(event, error.statusCode || 502, {
+      error: error.statusCode ? error.message : "Meta template media upload failed."
+    });
+  }
 }
 
 async function handleWhatsAppTemplates(event) {
@@ -4494,6 +4539,14 @@ exports.handler = async (event) => {
       return jsonResponse(event, error.statusCode || 500, {
         error: error.statusCode ? error.message : "WhatsApp connections could not be loaded."
       });
+    }
+  }
+
+  if (method === "POST" && path.endsWith("/whatsapp/templates/media")) {
+    try { return await handleWhatsAppTemplateMediaUpload(event); }
+    catch (error) {
+      console.error("WhatsApp template media upload failed:", error);
+      return jsonResponse(event, error.statusCode || 500, { error: error.statusCode ? error.message : "WhatsApp template media could not be uploaded." });
     }
   }
 
