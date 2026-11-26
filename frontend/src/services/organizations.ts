@@ -119,7 +119,7 @@ export type WhatsAppTemplateComponent =
   | { type: "HEADER"; format: "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"; text?: string }
   | { type: "BODY"; text?: string }
   | { type: "FOOTER"; text?: string }
-  | { type: "BUTTONS"; buttons?: Array<{ type?: string; text?: string; url?: string; phone_number?: string }> };
+  | { type: "BUTTONS"; buttons?: Array<{ type?: string; text?: string; url?: string; phone_number?: string; otp_type?: "COPY_CODE" | "ONE_TAP" | "ZERO_TAP" | "NO_BUTTONS" }> };
 export interface WhatsAppTemplate {
   id: string;
   name: string;
