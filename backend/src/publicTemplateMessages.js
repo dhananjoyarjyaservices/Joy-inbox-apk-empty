@@ -53,7 +53,7 @@ function buildPublicTemplateComponents(approvedTemplate, input = {}) {
   const isAuthenticationTemplate = String(approvedTemplate.category || "").toUpperCase() === "AUTHENTICATION" || otpButtons.length > 0;
   if (isAuthenticationTemplate) {
     if (otpButtons.length !== 1 || header || headerVariables.length || urlButtons.length ||
-        variables.length !== 1 || buttonVariables.length !== 1 || variables[0] !== buttonVariables[0]) {
+        bodyCount !== 1 || variables.length !== 1 || buttonVariables.length !== 1 || variables[0] !== buttonVariables[0]) {
       throw httpError("Authentication templates require one matching OTP body and button code and cannot contain headers or URL buttons.");
     }
     return buildAuthenticationTemplateSendComponents(normalizeAuthenticationOtpCode(variables[0]));
