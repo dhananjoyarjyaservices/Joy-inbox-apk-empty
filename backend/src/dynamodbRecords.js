@@ -223,7 +223,7 @@ async function updateWhatsAppMessageStatus(organizationId, messageId, status, st
       },
       { "#status": "status" },
       {
-        conditionExpression: "attribute_exists(PK) AND (attribute_not_exists(statusRank) OR statusRank <= :rank)"
+        conditionExpression: "attribute_exists(PK) AND (attribute_not_exists(statusRank) OR statusRank < :rank OR (#status = :status AND statusRank = :rank))"
       }
     );
     return true;
