@@ -39,18 +39,29 @@ function normalizeTemplateComponents(input) {
     }
     seen.add(item.type);
     if (item.type === "HEADER") {
-      if (item.format !== "TEXT") throw httpError("Only text headers are currently supported by the template manager.");
-      const component = { type: "HEADER", format: "TEXT", text: cleanText(item.text, "Header text", 60) };
-      const headerVariables = countPlaceholders(component.text);
-      if (headerVariables > 1) throw httpError("Text headers support at most one variable.");
-      if (item.example !== undefined || headerVariables > 0) {
-        if (!item.example || !Array.isArray(item.example.header_text) ||
-            item.example.header_text.length !== 1 || typeof item.example.header_text[0] !== "string") {
-          throw httpError("A variable text header requires one header_text example.");
+      if (item.format === "TEXT") {
+        const component = { type: "HEADER", format: "TEXT", text: cleanText(item.text, "Header text", 60) };
+        const headerVariables = countPlaceholders(component.text);
+        if (headerVariables > 1) throw httpError("Text headers support at most one variable.");
+        if (item.example !== undefined || headerVariables > 0) {
+          if (!item.example || !Array.isArray(item.example.header_text) ||
+              item.example.header_text.length !== 1 || typeof item.example.header_text[0] !== "string") {
+            throw httpError("A variable text header requires one header_text example.");
+          }
+          component.example = { header_text: [cleanText(item.example.header_text[0], "Header example", 60)] };
         }
-        component.example = { header_text: [cleanText(item.example.header_text[0], "Header example", 60)] };
+        result.push(component);
+      } else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(item.format)) {
+        const handles = item.example?.header_handle;
+        if (!Array.isArray(handles) || handles.length !== 1 || typeof handles[0] !== "string") {
+          throw httpError("A media header requires one uploaded Meta header_handle.");
+        }
+        const handle = cleanText(handles[0], "Header media handle", 4096);
+        if (/[\\x00-\\x1f\\x7f]/.test(handle)) throw httpError("Header media handle contains invalid characters.");
+        result.push({ type: "HEADER", format: item.format, example: { header_handle: [handle] } });
+      } else {
+        throw httpError("Header format must be TEXT, IMAGE, VIDEO or DOCUMENT.");
       }
-      result.push(component);
     } else if (item.type === "BODY") {
       const component = { type: "BODY", text: cleanText(item.text, "Body text", 1024) };
       const bodyVariables = countPlaceholders(component.text);
