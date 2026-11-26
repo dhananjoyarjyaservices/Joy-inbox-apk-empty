@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/saas-foundation
+      - feature/aws-data-plane-migration
   pull_request:
     branches:
       - main
