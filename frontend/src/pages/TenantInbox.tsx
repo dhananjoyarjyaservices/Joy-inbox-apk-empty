@@ -1100,11 +1100,12 @@ export default function TenantInbox() {
     setError("");
     try {
       let components: WhatsAppTemplateDraftComponent[] | undefined;
+      let result: { status?: string } = {};
       if (templateCreateCategory === "AUTHENTICATION") {
         const supportedApps = templateOtpType === "ONE_TAP"
           ? [{ packageName: templateOtpPackage.trim(), signatureHash: templateOtpSignature.trim() }]
           : undefined;
-        await createWhatsAppTemplate({
+        result = await createWhatsAppTemplate({
           organizationId: organization.id, phoneNumberId: selectedPhoneNumberId, wabaId: templateWabaId.trim(),
           name: templateCreateName.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, ""),
           language: templateCreateLanguage, category: "AUTHENTICATION", otpType: templateOtpType,
@@ -1139,7 +1140,7 @@ export default function TenantInbox() {
           ...(headerComponent ? [headerComponent] : []),
           { type: "BODY", text: templateCreateBody.trim() }
         ];
-        await createWhatsAppTemplate({
+        result = await createWhatsAppTemplate({
           organizationId: organization.id, phoneNumberId: selectedPhoneNumberId, wabaId: templateWabaId.trim(),
           name: templateCreateName.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, ""),
           language: templateCreateLanguage, category: templateCreateCategory, components
