@@ -42,6 +42,7 @@ const { getWorkspaceContext, listWorkspaceMembers, listWorkspaceMemberAudit, upd
 const { createWorkspaceInvitation, listWorkspaceInvitations, revokeWorkspaceInvitation, acceptWorkspaceInvitation } = require("./dynamodbInvitations");
 const { processStripeWebhookEvent: processDynamoStripeWebhookEvent } = require("./dynamodbBilling");
 const { createCheckoutSession: createDynamoCheckoutSession, createPortalSession: createDynamoPortalSession } = require("./dynamodbBilling");
+const dynamoWhatsApp = require("./dynamodbWhatsApp");
 const { listOrganizationMembers, listOrganizationMemberAudit, addOrganizationMember, updateOrganizationMemberRole, removeOrganizationMember } = require("./organizationMembers");
 const { listTenantResource, listPublicContacts, saveTenantResource, mergeTenantContacts, deleteTenantResource } = require("./tenantResources");
 const { updateTenantChatState, updateTenantMessageState, deleteTenantMessages, deleteTenantChats } = require("./tenantChatActions");
@@ -215,9 +216,14 @@ async function authenticateUser(event) {
 async function handleWhatsAppConnections(event) {
   const decoded = await authenticateUser(event);
   const organizationId = event.queryStringParameters?.organizationId;
-  const organization = await requireOrganization(getDb(), decoded, organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, organizationId)
+    : await requireOrganization(getDb(), decoded, organizationId);
   requirePermission(organization, "chats:read");
-  const connections = await listWhatsAppConnections(getDb(), organization.id);
+  const connections = dynamoMode
+    ? await dynamoWhatsApp.listWhatsAppConnections(organization.id)
+    : await listWhatsAppConnections(getDb(), organization.id);
   return jsonResponse(event, 200, { connections });
 }
 
@@ -956,10 +962,15 @@ async function handleWhatsAppConnect(event) {
   try { body = parseBody(event); } catch {
     return jsonResponse(event, 400, { error: "A valid JSON request body is required." });
   }
-  const organization = await requireOrganization(getDb(), decoded, body.organizationId);
+  const dynamoMode = process.env.JOY_INBOX_DATA_PLANE === "dynamodb";
+  const organization = dynamoMode
+    ? await getWorkspaceContext(decoded, body.organizationId)
+    : await requireOrganization(getDb(), decoded, body.organizationId);
   requirePermission(organization, "whatsapp:manage");
   if (getMethod(event) === "DELETE") {
-    const disconnected = await disconnectWhatsAppConnection(getDb(), organization, String(body.phoneNumberId || "").trim());
+    const disconnected = dynamoMode
+      ? await dynamoWhatsApp.disconnectWhatsAppConnection(organization.id, String(body.phoneNumberId || "").trim())
+      : await disconnectWhatsAppConnection(getDb(), organization, String(body.phoneNumberId || "").trim());
     return jsonResponse(event, 200, { connection: disconnected });
   }
   const phoneNumberId = String(body.phoneNumberId || "").trim();
@@ -981,12 +992,17 @@ async function handleWhatsAppConnect(event) {
     });
   }
 
-  const connection = await saveWhatsAppConnection(getDb(), organization, {
-    phoneNumberId,
-    accessToken,
-    displayPhoneNumber: meta.display_phone_number,
-    verifiedName: meta.verified_name
-  });
+  const connection = dynamoMode
+    ? await dynamoWhatsApp.saveWhatsAppConnection(organization.id, {
+        phoneNumberId, accessToken,
+        displayPhoneNumber: meta.display_phone_number,
+        verifiedName: meta.verified_name
+      })
+    : await saveWhatsAppConnection(getDb(), organization, {
+        phoneNumberId, accessToken,
+        displayPhoneNumber: meta.display_phone_number,
+        verifiedName: meta.verified_name
+      });
   return jsonResponse(event, 200, { connection });
 }
 
