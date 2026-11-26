@@ -51,12 +51,17 @@ async function getSigningKey(kid, jwksUrl) {
 
 async function verifyCognitoAccessToken(token) {
   if (typeof token !== "string" || token.length > 16384) throw authError();
-  const config = getCognitoConfig();
   const parts = token.split(".");
-  if (parts.length !== 3) throw authError();
+  if (parts.length !== 3 || parts.some((part) => !part)) throw authError();
   const header = decodeSegment(parts[0]);
   const claims = decodeSegment(parts[1]);
-  if (header.alg !== "RS256" || typeof header.kid !== "string") throw authError();
+  if (!header || typeof header !== "object" || Array.isArray(header) ||
+      header.alg !== "RS256" || typeof header.kid !== "string" || !header.kid ||
+      !claims || typeof claims !== "object" || Array.isArray(claims)) {
+    throw authError();
+  }
+  // Reject malformed JWTs before requiring deployment configuration or making network calls.
+  const config = getCognitoConfig();
   const now = Math.floor(Date.now() / 1000);
   if (claims.iss !== config.issuer || claims.token_use !== "access" ||
       claims.client_id !== config.clientId || typeof claims.sub !== "string" ||
