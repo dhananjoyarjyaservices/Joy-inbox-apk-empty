@@ -140,6 +140,59 @@ function normalizeTemplateDefinition(input, { allowPartial = false } = {}) {
   return result;
 }
 
+function normalizeAuthenticationTemplateDefinition(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw httpError("Authentication template details are required.");
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const language = typeof input.language === "string" ? input.language.trim() : "";
+  if (!NAME_PATTERN.test(name)) throw httpError("Template name must use lowercase letters, numbers and underscores.");
+  if (!LANGUAGE_PATTERN.test(language)) throw httpError("Template language code is invalid.");
+  const otpType = String(input.otpType || "COPY_CODE").trim().toUpperCase();
+  if (!["COPY_CODE", "ONE_TAP"].includes(otpType)) throw httpError("OTP button type must be COPY_CODE or ONE_TAP.");
+  const addSecurityRecommendation = input.addSecurityRecommendation === undefined ? true : input.addSecurityRecommendation;
+  if (typeof addSecurityRecommendation !== "boolean") throw httpError("addSecurityRecommendation must be boolean.");
+  const components = [{ type: "BODY", add_security_recommendation: addSecurityRecommendation }];
+  if (input.codeExpirationMinutes !== undefined && input.codeExpirationMinutes !== null && input.codeExpirationMinutes !== "") {
+    const minutes = Number(input.codeExpirationMinutes);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 90) {
+      throw httpError("Code expiration must be a whole number between 1 and 90 minutes.");
+    }
+    components.push({ type: "FOOTER", code_expiration_minutes: minutes });
+  }
+  const button = { type: "OTP", otp_type: otpType };
+  if (otpType === "ONE_TAP") {
+    if (!Array.isArray(input.supportedApps) || input.supportedApps.length < 1 || input.supportedApps.length > 5) {
+      throw httpError("One-tap autofill requires 1–5 supported Android apps.");
+    }
+    button.supported_apps = input.supportedApps.map((app, index) => {
+      if (!app || typeof app !== "object" || Array.isArray(app)) throw httpError("Supported Android app " + (index + 1) + " is invalid.");
+      const packageName = typeof app.packageName === "string" ? app.packageName.trim() : "";
+      const signatureHash = typeof app.signatureHash === "string" ? app.signatureHash.trim() : "";
+      if (!/^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+$/.test(packageName)) {
+        throw httpError("Supported Android app package name is invalid.");
+      }
+      if (!/^[A-Za-z0-9+/]{11}$/.test(signatureHash)) {
+        throw httpError("Android signing key hash must contain exactly 11 base64 characters.");
+      }
+      return { package_name: packageName, signature_hash: signatureHash };
+    });
+    if (new Set(button.supported_apps.map(app => app.package_name)).size !== button.supported_apps.length) {
+      throw httpError("Supported Android app package names must be unique.");
+    }
+  } else if (input.supportedApps !== undefined && input.supportedApps !== null && input.supportedApps.length) {
+    throw httpError("Supported Android apps are only used with one-tap autofill.");
+  }
+  components.push({ type: "BUTTONS", buttons: [button] });
+  const result = { name, language, category: "AUTHENTICATION", components };
+  if (input.messageSendTtlSeconds !== undefined && input.messageSendTtlSeconds !== null && input.messageSendTtlSeconds !== "") {
+    const ttl = Number(input.messageSendTtlSeconds);
+    if (!Number.isInteger(ttl) || ttl < 60 || ttl > 600) {
+      throw httpError("Authentication message TTL must be a whole number between 60 and 600 seconds.");
+    }
+    result.message_send_ttl_seconds = ttl;
+  }
+  return result;
+}
+
 function normalizeTemplateMutationIdentity(input) {
   const templateId = typeof input?.templateId === "string" ? input.templateId.trim() : "";
   const templateName = typeof input?.templateName === "string" ? input.templateName.trim() : "";
@@ -152,6 +205,7 @@ function normalizeTemplateMutationIdentity(input) {
 module.exports = {
   normalizeTemplateComponents,
   normalizeTemplateDefinition,
+  normalizeAuthenticationTemplateDefinition,
   normalizeTemplateMutationIdentity,
   TEMPLATE_ID_PATTERN,
   NAME_PATTERN
