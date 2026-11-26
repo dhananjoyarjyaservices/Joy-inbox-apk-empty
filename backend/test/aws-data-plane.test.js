@@ -9,6 +9,7 @@ const records = require("../src/dynamodbRecords");
 const members = require("../src/dynamodbMembers");
 const invitations = require("../src/dynamodbInvitations");
 const billing = require("../src/dynamodbBilling");
+const whatsapp = require("../src/dynamodbWhatsApp");
 const crypto = require("node:crypto");
 
 test("DynamoDB workspace service validates names and verified Firebase identities", () => {
@@ -518,4 +519,18 @@ test("DynamoDB billing exports the handlers wired by the API router", () => {
   assert.equal(typeof billing.createCheckoutSession, "function");
   assert.equal(typeof billing.createPortalSession, "function");
   assert.equal(typeof billing.writeWorkspaceSubscription, "function");
+});
+
+
+test("DynamoDB WhatsApp connection keys isolate tenant credentials from global phone ownership", () => {
+  assert.deepEqual(whatsapp.connectionKey("workspace_1", "123456789"), {
+    PK: "ORG#workspace_1", SK: "WHATSAPP#PHONE#123456789"
+  });
+  assert.deepEqual(whatsapp.phoneOwnerKey("123456789"), {
+    PK: "PHONE#123456789", SK: "CONNECTION"
+  });
+  assert.equal(typeof whatsapp.saveWhatsAppConnection, "function");
+  assert.equal(typeof whatsapp.getWhatsAppCredentials, "function");
+  assert.equal(typeof whatsapp.disconnectWhatsAppConnection, "function");
+  assert.equal(typeof whatsapp.listWhatsAppConnections, "function");
 });
