@@ -53,7 +53,7 @@ async function claimStripeEvent(eventId, now = new Date()) {
           TableName: dynamodb.getTableName("workspaces"),
           Key: key,
           UpdateExpression: "SET #status = :processing, leaseUntil = :lease, attempts = if_not_exists(attempts, :zero) + :one, updatedAt = :updated",
-          ConditionExpression: "#status <> :processing OR leaseUntil <= :now",
+          ConditionExpression: "attribute_not_exists(#status) OR #status <> :processing OR attribute_not_exists(leaseUntil) OR leaseUntil <= :now",
           ExpressionAttributeNames: { "#status": "status" },
           ExpressionAttributeValues: {
             ":processing": "processing",
