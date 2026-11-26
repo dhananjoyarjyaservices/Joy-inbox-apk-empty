@@ -53,6 +53,28 @@ test("rejects malformed template variable values", () => {
 });
 
 
+test("builds authentication OTP body and button parameters for public template sends", () => {
+  const authTemplate = {
+    status: "APPROVED", category: "AUTHENTICATION",
+    components: [
+      { type: "BODY", text: "{{1}} is your verification code." },
+      { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "COPY_CODE" }] }
+    ]
+  };
+  assert.deepEqual(buildPublicTemplateComponents(authTemplate, {
+    variables: ["123456"], buttonVariables: ["123456"]
+  }), [
+    { type: "body", parameters: [{ type: "text", text: "123456" }] },
+    { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "123456" }] }
+  ]);
+  assert.throws(() => buildPublicTemplateComponents(authTemplate, {
+    variables: ["123456"], buttonVariables: ["654321"]
+  }), /matching OTP/);
+  assert.throws(() => buildPublicTemplateComponents(authTemplate, {
+    variables: ["12 34"], buttonVariables: ["12 34"]
+  }), /4–15/);
+});
+
 test("requires and normalizes explicit past template opt-in evidence", () => {
   const now = Date.parse("2026-11-25T08:00:00.000Z");
   assert.deepEqual(normalizeTemplateConsent({
