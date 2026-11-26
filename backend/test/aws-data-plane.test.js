@@ -597,3 +597,77 @@ test("DynamoDB WhatsApp connection save uses one transaction and prevents cross-
     if (prior.encryptionKey === undefined) delete process.env.TENANT_SECRET_ENCRYPTION_KEY; else process.env.TENANT_SECRET_ENCRYPTION_KEY = prior.encryptionKey;
   }
 });
+
+
+test("DynamoDB inbound WhatsApp writer atomically stores customer, conversation and provider message", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  let captured;
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      captured = command.input;
+      return {};
+    }
+  });
+  try {
+    const timestamp = 1760000000000;
+    const saved = await records.saveIncomingWhatsAppMessage("workspace_1", {
+      conversationId: "919999999999",
+      customerId: "919999999999",
+      customerName: "Customer One",
+      messageId: "wamid.HBgMOTE5OTk5OTk5OTk5FQIAEhgUM0VC",
+      timestamp,
+      phoneNumberId: "123456789012",
+      type: "text",
+      text: "Hello Joy Inbox"
+    });
+    assert.equal(saved, true);
+    assert.equal(captured.TransactItems.length, 3);
+    const [customer, conversation, message] = captured.TransactItems.map(item => item.Put.Item);
+    assert.deepEqual([customer.entityType, conversation.entityType, message.entityType], [
+      "CUSTOMER", "CONVERSATION", "MESSAGE"
+    ]);
+    assert.equal(customer.PK, "ORG#workspace_1");
+    assert.equal(conversation.PK, "ORG#workspace_1");
+    assert.equal(message.PK, "ORG#workspace_1#CONVERSATION#919999999999");
+    assert.equal(message.messageId, "wamid.HBgMOTE5OTk5OTk5OTk5FQIAEhgUM0VC");
+    assert.equal(message.timestamp, timestamp);
+    assert.equal(message.text, "Hello Joy Inbox");
+    assert.match(captured.TransactItems[2].Put.ConditionExpression, /attribute_not_exists/);
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION;
+    else process.env.AWS_REGION = prior.region;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE;
+    else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+    if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE;
+    else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
+  }
+});
+
+test("DynamoDB inbound WhatsApp writer rejects malformed tenant, message ID and timestamp", async () => {
+  await assert.rejects(
+    records.saveIncomingWhatsAppMessage("../other", {
+      conversationId: "919999999999", messageId: "wamid.abc", timestamp: 1760000000000
+    }),
+    { statusCode: 400 }
+  );
+  await assert.rejects(
+    records.saveIncomingWhatsAppMessage("workspace_1", {
+      conversationId: "919999999999", messageId: "bad/message", timestamp: 1760000000000
+    }),
+    { statusCode: 400 }
+  );
+  await assert.rejects(
+    records.saveIncomingWhatsAppMessage("workspace_1", {
+      conversationId: "919999999999", messageId: "wamid.abc", timestamp: -1
+    }),
+    { statusCode: 400 }
+  );
+});
