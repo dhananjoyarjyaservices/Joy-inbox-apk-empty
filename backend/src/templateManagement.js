@@ -91,7 +91,7 @@ function normalizeTemplateComponents(input) {
         }
         if (type === "PHONE_NUMBER") {
           const phoneNumber = cleanText(button.phone_number, "Button phone number", 20);
-          if (!/^\\+[1-9][0-9]{7,14}$/.test(phoneNumber)) throw httpError("Button phone number must be in international format.");
+          if (/^\+[1-9][0-9]{7,14}$/.test(phoneNumber) === false) throw httpError("Button phone number must be in international format.");
           return { type, text, phone_number: phoneNumber };
         }
         throw httpError("Only QUICK_REPLY, URL and PHONE_NUMBER template buttons are currently supported.");
