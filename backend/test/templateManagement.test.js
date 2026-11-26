@@ -60,6 +60,23 @@ test("rejects unsupported media headers and unsafe button URLs", () => {
   ]), /Dynamic URL/);
 });
 
+test("rejects invalid WhatsApp CTA and quick-reply button combinations", () => {
+  assert.throws(() => normalizeTemplateComponents([
+    { type: "BODY", text: "Hello" },
+    { type: "BUTTONS", buttons: [
+      { type: "QUICK_REPLY", text: "Help" },
+      { type: "URL", text: "Visit", url: "https://example.com" }
+    ] }
+  ]), /cannot be mixed/);
+  assert.throws(() => normalizeTemplateComponents([
+    { type: "BODY", text: "Hello" },
+    { type: "BUTTONS", buttons: [
+      { type: "URL", text: "Visit", url: "https://example.com" },
+      { type: "URL", text: "More", url: "https://example.org" }
+    ] }
+  ]), /one URL and one phone/);
+});
+
 test("validates categories, names, locales, and template mutation identity", () => {
   assert.throws(() => normalizeTemplateDefinition({
     name: "Uppercase_Name", language: "en_US", category: "UTILITY",
