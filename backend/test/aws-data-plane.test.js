@@ -767,3 +767,60 @@ test("DynamoDB WhatsApp message pointer lookup is tenant-scoped and strongly con
     else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
   }
 });
+
+
+test("DynamoDB WhatsApp delivery status updates the indexed message without status regression", async () => {
+  const prior = {
+    region: process.env.AWS_REGION,
+    customers: process.env.DYNAMODB_CUSTOMERS_TABLE,
+    messages: process.env.DYNAMODB_MESSAGES_TABLE
+  };
+  process.env.AWS_REGION = "ap-south-1";
+  process.env.DYNAMODB_CUSTOMERS_TABLE = "JoyInboxCustomers";
+  process.env.DYNAMODB_MESSAGES_TABLE = "JoyInboxMessages";
+  const calls = [];
+  dynamodb.setDocumentClientForTests({
+    async send(command) {
+      calls.push({ name: command.constructor.name, input: command.input });
+      if (command.constructor.name === "GetCommand") {
+        return { Item: {
+          entityType: "WHATSAPP_MESSAGE_POINTER",
+          organizationId: "workspace_1",
+          conversationId: "919999999999",
+          timestamp: 1760000000000
+        } };
+      }
+      if (command.constructor.name === "UpdateCommand") return { Attributes: { status: "delivered" } };
+      throw new Error("Unexpected DynamoDB command.");
+    }
+  });
+  try {
+    const updated = await records.updateWhatsAppMessageStatus(
+      "workspace_1", "wamid.status:1", "delivered", 1760000005000
+    );
+    assert.equal(updated, true);
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[0].input.Key, {
+      PK: "ORG#workspace_1",
+      SK: "WHATSAPP_MESSAGE#wamid.status:1"
+    });
+    assert.equal(calls[1].input.TableName, "JoyInboxMessages");
+    assert.deepEqual(calls[1].input.Key, {
+      PK: "ORG#workspace_1#CONVERSATION#919999999999",
+      SK: "MESSAGE#0001760000000000#wamid.status:1"
+    });
+    assert.equal(calls[1].input.ExpressionAttributeValues[":status"], "delivered");
+    assert.equal(calls[1].input.ExpressionAttributeValues[":rank"], 2);
+    assert.match(calls[1].input.ConditionExpression, /statusRank <= :rank/);
+    assert.equal(calls[1].input.ExpressionAttributeValues[":statusUpdatedAt"], 1760000005000);
+    await assert.rejects(
+      records.updateWhatsAppMessageStatus("workspace_1", "wamid.status:1", "queued"),
+      { statusCode: 400 }
+    );
+  } finally {
+    dynamodb.setDocumentClientForTests(null);
+    if (prior.region === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = prior.region;
+    if (prior.customers === undefined) delete process.env.DYNAMODB_CUSTOMERS_TABLE; else process.env.DYNAMODB_CUSTOMERS_TABLE = prior.customers;
+    if (prior.messages === undefined) delete process.env.DYNAMODB_MESSAGES_TABLE; else process.env.DYNAMODB_MESSAGES_TABLE = prior.messages;
+  }
+});
