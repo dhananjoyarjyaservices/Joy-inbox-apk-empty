@@ -19,7 +19,7 @@ test("normalizes a supported text template and safe buttons", () => {
       { type: "FOOTER", text: "Thank you" },
       { type: "BUTTONS", buttons: [
         { type: "URL", text: "Track order", url: "https://example.com/orders" },
-        { type: "QUICK_REPLY", text: "Need help" }
+        { type: "PHONE_NUMBER", text: "Call us", phone_number: "+14155552671" }
       ] }
     ],
     allowCategoryChange: true
