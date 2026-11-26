@@ -181,6 +181,13 @@ async function removeWorkspaceMember(organization, actor, input) {
       ExpressionAttributeNames: { "#status": "status" },
       ExpressionAttributeValues: { ":removed": "removed", ":now": now, ":active": "active" }
     } },
+    { Update: {
+      TableName: dynamodb.getTableName("workspaces"),
+      Key: dynamodb.workspaceKey(organization.id),
+      UpdateExpression: "SET activeSeatCount = activeSeatCount - :one, updatedAt = :now",
+      ConditionExpression: "activeSeatCount > :zero",
+      ExpressionAttributeValues: { ":one": 1, ":zero": 0, ":now": now }
+    } },
     { Put: { TableName: dynamodb.getTableName("workspaces"), Item: audit, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } }
   ]);
   return { uid, status: "removed" };
