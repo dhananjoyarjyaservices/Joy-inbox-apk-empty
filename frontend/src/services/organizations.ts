@@ -115,18 +115,52 @@ export interface WhatsAppConnectionHealthResult {
   verifiedName?: string;
   error?: string;
 }
+export type WhatsAppTemplateComponent =
+  | { type: "HEADER"; format: "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"; text?: string }
+  | { type: "BODY"; text?: string }
+  | { type: "FOOTER"; text?: string }
+  | { type: "BUTTONS"; buttons?: Array<{ type?: string; text?: string; url?: string; phone_number?: string }> };
 export interface WhatsAppTemplate {
   id: string;
   name: string;
   status: string;
   language: string;
   category: string;
-  components: Array<{ type?: string; text?: string; format?: string; buttons?: Array<{ type?: string; text?: string; url?: string }> }>;
+  components: WhatsAppTemplateComponent[];
 }
+export type WhatsAppTemplateDraftComponent =
+  | { type: "HEADER"; format: "TEXT"; text: string; example?: { header_text: string[] } }
+  | { type: "BODY"; text: string; example?: { body_text: string[][] } }
+  | { type: "FOOTER"; text: string }
+  | { type: "BUTTONS"; buttons: Array<
+      | { type: "QUICK_REPLY"; text: string }
+      | { type: "URL"; text: string; url: string }
+      | { type: "PHONE_NUMBER"; text: string; phone_number: string }
+    > };
 export async function listWhatsAppTemplates(organizationId: string, phoneNumberId: string, wabaId: string): Promise<WhatsAppTemplate[]> {
   const query = new URLSearchParams({ organizationId, phoneNumberId, wabaId });
   const result = await request(`/whatsapp/templates?${query.toString()}`);
   return Array.isArray(result.templates) ? result.templates : [];
+}
+export async function createWhatsAppTemplate(input: {
+  organizationId: string; phoneNumberId: string; wabaId: string;
+  name: string; language: string; category: "UTILITY" | "MARKETING";
+  components: WhatsAppTemplateDraftComponent[]; allowCategoryChange?: boolean;
+}) {
+  return request("/whatsapp/templates", "POST", input);
+}
+export async function updateWhatsAppTemplate(input: {
+  organizationId: string; phoneNumberId: string; wabaId: string;
+  templateId: string; templateName: string;
+  category?: "UTILITY" | "MARKETING"; components?: WhatsAppTemplateDraftComponent[];
+}) {
+  return request("/whatsapp/templates", "PUT", input);
+}
+export async function deleteWhatsAppTemplate(input: {
+  organizationId: string; phoneNumberId: string; wabaId: string;
+  templateId: string; templateName: string;
+}) {
+  return request("/whatsapp/templates", "DELETE", input);
 }
 export async function checkTenantSlaAlerts(organizationId: string): Promise<{ notified: number }> {
   return request("/organizations/sla/check", "POST", { organizationId });
