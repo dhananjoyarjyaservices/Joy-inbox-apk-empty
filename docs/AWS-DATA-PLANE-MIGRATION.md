@@ -16,6 +16,22 @@ The current branch still uses `firebase-admin/firestore` throughout the API, ten
 
 This is a cross-cutting data-layer migration, not a configuration-only switch. Do not change only `media.js` and declare the SaaS migrated.
 
+## Verified provisioned DynamoDB schema (AWS console screenshots, 2026-11-26)
+
+All three existing tables were inspected in the AWS console in region `ap-south-1` (Asia Pacific — Mumbai).
+
+| Logical table | Exact table name | Partition key | Sort key | GSIs | Vector indexes | Capacity | PITR |
+|---|---|---|---|---:|---:|---|---|
+| Workspaces | `JoyInboxWorkspaces` | `PK` (String) | `SK` (String) | 0 | 0 | On-demand | Off |
+| Customers | `JoyInboxCustomers` | `PK` (String) | `SK` (String) | 0 | 0 | On-demand | Off |
+| Messages | `JoyInboxMessages` | `PK` (String) | `SK` (String) | 0 | 0 | On-demand | Off |
+
+The console showed all three tables Active and empty (item count 0) at inspection time. No table settings or indexes were changed during inspection.
+
+**What this verifies:** the adapter's primary-key attribute names `PK` and `SK` match the provisioned tables, and there are currently no GSIs available for alternate access patterns. The screenshots do **not** reveal the intended PK/SK value conventions, item attribute shapes, encryption configuration, or application access patterns. Those must be confirmed from the application data contract before production queries or writes are enabled.
+
+**Operational warning:** point-in-time recovery is Off on all three tables. Enable PITR and verify backup/recovery policy before storing production customer or message data. This documentation update does not change AWS settings.
+
 ## DynamoDB logical ownership
 
 Use the three already-provisioned DynamoDB tables only after their exact names, partition/sort keys, GSIs, billing mode, encryption and region have been inspected and recorded. Do not create replacement tables or assume key names from this document.
