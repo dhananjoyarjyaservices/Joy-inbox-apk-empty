@@ -13,7 +13,8 @@ function requireUid(decoded) {
   if (!decoded || typeof decoded.uid !== "string" || !decoded.uid) {
     throw httpError("Authentication required.", 401);
   }
-  return dynamodb.userWorkspacePartition(decoded.uid), decoded.uid;
+  dynamodb.userWorkspacePartition(decoded.uid);
+  return decoded.uid;
 }
 
 function normalizeWorkspaceName(value) {
