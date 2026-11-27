@@ -7,7 +7,7 @@ const { createDynamoStores } = require("../src/aws/dynamoStores");
 class Command { constructor(input) { this.input = input; } }
 const commands = {
   GetCommand: Command, PutCommand: Command, QueryCommand: Command,
-  DeleteCommand: Command, TransactWriteCommand: Command
+  DeleteCommand: Command, TransactWriteCommand: Command, UpdateCommand: Command
 };
 
 test("routes organization and message data to the messages table and CRM/workspaces to separate tables", async () => {
