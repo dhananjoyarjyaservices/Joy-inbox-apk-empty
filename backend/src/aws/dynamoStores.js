@@ -7,6 +7,7 @@ const { createDynamoMemberManagement } = require("./dynamoMemberManagement");
 const { createDynamoAuditStore } = require("./dynamoAuditStore");
 const { createDynamoSubscriptionStore } = require("./dynamoSubscriptionStore");
 const { createDynamoStripeEventStore } = require("./dynamoStripeEventStore");
+const { processDynamoStripeWebhookEvent } = require("./dynamoStripeBilling");
 
 /**
  * Creates isolated adapters for the three owner-verified DynamoDB tables.
@@ -60,6 +61,7 @@ function createDynamoStores({ documentClient, commands, env = process.env, getSe
     audit,
     subscriptions,
     stripeEvents,
+    stripeBilling: Object.freeze({ process: options => processDynamoStripeWebhookEvent({ ...options, eventStore: stripeEvents, subscriptions }) }),
     memberManagement,
     messages,
     customers: Object.freeze({
