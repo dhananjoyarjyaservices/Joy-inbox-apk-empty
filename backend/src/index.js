@@ -1,6 +1,7 @@
 
 const crypto = require("crypto");
 const { getFirebaseAdmin, getDb } = require("./firebase");
+const { verifyCognitoAccessToken } = require("./aws/cognitoAuth");
 const {
   getHeader,
   getRawBody,
@@ -196,9 +197,12 @@ async function authenticateUser(event) {
   }
   const idToken = authorization.slice(7).trim();
   if (!idToken) {
-    const error = new Error("Firebase ID token is missing.");
+    const error = new Error("Bearer access token is missing.");
     error.statusCode = 401;
     throw error;
+  }
+  if ((process.env.AUTH_PROVIDER || "firebase").toLowerCase() === "cognito") {
+    return verifyCognitoAccessToken(idToken);
   }
   try {
     return await getFirebaseAdmin().auth().verifyIdToken(idToken, true);
