@@ -11,22 +11,23 @@ test("creates organization and first owner membership atomically with conditiona
   let sent;
   const store = createDynamoOrganizationStore({
     documentClient: { send: async (command) => { sent = command.input; return {}; } },
-    commands, tableName: "JoyInboxMessages", userIndexName: "GSI1"
+    commands, tableName: "JoyInboxMessages"
   });
   const result = await store.createOrganization({ organizationId: "org_1", uid: "user_1", name: "Acme", now: "2026-11-27T00:00:00.000Z" });
   assert.deepEqual(result, { id: "org_1", name: "Acme", role: "owner", status: "active" });
-  assert.equal(sent.TransactItems.length, 2);
+  assert.equal(sent.TransactItems.length, 3);
   assert.equal(sent.TransactItems[0].Put.Item.PK, "ORG#org_1");
   assert.equal(sent.TransactItems[0].Put.Item.SK, "META");
   assert.equal(sent.TransactItems[1].Put.Item.SK, "MEMBER#user_1");
-  assert.equal(sent.TransactItems[1].Put.Item.GSI1PK, "USER#user_1");
   assert.match(sent.TransactItems[1].Put.ConditionExpression, /attribute_not_exists/);
+  assert.equal(sent.TransactItems[2].Put.Item.PK, "USER#user_1");
+  assert.equal(sent.TransactItems[2].Put.Item.SK, "ORG#org_1");
 });
 
-test("requires the user-membership GSI to be named explicitly", () => {
+test("constructs without a GSI because user membership uses the base table", () => {
   assert.throws(() => createDynamoOrganizationStore({
     documentClient: { send: async () => ({}) }, commands, tableName: "JoyInboxMessages"
-  }), /provisioned user-membership GSI/);
+  });
 });
 
 test("resolves active membership from authoritative organization records", async () => {
@@ -57,7 +58,8 @@ test("lists organizations by user index and rejects foreign pagination cursors",
   });
   const page = await store.listOrganizations("user_1", { limit: 20 });
   assert.equal(page.items[0].organizationId, "org_1");
-  assert.equal(sent.IndexName, "GSI1");
+  assert.equal(sent.IndexName, undefined);
   assert.equal(sent.ExpressionAttributeValues[":user"], "USER#user_1");
-  await assert.rejects(() => store.listOrganizations("user_1", { exclusiveStartKey: { GSI1PK: "USER#user_2" } }), { statusCode: 400 });
+  assert.equal(sent.KeyConditionExpression, "PK = :user AND begins_with(SK, :organization)");
+  await assert.rejects(() => store.listOrganizations("user_1", { exclusiveStartKey: { PK: "USER#user_2" } }), { statusCode: 400 });
 });
