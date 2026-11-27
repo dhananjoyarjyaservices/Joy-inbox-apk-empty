@@ -39,8 +39,8 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
       await documentClient.send(new commands.TransactWriteCommand({ TransactItems: [
         { Update: {
           TableName: tableName, Key: usageKey,
-          UpdateExpression: "SET #entity = :entity, plan = :plan, periodStart = :start, periodEnd = :end, messageLimit = :limit, updatedAt = :now, messagesUsed = if_not_exists(messagesUsed, :zero) ADD messagesReserved :one",
-          ConditionExpression: "(attribute_not_exists(messagesUsed) AND attribute_not_exists(messagesReserved)) OR (messagesUsed + messagesReserved < :limit)",
+          UpdateExpression: "SET #entity = :entity, plan = :plan, periodStart = :start, periodEnd = :end, messageLimit = :limit, updatedAt = :now, messagesUsed = if_not_exists(messagesUsed, :zero), messagesReserved = if_not_exists(messagesReserved, :zero) ADD messagesReserved :one, messagesCount :one",
+          ConditionExpression: "attribute_not_exists(messagesCount) OR messagesCount < :limit",
           ExpressionAttributeNames: { "#entity": "entityType" },
           ExpressionAttributeValues: {
             ":entity": "BILLING_USAGE", ":plan": window.plan.key, ":start": dateIso(window.start),
@@ -78,7 +78,7 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
           TableName: tableName, Key: usageKey,
           UpdateExpression: outcome === "sent"
             ? "SET updatedAt = :now ADD messagesReserved :minus, messagesUsed :one"
-            : "SET updatedAt = :now ADD messagesReserved :minus",
+            : "SET updatedAt = :now ADD messagesReserved :minus, messagesCount :minus",
           ConditionExpression: "messagesReserved >= :one",
           ExpressionAttributeValues: { ":minus": -1, ":one": 1, ":now": at.toISOString() }
         } },
@@ -106,7 +106,7 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
       await documentClient.send(new commands.TransactWriteCommand({ TransactItems: [
         { Update: {
           TableName: tableName, Key: { PK: pk, SK: `USAGE#${window.key}` },
-          UpdateExpression: "SET #entity = :entity, plan = :plan, periodStart = :start, periodEnd = :end, messageLimit = :limit, updatedAt = :now ADD messagesUsed :one",
+          UpdateExpression: "SET #entity = :entity, plan = :plan, periodStart = :start, periodEnd = :end, messageLimit = :limit, updatedAt = :now ADD messagesUsed :one, messagesCount :one",
           ExpressionAttributeNames: { "#entity": "entityType" },
           ExpressionAttributeValues: { ":entity": "BILLING_USAGE", ":plan": window.plan.key, ":start": dateIso(window.start), ":end": dateIso(window.end), ":limit": window.limit, ":now": at.toISOString(), ":one": 1 }
         } },
@@ -131,7 +131,8 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
     const item = result.Item || {};
     const used = Math.max(0, Number(item.messagesUsed || 0));
     const reserved = Math.max(0, Number(item.messagesReserved || 0));
-    const percent = Math.min(100, Math.floor((used + reserved) / window.limit * 100));
+    const counted = Math.max(0, Number(item.messagesCount ?? (used + reserved)));
+    const percent = Math.min(100, Math.floor(counted / window.limit * 100));
     return {
       messagesUsed: used, messagesReserved: reserved, messageLimit: window.limit, percent,
       thresholdsReached: [80, 95, 100].filter(value => percent >= value),
