@@ -121,8 +121,8 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
       await documentClient.send(new commands.TransactWriteCommand({ TransactItems: [
         { Update: {
           TableName: tableName, Key: usageKey,
-          UpdateExpression: "SET #entity = :entity, mediaTransferLimitBytes = :limit, updatedAt = :now, mediaBytesUsed = if_not_exists(mediaBytesUsed, :zero), mediaBytesReserved = if_not_exists(mediaBytesReserved, :zero) ADD mediaBytesReserved :bytes",
-          ConditionExpression: "(attribute_not_exists(mediaBytesUsed) AND attribute_not_exists(mediaBytesReserved)) OR (mediaBytesUsed + mediaBytesReserved <= :available)",
+          UpdateExpression: "SET #entity = :entity, mediaTransferLimitBytes = :limit, updatedAt = :now, mediaBytesUsed = if_not_exists(mediaBytesUsed, :zero), mediaBytesReserved = if_not_exists(mediaBytesReserved, :zero), mediaBytesCount = if_not_exists(mediaBytesCount, :zero) ADD mediaBytesReserved :bytes, mediaBytesCount :bytes",
+          ConditionExpression: "attribute_not_exists(mediaBytesCount) OR mediaBytesCount <= :available",
           ExpressionAttributeNames: { "#entity": "entityType" },
           ExpressionAttributeValues: { ":entity": "BILLING_USAGE", ":limit": mediaLimitBytes, ":now": at.toISOString(), ":zero": 0, ":bytes": bytes, ":available": available }
         } },
@@ -160,7 +160,7 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
           TableName: tableName, Key: usageKey,
           UpdateExpression: outcome === "sent"
             ? "SET updatedAt = :now ADD mediaBytesReserved :minus, mediaBytesUsed :actual"
-            : "SET updatedAt = :now ADD mediaBytesReserved :minus",
+            : "SET updatedAt = :now ADD mediaBytesReserved :minus, mediaBytesCount :minus",
           ConditionExpression: "mediaBytesReserved >= :held",
           ExpressionAttributeValues: { ":minus": -heldBytes, ":held": heldBytes, ":actual": actual, ":now": at.toISOString() }
         } },
