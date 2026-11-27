@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const { createDynamoOrganizationStore } = require("../src/aws/dynamoOrganizationStore");
 
 class Command { constructor(input) { this.input = input; } }
-const commands = { GetCommand: Command, PutCommand: Command, QueryCommand: Command, TransactWriteCommand: Command };
+const commands = { GetCommand: Command, PutCommand: Command, QueryCommand: Command, TransactWriteCommand: Command, DeleteCommand: Command };
 
 test("creates organization and first owner membership atomically with conditional puts", async () => {
   let sent;
@@ -63,4 +63,45 @@ test("lists organizations by user index and rejects foreign pagination cursors",
   assert.equal(sent.KeyConditionExpression, "PK = :user AND begins_with(SK, :organization)");
   await assert.rejects(() => store.listOrganizations("user_1", { exclusiveStartKey: { PK: "USER#user_2", SK: "ORG#org_1" } }), { statusCode: 400 });
   await assert.rejects(() => store.listOrganizations("user_1", { exclusiveStartKey: { PK: "USER#user_1", SK: "CUSTOMER#customer_1" } }), { statusCode: 400 });
+});
+
+test("adds a non-owner member atomically to organization and user lookup records", async () => {
+  let sent;
+  const store = createDynamoOrganizationStore({
+    documentClient: { send: async (command) => { sent = command.input; return {}; } },
+    commands, tableName: "JoyInboxMessages"
+  });
+  const result = await store.addMember({ organizationId: "org_1", uid: "user_2", role: "agent" });
+  assert.deepEqual(result, { uid: "user_2", role: "agent", status: "active" });
+  assert.equal(sent.TransactItems.length, 2);
+  assert.equal(sent.TransactItems[0].Put.Item.SK, "MEMBER#user_2");
+  assert.equal(sent.TransactItems[1].Put.Item.PK, "USER#user_2");
+});
+
+test("rejects owner assignment to a new member and protects owner removal", async () => {
+  const store = createDynamoOrganizationStore({
+    documentClient: { send: async (command) => command.input.Key.SK === "MEMBER#user_1"
+      ? { Item: { role: "owner", status: "active" } }
+      : {} },
+    commands, tableName: "JoyInboxMessages"
+  });
+  await assert.rejects(() => store.addMember({ organizationId: "org_1", uid: "user_2", role: "owner" }), { statusCode: 400 });
+  await assert.rejects(() => store.removeMember({ organizationId: "org_1", uid: "user_1" }), { statusCode: 409 });
+});
+
+test("updates and removes non-owner memberships using DynamoDB transactions", async () => {
+  let sent;
+  const store = createDynamoOrganizationStore({
+    documentClient: { send: async (command) => {
+      if (command.input.Key?.SK === "MEMBER#user_2") return { Item: { uid: "user_2", role: "agent", status: "active" } };
+      sent = command.input;
+      return {};
+    } },
+    commands, tableName: "JoyInboxMessages"
+  });
+  await store.updateMemberRole({ organizationId: "org_1", uid: "user_2", role: "admin" });
+  assert.equal(sent.TransactItems[0].Put.Item.role, "admin");
+  assert.equal(sent.TransactItems[1].Put.Item.role, "admin");
+  await store.removeMember({ organizationId: "org_1", uid: "user_2" });
+  assert.ok(sent.TransactItems.every(item => item.Delete));
 });
