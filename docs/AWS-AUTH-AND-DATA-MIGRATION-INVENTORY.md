@@ -46,6 +46,13 @@ Status: implementation planning based on the current `feature/saas-foundation` s
 | Secrets | AWS Secrets Manager + KMS | Keep Meta, Stripe and encryption secrets out of frontend bundles and source |
 | Runtime | Lambda + API Gateway | Configure least-privilege role, environment references, logs, alarms, CORS and API base URL |
 
+### DynamoDB organization and membership adapter
+
+- Added `backend/src/aws/dynamoOrganizationStore.js` with transactional organization + first-owner creation, strongly consistent organization/member reads, active membership authorization, and user-to-organization listing.
+- Added `backend/test/dynamo-organization-store.test.js` for atomic creation, active membership checks, inactive membership rejection and user-scoped pagination.
+- The adapter expects the table's confirmed base keys `PK` and `SK`, plus a provisioned GSI with `GSI1PK` and `GSI1SK` for user-to-organization lookup. The index name is injected explicitly as `DYNAMODB_USER_ORGANIZATIONS_INDEX`; no GSI is assumed to exist and no infrastructure change has been deployed.
+- Before wiring this adapter into API routes, inspect the live table indexes and either confirm this GSI exists or design a migration that safely adds it. Existing Firebase organization/member data still remains the active source of truth until cutover.
+
 ## Safe migration sequence
 
 1. Confirm the actual `JoyInboxMessages` key schema and inspect existing records/indexes. Do not assume the proposed `ORG#...` key layout matches production data.
