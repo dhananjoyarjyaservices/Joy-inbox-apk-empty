@@ -71,11 +71,13 @@ test("adds a non-owner member atomically to organization and user lookup records
     documentClient: { send: async (command) => { sent = command.input; return {}; } },
     commands, tableName: "JoyInboxMessages"
   });
-  const result = await store.addMember({ organizationId: "org_1", uid: "user_2", role: "agent" });
+  const result = await store.addMember({ organizationId: "org_1", uid: "user_2", role: "agent", seatLimit: 5 });
   assert.deepEqual(result, { uid: "user_2", role: "agent", status: "active" });
   assert.equal(sent.TransactItems.length, 2);
   assert.equal(sent.TransactItems[0].Put.Item.SK, "MEMBER#user_2");
   assert.equal(sent.TransactItems[1].Put.Item.PK, "USER#user_2");
+  assert.equal(sent.TransactItems[2].Update.ExpressionAttributeValues[":seatLimit"], 5);
+  assert.match(sent.TransactItems[2].Update.ConditionExpression, /activeMemberCount < :seatLimit/);
 });
 
 test("rejects owner assignment to a new member and protects owner removal", async () => {
@@ -85,7 +87,7 @@ test("rejects owner assignment to a new member and protects owner removal", asyn
       : {} },
     commands, tableName: "JoyInboxMessages"
   });
-  await assert.rejects(() => store.addMember({ organizationId: "org_1", uid: "user_2", role: "owner" }), { statusCode: 400 });
+  await assert.rejects(() => store.addMember({ organizationId: "org_1", uid: "user_2", role: "owner", seatLimit: 5 }), { statusCode: 400 });
   await assert.rejects(() => store.removeMember({ organizationId: "org_1", uid: "user_1" }), { statusCode: 409 });
 });
 
@@ -105,7 +107,8 @@ test("updates and removes non-owner memberships using DynamoDB transactions", as
   assert.match(sent.TransactItems[0].Put.ConditionExpression, /#role <> :owner/);
   assert.match(sent.TransactItems[0].Put.ConditionExpression, /#status = :active/);
   await store.removeMember({ organizationId: "org_1", uid: "user_2" });
-  assert.ok(sent.TransactItems.every(item => item.Delete));
+  assert.ok(sent.TransactItems.slice(0, 2).every(item => item.Delete));
+  assert.match(sent.TransactItems[2].Update.UpdateExpression, /activeMemberCount/);
   assert.match(sent.TransactItems[0].Delete.ConditionExpression, /#role <> :owner/);
   assert.match(sent.TransactItems[0].Delete.ConditionExpression, /#status = :active/);
 });
