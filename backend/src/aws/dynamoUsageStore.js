@@ -122,9 +122,9 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
         { Update: {
           TableName: tableName, Key: usageKey,
           UpdateExpression: "SET #entity = :entity, mediaTransferLimitBytes = :limit, updatedAt = :now, mediaBytesUsed = if_not_exists(mediaBytesUsed, :zero), mediaBytesReserved = if_not_exists(mediaBytesReserved, :zero), mediaBytesCount = if_not_exists(mediaBytesCount, :zero) ADD mediaBytesReserved :bytes, mediaBytesCount :bytes",
-          ConditionExpression: "attribute_not_exists(mediaBytesCount) OR mediaBytesCount <= :available",
+          ConditionExpression: "attribute_not_exists(mediaBytesCount) OR mediaBytesCount <= :maxAllowedBefore",
           ExpressionAttributeNames: { "#entity": "entityType" },
-          ExpressionAttributeValues: { ":entity": "BILLING_USAGE", ":limit": mediaLimitBytes, ":now": at.toISOString(), ":zero": 0, ":bytes": bytes, ":available": available }
+          ExpressionAttributeValues: { ":entity": "BILLING_USAGE", ":limit": mediaLimitBytes, ":now": at.toISOString(), ":zero": 0, ":bytes": bytes, ":maxAllowedBefore": mediaLimitBytes - bytes }
         } },
         { Put: {
           TableName: tableName,
