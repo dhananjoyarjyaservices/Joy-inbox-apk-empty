@@ -25,6 +25,15 @@ Status: implementation planning based on the current `feature/saas-foundation` s
 - `infra/aws/aws-native-staging.yaml`: proposed private S3 bucket and narrowly scoped Lambda role policy. It is a template, not a deployed stack.
 - These adapters are not yet connected to the existing domain routes and do not constitute a production AWS data layer.
 
+
+## Cognito verifier implementation status (incremental)
+
+- Added `backend/src/aws/cognitoAuth.js`: RS256 signature verification using Cognito's issuer JWKS, strict issuer, app-client ID, `token_use=access`, subject, expiry, issued-at and optional not-before checks. JWKS are cached in-process for one hour.
+- Added `backend/test/cognito-auth.test.js`: positive signature test plus invalid signature, wrong issuer/client/token-use, expired token, unknown key and missing configuration cases.
+- Added an opt-in backend auth-provider switch in `backend/src/index.js`: `AUTH_PROVIDER=cognito` selects Cognito access-token verification; default remains the existing Firebase verification path.
+- This is deliberately **not enabled for staging or production yet**. Existing tenant membership and organization creation still read Firestore and expect the identity to resolve to a stored membership. Cognito `sub` values are not automatically the same as Firebase UIDs. Enabling the switch before migrating membership records would reject legitimate users or break tenant authorization.
+- Required Cognito runtime configuration for a future staging test: `AUTH_PROVIDER=cognito`, `COGNITO_REGION=ap-south-1`, `COGNITO_USER_POOL_ID=<pool-id>`, `COGNITO_CLIENT_ID=<app-client-id>`. These are not configured in AWS by this code change. Never put app client secrets, Meta tokens, Stripe secrets or private keys in Vite/frontend variables.
+
 ## Required AWS target responsibilities
 
 | Concern | Target | Migration requirement |
