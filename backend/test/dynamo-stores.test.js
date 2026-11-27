@@ -69,9 +69,11 @@ test("exposes native tenant-scoped audit store and uses it for member-management
   assert.ok(sent[0].Item.SK.startsWith("AUDIT#"));
 });
 
-test("member management stays disabled until a trusted subscription seat resolver is supplied", () => {
+test("member management is wired to the verified DynamoDB subscription seat resolver", () => {
   const stores = createDynamoStores({
     documentClient: { send: async () => ({}) }, commands, env: {}
   });
-  assert.equal(stores.memberManagement, null);
+  assert.ok(stores.memberManagement);
+  assert.equal(typeof stores.subscriptions.getSeatLimit, "function");
+  assert.equal(typeof stores.subscriptions.putVerifiedSubscription, "function");
 });
