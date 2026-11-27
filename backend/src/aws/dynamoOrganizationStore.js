@@ -11,15 +11,12 @@ function assertId(value, label) {
   if (typeof value !== "string" || !ID_PATTERN.test(value)) throw httpError(`A valid ${label} is required.`, 400);
 }
 
-function createDynamoOrganizationStore({ documentClient, commands, tableName, userIndexName }) {
+function createDynamoOrganizationStore({ documentClient, commands, tableName }) {
   if (!documentClient || typeof documentClient.send !== "function") throw new Error("A DynamoDB DocumentClient is required.");
   if (!commands?.GetCommand || !commands?.PutCommand || !commands?.QueryCommand || !commands?.TransactWriteCommand) {
     throw new Error("DynamoDB Get, Put, Query and TransactWrite command constructors are required.");
   }
   if (typeof tableName !== "string" || !tableName.trim()) throw new Error("DYNAMODB_TABLE_NAME is not configured.");
-  if (typeof userIndexName !== "string" || !/^[A-Za-z0-9_.-]{3,255}$/.test(userIndexName)) {
-    throw new Error("DYNAMODB_USER_ORGANIZATIONS_INDEX must name a provisioned user-membership GSI.");
-  }
 
   async function createOrganization({ organizationId, uid, name, now = new Date().toISOString() }) {
     assertId(organizationId, "organization ID");
@@ -42,8 +39,6 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName, us
     const membership = {
       PK: `ORG#${organizationId}`,
       SK: `MEMBER#${uid}`,
-      GSI1PK: `USER#${uid}`,
-      GSI1SK: `ORG#${organizationId}`,
       entityType: "MEMBERSHIP",
       organizationId,
       uid,
@@ -55,7 +50,11 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName, us
     await documentClient.send(new commands.TransactWriteCommand({
       TransactItems: [
         { Put: { TableName: tableName, Item: org, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } },
-        { Put: { TableName: tableName, Item: membership, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } }
+        { Put: { TableName: tableName, Item: membership, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } },
+        { Put: { TableName: tableName, Item: {
+          PK: `USER#${uid}`, SK: `ORG#${organizationId}`, entityType: "USER_ORGANIZATION",
+          organizationId, uid, role: "owner", status: "active", joinedAt: now
+        }, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } }
       ]
     }));
     return { id: organizationId, name: org.name, role: "owner", status: "active" };
@@ -96,13 +95,12 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName, us
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw httpError("Page limit must be between 1 and 100.", 400);
     const input = {
       TableName: tableName,
-      IndexName: userIndexName,
-      KeyConditionExpression: "GSI1PK = :user",
-      ExpressionAttributeValues: { ":user": `USER#${uid}` },
+      KeyConditionExpression: "PK = :user AND begins_with(SK, :organization)",
+      ExpressionAttributeValues: { ":user": `USER#${uid}`, ":organization": "ORG#" },
       Limit: limit
     };
     if (exclusiveStartKey !== undefined) {
-      if (!exclusiveStartKey || exclusiveStartKey.GSI1PK !== `USER#${uid}`) {
+      if (!exclusiveStartKey || exclusiveStartKey.PK !== `USER#${uid}`) {
         throw httpError("Pagination cursor does not belong to this user.", 400);
       }
       input.ExclusiveStartKey = exclusiveStartKey;
