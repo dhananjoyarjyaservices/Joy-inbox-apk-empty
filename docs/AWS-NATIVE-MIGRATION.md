@@ -96,6 +96,26 @@ The existing `JoyInboxMessages` PK/SK table must be inspected and its current da
 9. **Cutover**: owner approval required. Deploy new Lambda package, configure API Gateway/custom domain, frontend API URL and monitoring. Retain rollback path and source snapshots.
 10. **Decommission Firebase**: only after owner confirms migration reconciliation, production acceptance and rollback window completion.
 
+## AWS runtime wiring progress
+
+The following reusable code is now present on `feature/saas-foundation`:
+
+- `backend/src/aws/awsRuntimeConfig.js` validates the required Mumbai region, three distinct DynamoDB table names, private media bucket name and Cognito pool/app-client identifiers. It fails closed when values are missing or malformed.
+- `backend/src/aws/awsServices.js` constructs DynamoDB v3 and S3 v3 clients, creates the DocumentClient, wires the three DynamoDB domain adapters and the private S3 media adapter. It supports dependency injection for tests.
+- `backend/test/aws-runtime-config.test.js` and `backend/test/aws-services.test.js` cover validation and client/store wiring.
+
+This factory is not yet called from `backend/src/index.js`. The production request handlers still use their legacy persistence/authentication services. Do not set `AUTH_PROVIDER=cognito` or route customer traffic to these adapters yet.
+
+The AWS SDK v3 modules are loaded lazily from the Lambda Node.js 22 runtime in the current factory. Before production packaging, vendor and pin the required AWS SDK v3 modules in `backend/package.json` and regenerate `backend/package-lock.json` in a network-enabled build environment; relying on the runtime-bundled SDK version is not a reproducible production dependency strategy. The local package-lock could not be regenerated in the current environment because npm registry access timed out.
+
+Required deployment environment (names only; never put secret values in Git):
+- `AWS_REGION=ap-south-1`
+- `DYNAMODB_MESSAGES_TABLE`, `DYNAMODB_CUSTOMERS_TABLE`, `DYNAMODB_WORKSPACES_TABLE`
+- `S3_MEDIA_BUCKET`
+- `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID`
+
+All names/IDs must be verified in the owner's AWS account before configuring Lambda. This configuration validator does not create AWS resources or prove that they exist.
+
 ## Immediate next implementation tasks
 
 - [ ] Produce a complete Firestore collection/query/transaction inventory across all backend modules.
