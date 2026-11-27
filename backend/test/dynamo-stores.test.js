@@ -48,3 +48,30 @@ test("rejects table-name collisions to prevent cross-domain writes", () => {
     }
   }), /three distinct DynamoDB tables/);
 });
+
+test("exposes native tenant-scoped audit store and uses it for member-management audit", async () => {
+  const sent = [];
+  const stores = createDynamoStores({
+    documentClient: { send: async command => { sent.push(command.input); return {}; } },
+    commands,
+    env: {},
+    getSeatLimit: async () => 5
+  });
+  assert.equal(typeof stores.audit.record, "function");
+  assert.equal(typeof stores.audit.list, "function");
+  assert.ok(stores.memberManagement);
+  await stores.audit.record({
+    organizationId: "org_1", actorUid: "owner_1", actorRole: "owner",
+    action: "member.added", targetUid: "agent_1", details: { role: "agent" }
+  });
+  assert.equal(sent[0].TableName, "JoyInboxMessages");
+  assert.equal(sent[0].Item.PK, "ORG#org_1");
+  assert.ok(sent[0].Item.SK.startsWith("AUDIT#"));
+});
+
+test("member management stays disabled until a trusted subscription seat resolver is supplied", () => {
+  const stores = createDynamoStores({
+    documentClient: { send: async () => ({}) }, commands, env: {}
+  });
+  assert.equal(stores.memberManagement, null);
+});
