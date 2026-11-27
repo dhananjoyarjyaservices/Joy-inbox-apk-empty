@@ -5,6 +5,7 @@ const { createDynamoOrganizationStore } = require("./dynamoOrganizationStore");
 const { createDynamoTenancy } = require("./dynamoTenancy");
 const { createDynamoMemberManagement } = require("./dynamoMemberManagement");
 const { createDynamoAuditStore } = require("./dynamoAuditStore");
+const { createDynamoSubscriptionStore } = require("./dynamoSubscriptionStore");
 
 /**
  * Creates isolated adapters for the three owner-verified DynamoDB tables.
@@ -12,7 +13,7 @@ const { createDynamoAuditStore } = require("./dynamoAuditStore");
  * clients and command constructors. This factory is not enabled by the API
  * until identity and all domain migrations are complete.
  */
-function createDynamoStores({ documentClient, commands, env = process.env, getSeatLimit, recordMemberAudit }) {
+function createDynamoStores({ documentClient, commands, env = process.env, getSeatLimit, recordMemberAudit, plans }) {
   const messagesTable = env.DYNAMODB_MESSAGES_TABLE || "JoyInboxMessages";
   const customersTable = env.DYNAMODB_CUSTOMERS_TABLE || "JoyInboxCustomers";
   const workspacesTable = env.DYNAMODB_WORKSPACES_TABLE || "JoyInboxWorkspaces";
@@ -35,13 +36,12 @@ function createDynamoStores({ documentClient, commands, env = process.env, getSe
   });
   const tenancy = createDynamoTenancy({ organizationStore: organizations });
   const audit = createDynamoAuditStore({ documentClient, commands, tableName: messagesTable });
-  const memberManagement = typeof getSeatLimit === "function"
-    ? createDynamoMemberManagement({
-      organizationStore: organizations,
-      getSeatLimit,
-      recordAudit: recordMemberAudit || audit.record
-    })
-    : null;
+  const subscriptions = createDynamoSubscriptionStore({ documentClient, commands, tableName: messagesTable, ...(plans ? { plans } : {}) });
+  const memberManagement = createDynamoMemberManagement({
+    organizationStore: organizations,
+    getSeatLimit: getSeatLimit || subscriptions.getSeatLimit,
+    recordAudit: recordMemberAudit || audit.record
+  });
   const messages = createDynamoTenantStore({
     documentClient, commands, tableName: messagesTable
   });
@@ -56,6 +56,7 @@ function createDynamoStores({ documentClient, commands, env = process.env, getSe
     organizations,
     tenancy,
     audit,
+    subscriptions,
     memberManagement,
     messages,
     customers: Object.freeze({
