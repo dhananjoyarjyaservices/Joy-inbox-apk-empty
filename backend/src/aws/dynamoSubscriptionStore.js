@@ -3,6 +3,7 @@
 const { getBillingPlanCatalog } = require("../billing");
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const ACTIVE_STATUSES = new Set(["active", "trialing"]);
+const KNOWN_STATUSES = new Set(["active", "trialing", "past_due", "unpaid", "canceled", "incomplete", "incomplete_expired", "paused"]);
 
 function billingStoreError(message, statusCode = 400) {
   const error = new Error(message);
@@ -27,7 +28,7 @@ function createDynamoSubscriptionStore({ documentClient, commands, tableName, pl
     if (!subscription || typeof subscription !== "object" || Array.isArray(subscription)) throw billingStoreError("A verified subscription is required.");
     const plan = plans.find(item => item.key === subscription.plan);
     if (!plan) throw billingStoreError("The verified subscription has an unknown plan.", 400);
-    if (!ACTIVE_STATUSES.has(subscription.status)) throw billingStoreError("Only active or trialing subscriptions can grant seats.", 400);
+    if (!KNOWN_STATUSES.has(subscription.status)) throw billingStoreError("The verified Stripe subscription status is not recognized.", 400);
     if (typeof subscription.stripeSubscriptionId !== "string" || !/^sub_[A-Za-z0-9_]+$/.test(subscription.stripeSubscriptionId)) {
       throw billingStoreError("A valid Stripe subscription ID is required.");
     }
