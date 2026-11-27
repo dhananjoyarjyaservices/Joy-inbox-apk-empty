@@ -105,3 +105,21 @@ test("updates and removes non-owner memberships using DynamoDB transactions", as
   await store.removeMember({ organizationId: "org_1", uid: "user_2" });
   assert.ok(sent.TransactItems.every(item => item.Delete));
 });
+
+test("lists organization members with tenant-bound pagination", async () => {
+  let sent;
+  const store = createDynamoOrganizationStore({
+    documentClient: { send: async command => { sent = command.input; return { Items: [{ uid: "user_2" }] }; } },
+    commands, tableName: "JoyInboxMessages"
+  });
+  const page = await store.listMembers("org_1", { limit: 10 });
+  assert.equal(page.items[0].uid, "user_2");
+  assert.equal(sent.KeyConditionExpression, "PK = :organization AND begins_with(SK, :member)");
+  assert.equal(sent.ExpressionAttributeValues[":organization"], "ORG#org_1");
+  await assert.rejects(() => store.listMembers("org_1", {
+    exclusiveStartKey: { PK: "ORG#org_2", SK: "MEMBER#user_2" }
+  }), { statusCode: 400 });
+  await assert.rejects(() => store.listMembers("org_1", {
+    exclusiveStartKey: { PK: "ORG#org_1", SK: "CUSTOMER#user_2" }
+  }), { statusCode: 400 });
+});
