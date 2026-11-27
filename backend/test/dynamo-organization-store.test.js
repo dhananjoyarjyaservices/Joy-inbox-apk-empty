@@ -102,8 +102,12 @@ test("updates and removes non-owner memberships using DynamoDB transactions", as
   await store.updateMemberRole({ organizationId: "org_1", uid: "user_2", role: "admin" });
   assert.equal(sent.TransactItems[0].Put.Item.role, "admin");
   assert.equal(sent.TransactItems[1].Put.Item.role, "admin");
+  assert.match(sent.TransactItems[0].Put.ConditionExpression, /#role <> :owner/);
+  assert.match(sent.TransactItems[0].Put.ConditionExpression, /#status = :active/);
   await store.removeMember({ organizationId: "org_1", uid: "user_2" });
   assert.ok(sent.TransactItems.every(item => item.Delete));
+  assert.match(sent.TransactItems[0].Delete.ConditionExpression, /#role <> :owner/);
+  assert.match(sent.TransactItems[0].Delete.ConditionExpression, /#status = :active/);
 });
 
 test("lists organization members with tenant-bound pagination", async () => {
