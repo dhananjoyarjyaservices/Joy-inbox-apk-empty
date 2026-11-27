@@ -13,7 +13,7 @@ function assertId(value, label) {
 
 function createDynamoOrganizationStore({ documentClient, commands, tableName }) {
   if (!documentClient || typeof documentClient.send !== "function") throw new Error("A DynamoDB DocumentClient is required.");
-  if (!commands?.GetCommand || !commands?.PutCommand || !commands?.QueryCommand || !commands?.TransactWriteCommand) {
+  if (!commands?.GetCommand || !commands?.PutCommand || !commands?.QueryCommand || !commands?.TransactWriteCommand || !commands?.DeleteCommand) {
     throw new Error("DynamoDB Get, Put, Query and TransactWrite command constructors are required.");
   }
   if (typeof tableName !== "string" || !tableName.trim()) throw new Error("DYNAMODB_TABLE_NAME is not configured.");
@@ -90,6 +90,63 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
     return { ...organization.Item, id: organizationId, uid, role: membership.role };
   }
 
+
+  async function addMember({ organizationId, uid, role = "agent", now = new Date().toISOString() }) {
+    assertId(organizationId, "organization ID");
+    assertId(uid, "user ID");
+    if (!["admin", "agent"].includes(role)) throw httpError("Only admin or agent roles can be assigned to a new member.", 400);
+    const member = {
+      PK: `ORG#${organizationId}`, SK: `MEMBER#${uid}`,
+      entityType: "MEMBERSHIP", organizationId, uid, role,
+      status: "active", joinedAt: now, createdAt: now
+    };
+    const userOrganization = {
+      PK: `USER#${uid}`, SK: `ORG#${organizationId}`,
+      entityType: "USER_ORGANIZATION", organizationId, uid, role,
+      status: "active", joinedAt: now
+    };
+    await documentClient.send(new commands.TransactWriteCommand({
+      TransactItems: [
+        { Put: { TableName: tableName, Item: member, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } },
+        { Put: { TableName: tableName, Item: userOrganization, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } }
+      ]
+    }));
+    return { uid, role, status: "active" };
+  }
+
+  async function updateMemberRole({ organizationId, uid, role, now = new Date().toISOString() }) {
+    assertId(organizationId, "organization ID");
+    assertId(uid, "user ID");
+    if (!["admin", "agent"].includes(role)) throw httpError("Only admin or agent roles can be assigned.", 400);
+    const memberKey = { PK: `ORG#${organizationId}`, SK: `MEMBER#${uid}` };
+    const userKey = { PK: `USER#${uid}`, SK: `ORG#${organizationId}` };
+    const current = await getMembership(organizationId, uid);
+    if (!current || current.status !== "active") throw httpError("Active organization membership was not found.", 404);
+    if (current.role === "owner") throw httpError("The organization owner role cannot be changed here.", 409);
+    await documentClient.send(new commands.TransactWriteCommand({
+      TransactItems: [
+        { Put: { TableName: tableName, Item: { ...current, ...memberKey, role, updatedAt: now }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } },
+        { Put: { TableName: tableName, Item: { ...userKey, entityType: "USER_ORGANIZATION", organizationId, uid, role, status: "active", updatedAt: now }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } }
+      ]
+    }));
+    return { uid, role, status: "active" };
+  }
+
+  async function removeMember({ organizationId, uid }) {
+    assertId(organizationId, "organization ID");
+    assertId(uid, "user ID");
+    const current = await getMembership(organizationId, uid);
+    if (!current || current.status !== "active") throw httpError("Active organization membership was not found.", 404);
+    if (current.role === "owner") throw httpError("The organization owner cannot be removed.", 409);
+    await documentClient.send(new commands.TransactWriteCommand({
+      TransactItems: [
+        { Delete: { TableName: tableName, Key: { PK: `ORG#${organizationId}`, SK: `MEMBER#${uid}` }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } },
+        { Delete: { TableName: tableName, Key: { PK: `USER#${uid}`, SK: `ORG#${organizationId}` }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } }
+      ]
+    }));
+    return { uid, removed: true };
+  }
+
   async function listOrganizations(uid, { limit = 50, exclusiveStartKey } = {}) {
     assertId(uid, "user ID");
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw httpError("Page limit must be between 1 and 100.", 400);
@@ -110,7 +167,7 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
     return { items: result.Items || [], lastEvaluatedKey: result.LastEvaluatedKey || null };
   }
 
-  return Object.freeze({ createOrganization, getMembership, requireActiveOrganization, listOrganizations });
+  return Object.freeze({ createOrganization, getMembership, requireActiveOrganization, addMember, updateMemberRole, removeMember, listOrganizations });
 }
 
 module.exports = { createDynamoOrganizationStore };
