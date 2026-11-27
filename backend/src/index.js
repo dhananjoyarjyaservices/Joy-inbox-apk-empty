@@ -95,6 +95,7 @@ const { normalizeOutOfOfficeSettings } = require("./automationRules");
 const { normalizeCampaignDefinition, normalizeCampaignRecipients } = require("./campaignRules");
 const { filterSuppressedCampaignRecipients, suppressionDocumentId } = require("./campaignCompliance");
 const { getConfiguredBillingPlans, createCheckoutSession, createPortalSession, verifyStripeSignature, processStripeWebhookEvent } = require("./billing");
+const { processVerifiedStripeWebhook } = require("./stripeWebhookBoundary");
 const { getTenantMessageUsage, reserveMediaTransfer, finishMediaTransfer, reserveOutboundMessage, finishOutboundReservation } = require("./tenantUsage");
 const { listTenantInternalNotes, addTenantInternalNote } = require("./tenantInternalNotes");
 const { DEFAULT_PIPELINE_STAGES, normalizeCrmFieldDefinition, normalizePipelineStage, normalizeCrmSavedFilter, canAccessCrmLead, normalizeCrmLead } = require("./crm");
@@ -4157,23 +4158,21 @@ async function handleTenantBilling(event) {
 
 async function handleStripeBillingWebhook(event) {
   const rawBody = getRawBody(event);
-  const signature = getHeader(event, "stripe-signature");
-  if (!verifyStripeSignature(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET)) {
-    return textResponse(event, 400, "Invalid Stripe signature.");
-  }
-  let payload;
-  try { payload = JSON.parse(rawBody.toString("utf8")); }
-  catch { return textResponse(event, 400, "Invalid Stripe event JSON."); }
   try {
-    const result = await processStripeWebhookEvent(getDb(), payload);
+    const { result } = await processVerifiedStripeWebhook({
+      rawBody,
+      signature: getHeader(event, "stripe-signature"),
+      secret: process.env.STRIPE_WEBHOOK_SECRET,
+      processEvent: payload => processStripeWebhookEvent(getDb(), payload)
+    });
     if (result.inProgress) return textResponse(event, 503, "Stripe event is already being processed.");
     return textResponse(event, 200, "EVENT_RECEIVED");
   } catch (error) {
+    if (error.statusCode === 400) return textResponse(event, 400, error.message);
     console.error("Stripe billing webhook failed:", error);
     return textResponse(event, error.statusCode && error.statusCode < 500 ? error.statusCode : 500, "Stripe event processing failed.");
   }
 }
-
 async function handleTenantCampaigns(event) {
   const method = getMethod(event);
   const decoded = await authenticateUser(event);
