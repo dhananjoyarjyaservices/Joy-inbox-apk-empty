@@ -97,6 +97,88 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
     }
   }
 
+  async function reserveMediaTransfer(organizationId, transferId, expectedBytes, at = now()) {
+    if (!ID.test(String(transferId || ""))) throw usageError("A valid media transfer ID is required.", 400);
+    const window = await getWindow(organizationId, at);
+    const mediaLimitBytes = Math.ceil(window.plan.limits.mediaTransferGb * 1024 * 1024 * 1024 * (window.trial ? 0.25 : 1));
+    const pk = `ORG#${organizationId}`;
+    const usageKey = { PK: pk, SK: `USAGE#${window.key}` };
+    const reservationKey = { PK: pk, SK: `MEDIA_RESERVATION#${digest(transferId)}` };
+    const existing = await documentClient.send(new commands.GetCommand({ TableName: tableName, Key: reservationKey, ConsistentRead: true }));
+    if (existing.Item && ["reserved", "committed"].includes(existing.Item.state)) {
+      return { enforced: true, duplicate: true, organizationId, transferId: String(transferId), periodKey: window.key };
+    }
+    const usageResult = await documentClient.send(new commands.GetCommand({ TableName: tableName, Key: usageKey, ConsistentRead: true }));
+    const usage = usageResult.Item || {};
+    const used = Math.max(0, Number(usage.mediaBytesUsed || 0));
+    const reserved = Math.max(0, Number(usage.mediaBytesReserved || 0));
+    const available = Math.max(0, mediaLimitBytes - used - reserved);
+    const bytes = expectedBytes === null || expectedBytes === undefined ? available : Number(expectedBytes);
+    if (!Number.isSafeInteger(bytes) || bytes <= 0 || bytes > available) {
+      throw usageError("Media transfer limit reached for this service month. Upgrade your plan to transfer more media.", 429, "MEDIA_QUOTA_EXCEEDED");
+    }
+    try {
+      await documentClient.send(new commands.TransactWriteCommand({ TransactItems: [
+        { Update: {
+          TableName: tableName, Key: usageKey,
+          UpdateExpression: "SET #entity = :entity, mediaTransferLimitBytes = :limit, updatedAt = :now, mediaBytesUsed = if_not_exists(mediaBytesUsed, :zero), mediaBytesReserved = if_not_exists(mediaBytesReserved, :zero) ADD mediaBytesReserved :bytes",
+          ConditionExpression: "(attribute_not_exists(mediaBytesUsed) AND attribute_not_exists(mediaBytesReserved)) OR (mediaBytesUsed + mediaBytesReserved <= :available)",
+          ExpressionAttributeNames: { "#entity": "entityType" },
+          ExpressionAttributeValues: { ":entity": "BILLING_USAGE", ":limit": mediaLimitBytes, ":now": at.toISOString(), ":zero": 0, ":bytes": bytes, ":available": available }
+        } },
+        { Put: {
+          TableName: tableName,
+          Item: { ...reservationKey, entityType: "MEDIA_RESERVATION", organizationId, transferId: String(transferId), periodKey: window.key, reservedBytes: bytes, state: "reserved", createdAt: at.toISOString(), updatedAt: at.toISOString() },
+          ConditionExpression: "attribute_not_exists(PK)"
+        } }
+      ] }));
+      return { enforced: true, duplicate: false, organizationId, transferId: String(transferId), periodKey: window.key, reservedBytes: bytes };
+    } catch (error) {
+      if (error?.name === "TransactionCanceledException" || error?.name === "ConditionalCheckFailedException") {
+        const latest = await documentClient.send(new commands.GetCommand({ TableName: tableName, Key: reservationKey, ConsistentRead: true }));
+        if (latest.Item && ["reserved", "committed"].includes(latest.Item.state)) return { enforced: true, duplicate: true, organizationId, transferId: String(transferId), periodKey: window.key };
+        throw usageError("Media transfer limit reached for this service month. Upgrade your plan to transfer more media.", 429, "MEDIA_QUOTA_EXCEEDED");
+      }
+      throw error;
+    }
+  }
+
+  async function finishMediaTransfer(reservation, outcome, actualBytes, at = now()) {
+    if (!reservation?.enforced || reservation.duplicate || !ID.test(String(reservation.organizationId || "")) ||
+        !ID.test(String(reservation.transferId || "")) || !["sent", "failed"].includes(outcome)) return false;
+    const pk = `ORG#${reservation.organizationId}`;
+    const reservationKey = { PK: pk, SK: `MEDIA_RESERVATION#${digest(reservation.transferId)}` };
+    const usageKey = { PK: pk, SK: `USAGE#${reservation.periodKey}` };
+    try {
+      const result = await documentClient.send(new commands.GetCommand({ TableName: tableName, Key: reservationKey, ConsistentRead: true }));
+      const heldBytes = Math.max(0, Number(result.Item?.reservedBytes || 0));
+      if (!heldBytes || result.Item?.state !== "reserved") return false;
+      const actual = outcome === "sent" ? Number(actualBytes ?? heldBytes) : 0;
+      if (!Number.isSafeInteger(actual) || actual < 0 || actual > heldBytes) throw usageError("Actual media transfer size is invalid.", 400);
+      await documentClient.send(new commands.TransactWriteCommand({ TransactItems: [
+        { Update: {
+          TableName: tableName, Key: usageKey,
+          UpdateExpression: outcome === "sent"
+            ? "SET updatedAt = :now ADD mediaBytesReserved :minus, mediaBytesUsed :actual"
+            : "SET updatedAt = :now ADD mediaBytesReserved :minus",
+          ConditionExpression: "mediaBytesReserved >= :held",
+          ExpressionAttributeValues: { ":minus": -heldBytes, ":held": heldBytes, ":actual": actual, ":now": at.toISOString() }
+        } },
+        { Update: {
+          TableName: tableName, Key: reservationKey,
+          UpdateExpression: "SET #state = :state, actualBytes = :actual, finishedAt = :now, updatedAt = :now",
+          ConditionExpression: "#state = :reserved",
+          ExpressionAttributeNames: { "#state": "state" },
+          ExpressionAttributeValues: { ":state": outcome === "sent" ? "committed" : "released", ":actual": actual, ":reserved": "reserved", ":now": at.toISOString() }
+        } }
+      ] }));
+      return true;
+    } catch (error) {
+      if (error?.name === "TransactionCanceledException" || error?.name === "ConditionalCheckFailedException") return false;
+      throw error;
+    }
+  }
+
   async function recordInboundMessageUsage(organizationId, providerMessageId, at = now()) {
     if (!ID.test(String(organizationId || "")) || !providerMessageId) return false;
     const window = await getWindow(organizationId, at);
@@ -140,7 +222,7 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
     };
   }
 
-  return Object.freeze({ reserveOutboundMessage, finishOutboundReservation, recordInboundMessageUsage, getUsage });
+  return Object.freeze({ reserveOutboundMessage, finishOutboundReservation, reserveMediaTransfer, finishMediaTransfer, recordInboundMessageUsage, getUsage });
 }
 
 module.exports = { createDynamoUsageStore };
