@@ -8,6 +8,7 @@ const { createDynamoAuditStore } = require("./dynamoAuditStore");
 const { createDynamoSubscriptionStore } = require("./dynamoSubscriptionStore");
 const { createDynamoStripeEventStore } = require("./dynamoStripeEventStore");
 const { processDynamoStripeWebhookEvent } = require("./dynamoStripeBilling");
+const { createDynamoUsageStore } = require("./dynamoUsageStore");
 
 /**
  * Creates isolated adapters for the three owner-verified DynamoDB tables.
@@ -40,6 +41,7 @@ function createDynamoStores({ documentClient, commands, env = process.env, getSe
   const audit = createDynamoAuditStore({ documentClient, commands, tableName: messagesTable });
   const subscriptions = createDynamoSubscriptionStore({ documentClient, commands, tableName: messagesTable, ...(plans ? { plans } : {}) });
   const stripeEvents = createDynamoStripeEventStore({ documentClient, commands, tableName: messagesTable });
+  const usage = createDynamoUsageStore({ documentClient, commands, tableName: messagesTable, subscriptions, plans });
   const memberManagement = createDynamoMemberManagement({
     organizationStore: organizations,
     getSeatLimit: getSeatLimit || subscriptions.getSeatLimit,
@@ -61,6 +63,7 @@ function createDynamoStores({ documentClient, commands, env = process.env, getSe
     audit,
     subscriptions,
     stripeEvents,
+    usage,
     stripeBilling: Object.freeze({ process: options => processDynamoStripeWebhookEvent({ ...options, eventStore: stripeEvents, subscriptions }) }),
     memberManagement,
     messages,
