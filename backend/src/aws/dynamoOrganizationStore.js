@@ -34,7 +34,8 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
       createdBy: uid,
       createdAt: now,
       updatedAt: now,
-      plan: "free"
+      plan: "free",
+      activeMemberCount: 1
     };
     const membership = {
       PK: `ORG#${organizationId}`,
@@ -91,10 +92,11 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
   }
 
 
-  async function addMember({ organizationId, uid, role = "agent", now = new Date().toISOString() }) {
+  async function addMember({ organizationId, uid, role = "agent", seatLimit, now = new Date().toISOString() }) {
     assertId(organizationId, "organization ID");
     assertId(uid, "user ID");
     if (!["admin", "agent"].includes(role)) throw httpError("Only admin or agent roles can be assigned to a new member.", 400);
+    if (!Number.isInteger(seatLimit) || seatLimit < 1 || seatLimit > 1000) throw httpError("A verified plan seat limit is required.", 503);
     const member = {
       PK: `ORG#${organizationId}`, SK: `MEMBER#${uid}`,
       entityType: "MEMBERSHIP", organizationId, uid, role,
@@ -108,7 +110,13 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
     await documentClient.send(new commands.TransactWriteCommand({
       TransactItems: [
         { Put: { TableName: tableName, Item: member, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } },
-        { Put: { TableName: tableName, Item: userOrganization, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } }
+        { Put: { TableName: tableName, Item: userOrganization, ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)" } },
+        { Update: { TableName: tableName, Key: { PK: `ORG#${organizationId}`, SK: "META" },
+          UpdateExpression: "ADD activeMemberCount :one",
+          ConditionExpression: "#status = :active AND activeMemberCount < :seatLimit",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: { ":one": 1, ":active": "active", ":seatLimit": seatLimit }
+        } }
       ]
     }));
     return { uid, role, status: "active" };
@@ -147,7 +155,12 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
           ExpressionAttributeNames: { "#role": "role", "#status": "status" },
           ExpressionAttributeValues: { ":owner": "owner", ":active": "active" }
         } },
-        { Delete: { TableName: tableName, Key: { PK: `USER#${uid}`, SK: `ORG#${organizationId}` }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } }
+        { Delete: { TableName: tableName, Key: { PK: `USER#${uid}`, SK: `ORG#${organizationId}` }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } },
+        { Update: { TableName: tableName, Key: { PK: `ORG#${organizationId}`, SK: "META" },
+          UpdateExpression: "ADD activeMemberCount :minusOne",
+          ConditionExpression: "activeMemberCount > :zero",
+          ExpressionAttributeValues: { ":minusOne": -1, ":zero": 0 }
+        } }
       ]
     }));
     return { uid, removed: true };
