@@ -1,0 +1,51 @@
+name: Generate backend lockfile
+
+on:
+  push:
+    branches:
+      - feature/saas-foundation
+    paths:
+      - "backend/package.json"
+      - ".github/workflows/backend-lockfile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backend-lockfile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out development branch
+        uses: actions/checkout@v7
+        with:
+          ref: feature/saas-foundation
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Generate a genuine npm lockfile
+        working-directory: backend
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit generated lockfile when it changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Backend lockfile is already current."
+          else
+            git commit -m "build: generate backend npm lockfile"
+            git push origin HEAD:feature/saas-foundation
+          fi
+      - name: Verify clean install from the generated lockfile
+        working-directory: backend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test

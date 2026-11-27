@@ -1,0 +1,187 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const {
+  getTenantChatRef,
+  getTenantMessageRef,
+  claimTenantSendRequest,
+  getRetryableTenantTextMessage,
+  resolveTenantReplyContext,
+  getTenantReplyMessageFields,
+  markTenantSendRequestFailed
+} = require("../src/tenantMessaging");
+
+function fakeDb() {
+  const docs = new Map();
+  function doc(path) {
+    return {
+      path,
+      collection(name) { return collection(path + "/" + name); },
+      async get() {
+        const value = docs.get(path);
+        return { exists: Boolean(value), id: path.split("/").pop(), data: () => value };
+      },
+      async set(value, options) {
+        docs.set(path, options ? { ...(docs.get(path) || {}), ...value } : value);
+      }
+    };
+  }
+  function collection(path) {
+    return { doc(id) { return doc(path + "/" + id); } };
+  }
+  return {
+    docs,
+    collection,
+    async runTransaction(callback) {
+      return callback({
+        async get(ref) {
+          const value = docs.get(ref.path);
+          return { exists: Boolean(value), data: () => value };
+        },
+        create(ref, value) { docs.set(ref.path, value); },
+        set(ref, value, options) {
+          docs.set(ref.path, options ? { ...(docs.get(ref.path) || {}), ...value } : value);
+        }
+      });
+    }
+  };
+}
+
+test("tenant chat, message and idempotency records are scoped under the organization", async () => {
+  const db = fakeDb();
+  const chat = getTenantChatRef(db, "org_one", "15551234567");
+  assert.equal(chat.path, "organizations/org_one/chats/15551234567");
+  assert.equal(getTenantMessageRef(db, "org_one", "15551234567", "wamid.1").path,
+    "organizations/org_one/chats/15551234567/messages/wamid.1");
+
+  const first = await claimTenantSendRequest(db, "org_one", "15551234567", "client-1", "hash-a");
+  assert.equal(first.state, "claimed");
+  const retry = await claimTenantSendRequest(db, "org_one", "15551234567", "client-1", "hash-a");
+  assert.equal(retry.state, "pending");
+  const otherTenant = await claimTenantSendRequest(db, "org_two", "15551234567", "client-1", "hash-a");
+  assert.equal(otherTenant.state, "claimed");
+  assert.notEqual(first.ref.path, otherTenant.ref.path);
+  await assert.rejects(
+    () => claimTenantSendRequest(db, "org_one", "15551234567", "client-1", "different"),
+    { statusCode: 409 }
+  );
+});
+
+test("tenant reply lookup cannot read another organization's message", async () => {
+  const db = fakeDb();
+  await getTenantMessageRef(db, "org_one", "15551234567", "wamid.original").set({
+    messageId: "wamid.original",
+    direction: "incoming",
+    text: "Original customer message",
+    type: "text",
+    sender: "Customer"
+  });
+  const reply = await resolveTenantReplyContext(db, "org_one", "15551234567", {
+    replyToMessageId: "wamid.original"
+  });
+  assert.equal(reply.contextMessageId, "wamid.original");
+  assert.deepEqual(getTenantReplyMessageFields(reply), {
+    replyToMessageId: "wamid.original",
+    replyToMessageText: "Original customer message",
+    replyToMessageSender: "Customer",
+    replyToMessageType: "text"
+  });
+  await assert.rejects(
+    () => resolveTenantReplyContext(db, "org_two", "15551234567", {
+      replyToMessageId: "wamid.original"
+    }),
+    { statusCode: 404 }
+  );
+});
+
+test("tenant reply lookup rejects malformed and conflicting message identifiers", async () => {
+  const db = fakeDb();
+  for (const body of [
+    { replyToMessageId: "" },
+    { replyToMessageId: "invalid id with spaces" },
+    { replyToMessageId: "wamid.one", contextMessageId: "wamid.two" }
+  ]) {
+    await assert.rejects(
+      () => resolveTenantReplyContext(db, "org_one", "15551234567", body),
+      { statusCode: 400 }
+    );
+  }
+});
+
+test("tenant reply context uses the WhatsApp message ID while storing a local quote preview", async () => {
+  const db = fakeDb();
+  await getTenantMessageRef(db, "org_one", "15551234567", "local-document-id").set({
+    messageId: "wamid.remote-id",
+    direction: "outgoing",
+    text: "Agent response",
+    type: "text"
+  });
+  const reply = await resolveTenantReplyContext(db, "org_one", "15551234567", {
+    replyToMessageId: "local-document-id"
+  });
+  assert.equal(reply.contextMessageId, "wamid.remote-id");
+  assert.equal(reply.messageDocumentId, "local-document-id");
+  assert.equal(reply.sender, "You");
+  assert.equal(reply.text, "Agent response");
+});
+
+test("only failed outgoing text messages with their original WhatsApp number are retryable", () => {
+  const retryable = getRetryableTenantTextMessage({
+    direction: "outgoing",
+    type: "text",
+    status: "failed",
+    text: "  Please confirm  ",
+    phoneNumberId: "phone-123"
+  });
+  assert.deepEqual(retryable, { text: "Please confirm", phoneNumberId: "phone-123" });
+});
+
+test("retry rejects incoming, non-text, non-failed and empty messages", () => {
+  const base = {
+    direction: "outgoing",
+    type: "text",
+    status: "failed",
+    text: "Hello",
+    phoneNumberId: "phone-123"
+  };
+  for (const patch of [
+    { direction: "incoming" },
+    { type: "image" },
+    { status: "sent" },
+    { text: "   " },
+    { text: null }
+  ]) {
+    assert.throws(() => getRetryableTenantTextMessage({ ...base, ...patch }), { statusCode: 409 });
+  }
+});
+
+test("retry rejects messages without the original WhatsApp sender number", () => {
+  assert.throws(() => getRetryableTenantTextMessage({
+    direction: "outgoing",
+    type: "text",
+    status: "failed",
+    text: "Hello"
+  }), { statusCode: 409 });
+});
+
+test("ambiguous delivery is quarantined and cannot be automatically resent", async () => {
+  const db = fakeDb();
+  const first = await claimTenantSendRequest(db, "org_one", "15551234567", "client-unknown", "hash-a");
+  assert.equal(first.state, "claimed");
+
+  await markTenantSendRequestFailed(first.ref, new Error("Network connection timed out"));
+  const record = db.docs.get(first.ref.path);
+  assert.equal(record.status, "unknown");
+  assert.equal(record.deliveryMayHaveSucceeded, true);
+
+  const retry = await claimTenantSendRequest(db, "org_one", "15551234567", "client-unknown", "hash-a");
+  assert.equal(retry.state, "unknown");
+});
+
+test("definitively rejected sends can be retried with the same idempotency key", async () => {
+  const db = fakeDb();
+  const first = await claimTenantSendRequest(db, "org_one", "15551234567", "client-failed", "hash-a");
+  await markTenantSendRequestFailed(first.ref, Object.assign(new Error("Meta rejected request"), { definitive: true }));
+
+  const retry = await claimTenantSendRequest(db, "org_one", "15551234567", "client-failed", "hash-a");
+  assert.equal(retry.state, "claimed");
+});

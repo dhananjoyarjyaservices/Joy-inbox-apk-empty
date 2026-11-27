@@ -1,0 +1,160 @@
+# Joy Inbox AWS-Native Backend Migration
+
+Status: migration required; this document is the implementation contract for the AWS target. It does not claim that the migration or AWS deployment is complete.
+
+## Owner decision
+
+Joy Inbox customer/business data must be stored in AWS, not Firebase. The existing Firebase-backed implementation is legacy source code to migrate; it is not the target architecture. Do not request or add Firebase credentials to the new Lambda deployment. Do not deploy the current Firebase-dependent ZIP as the target backend.
+
+## Target architecture
+
+- AWS Lambda (Node.js 22.x): HTTP API and scheduled workers.
+- Amazon DynamoDB: tenant, workspace, membership, chats, messages, contacts, CRM, campaigns, templates metadata, automation, webhook delivery, billing metadata, quotas, usage, idempotency and audit records.
+- Amazon S3: private customer media (images, video, audio, documents and uploaded assets), with tenant-scoped object keys, encryption, lifecycle/retention and signed access.
+- AWS Cognito: proposed AWS-native user identity provider; confirm pool/app-client design and migration strategy before production cutover. Lambda must verify Cognito JWTs and map Cognito subject IDs to tenant memberships.
+- AWS Secrets Manager: server-side Meta/WhatsApp, Stripe and application encryption secrets. Lambda execution role receives read access only to the specific secret ARNs required by that function.
+- Amazon EventBridge: scheduled workers (campaign, automation, SLA, CRM follow-up and retention) with schedules disabled until staging verification.
+- Amazon CloudWatch: logs, metrics and alarms.
+- API Gateway: HTTPS API entry point; configure CORS to exact frontend origins and route to Lambda.
+- AWS KMS / S3 SSE: encryption at rest. S3 public access remains blocked.
+
+Region: ap-south-1 (Mumbai), consistent with the owner-created Lambda and existing AWS resource context.
+
+## Existing AWS resource facts supplied/observed
+
+- Existing DynamoDB table previously created by the owner: `JoyInboxMessages`, partition key `PK` (String), sort key `SK` (String), status Active.
+- Lambda function created in the owner account: `joy-inbox-api`, region `ap-south-1`, Node.js 22.x, 512 MB memory, 30-second timeout.
+- Lambda execution role currently has only `AWSLambdaBasicExecutionRole` (CloudWatch Logs).
+- Do not assume an S3 bucket, Cognito user pool, API Gateway, Secrets Manager secret, EventBridge rules or additional DynamoDB tables already exist. Verify before referencing them in IAM policies.
+
+## Legacy implementation audit (feature/saas-foundation)
+
+The current backend is Firebase-dependent:
+- `backend/src/firebase.js` initializes Firebase Admin using service-account environment variables and exposes Firestore.
+- `backend/src/index.js` imports Firebase Admin and uses Firebase ID-token verification for authentication.
+- `backend/src/organizations.js`, `tenancy.js`, `tenantResources.js`, `tenantMessaging.js` and numerous domain modules use Firestore collection/document/query/transaction/batch APIs.
+- `backend/src/media.js` stores and deletes message media through Firebase Admin Storage.
+- `backend/package.json` currently depends on `firebase-admin`; the current Lambda package is therefore not AWS-native.
+- `backend/src/historyRetention.js` deletes old message documents through Firestore. It must be rewritten against DynamoDB and S3 retention policy before its schedule is enabled.
+
+This is a cross-cutting data/auth migration, not an environment-variable-only change. Existing Firestore collection semantics, document IDs, transactions, pagination, atomic updates and security checks must be deliberately mapped to DynamoDB access patterns and conditional/transactional writes.
+
+## Data model migration requirements
+
+Use tenant isolation in every key and every query. Never perform unbounded table scans in request paths. Define and document access patterns before creating tables.
+
+Initial access-pattern inventory:
+- Tenant/workspace and membership lookup by Cognito subject + organization ID.
+- Organization list for a user.
+- Workspace settings and encrypted WhatsApp connection lookup by organization + phone number ID.
+- Chats/messages by organization + chat + chronological message timestamp/ID.
+- Contacts by organization + normalized phone and by name cursor.
+- Quick replies, tags, notes, CRM leads, stages, custom fields, saved filters and activity by organization.
+- Campaigns, recipients/suppression state, automation rules/runs, SLA settings, scheduled follow-ups.
+- API keys (hash only), API usage/rate limits, idempotency keys.
+- Webhook subscriptions, delivery queue/history, retry and replay state.
+- Billing subscription, plan, quotas, usage reservations and audit history.
+- Retention cursors and system job state.
+
+The existing `JoyInboxMessages` PK/SK table must be inspected and its current data/access patterns verified before reuse. Do not silently change its key schema or overwrite existing data. Decide whether to extend this table with GSIs or create purpose-specific tables only after the access-pattern review. Document every table, key, GSI, TTL attribute and billing mode in an infrastructure template.
+
+## S3 media requirements
+
+- Private bucket in ap-south-1; block all public access; enable bucket-owner-enforced object ownership and encryption.
+- Object key namespace must include an opaque tenant/workspace ID and validated chat/message/media IDs; never trust client-supplied object keys.
+- Store metadata (tenant ID, MIME type, size, checksum, retention expiry) in DynamoDB.
+- Use short-lived presigned URLs for authorized uploads/downloads; validate content type, file signature, size and tenant ownership.
+- Lifecycle/retention must honor each plan's configured history/media retention and legal/operational holds. Do not enable automatic deletion until staging restore and retention tests pass.
+- Avoid storing WhatsApp bearer tokens or other secrets in object metadata.
+
+## Authentication migration requirements
+
+- Confirm AWS Cognito user-pool region, sign-in identifiers, app clients, callback/logout URLs, MFA and password policy.
+- Replace Firebase `verifyIdToken` with Cognito JWT verification (issuer, audience/client ID, signature, expiry and token_use).
+- Map Cognito `sub` to tenant memberships; enforce current owner/admin/agent role permissions on every request.
+- Provide a secure account migration/invitation/reset path. Do not attempt to migrate password hashes from Firebase.
+- Keep authentication and authorization separate: a valid JWT alone never grants workspace access.
+
+## Secrets and IAM requirements
+
+- Do not put real credentials in Git, chat, screenshots, frontend variables or source files.
+- Store Meta app secret, WhatsApp system credentials where applicable, Stripe secret/webhook secret, tenant-secret encryption keys and webhook signing material in Secrets Manager.
+- Use environment variables only for non-secret configuration and secret ARNs/names; retrieve secrets server-side with bounded caching.
+- IAM policies must use verified resource ARNs and least privilege. No `AdministratorAccess`, wildcard resource grants or guessed bucket/table/secret names.
+- Separate execution roles for API and scheduled workers when practical. Lambda role must not get IAM administration or resource-creation permissions.
+
+## Migration phases and acceptance gates
+
+1. **Inventory and design**: enumerate every Firestore collection, document shape, query, transaction, batch, scheduled job, Firebase Auth dependency and Storage operation. Produce DynamoDB table/key/GSI design and data migration mapping. No production data changes.
+2. **AWS infrastructure as code**: define DynamoDB, S3, Cognito, Secrets Manager references, API Gateway, Lambda roles and disabled EventBridge schedules in version-controlled templates. Keep deletion/retention schedules disabled.
+3. **AWS adapters**: implement tested repository interfaces for DynamoDB and S3; preserve tenant scoping, conditional writes, idempotency, pagination and concurrency behavior.
+4. **Authentication**: implement Cognito JWT verification and tenant membership mapping with tests; provide owner-controlled user migration/onboarding flow.
+5. **Domain migration**: migrate organizations/members, WhatsApp connections, chat/messages, contacts/CRM, campaigns, automation, webhooks, billing, quotas, notifications and all remaining modules. Remove Firestore SDK usage only after each module has AWS parity and tests.
+6. **Data migration**: build an idempotent export/transform/import tool with counts, checksums, retry logs and reconciliation. Keep source data read-only until acceptance; do not delete Firebase data automatically.
+7. **Media migration**: move existing media only if it exists and the owner approves; verify object count, byte count, checksums, metadata and signed access.
+8. **Validation**: unit, integration, tenant-isolation, auth, concurrency, quota, idempotency, retention, failure/retry, backup/restore and load tests. Run against isolated AWS staging resources.
+9. **Cutover**: owner approval required. Deploy new Lambda package, configure API Gateway/custom domain, frontend API URL and monitoring. Retain rollback path and source snapshots.
+10. **Decommission Firebase**: only after owner confirms migration reconciliation, production acceptance and rollback window completion.
+
+## AWS runtime wiring progress
+
+The following reusable code is now present on `feature/saas-foundation`:
+
+- `backend/src/aws/awsRuntimeConfig.js` validates the required Mumbai region, three distinct DynamoDB table names, private media bucket name and Cognito pool/app-client identifiers. It fails closed when values are missing or malformed.
+- `backend/src/aws/awsServices.js` constructs DynamoDB v3 and S3 v3 clients, creates the DocumentClient, wires the three DynamoDB domain adapters and the private S3 media adapter. It supports dependency injection for tests.
+- `backend/test/aws-runtime-config.test.js` and `backend/test/aws-services.test.js` cover validation and client/store wiring.
+
+This factory is not yet called from `backend/src/index.js`. The production request handlers still use their legacy persistence/authentication services. Do not set `AUTH_PROVIDER=cognito` or route customer traffic to these adapters yet.
+
+The AWS SDK v3 modules are loaded lazily from the Lambda Node.js 22 runtime in the current factory. Before production packaging, vendor and pin the required AWS SDK v3 modules in `backend/package.json` and regenerate `backend/package-lock.json` in a network-enabled build environment; relying on the runtime-bundled SDK version is not a reproducible production dependency strategy. The local package-lock could not be regenerated in the current environment because npm registry access timed out.
+
+Required deployment environment (names only; never put secret values in Git):
+- `AWS_REGION=ap-south-1`
+- `DYNAMODB_MESSAGES_TABLE`, `DYNAMODB_CUSTOMERS_TABLE`, `DYNAMODB_WORKSPACES_TABLE`
+- `S3_MEDIA_BUCKET`
+- `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID`
+
+All names/IDs must be verified in the owner's AWS account before configuring Lambda. This configuration validator does not create AWS resources or prove that they exist.
+
+
+### Read-only AWS readiness endpoint
+
+- `backend/src/aws/awsReadiness.js` checks the configured three DynamoDB tables with `DescribeTable` and the configured S3 bucket with `HeadBucket`. It does not read or mutate customer records.
+- `backend/src/aws/awsServices.js` exposes this as `checkReadiness()`.
+- `GET /health/aws` is an opt-in authenticated diagnostic route. It is hidden unless both `AWS_RUNTIME_ENABLED=true` and `AUTH_PROVIDER=cognito`; it requires a valid Cognito access token and returns only resource domains/status, not table/bucket names or raw AWS errors.
+- The API Lambda role will need `dynamodb:DescribeTable` for the three verified table ARNs and `s3:ListBucket`/bucket metadata permission sufficient for `HeadBucket` on the one verified media bucket. This is a proposed permission requirement, not an IAM policy already deployed.
+- Do not enable this route until the SDK packages are pinned/bundled, the exact resource names and ARNs are verified, Cognito pool/client are active, and least-privilege IAM permissions have been attached.
+
+## Immediate next implementation tasks
+
+- [ ] Produce a complete Firestore collection/query/transaction inventory across all backend modules.
+- [ ] Produce a DynamoDB single-table vs multi-table decision using real access patterns, including the existing `JoyInboxMessages` table.
+- [ ] Produce S3 bucket/object/lifecycle design and exact IAM policy ARNs after resources are confirmed.
+- [ ] Implement DynamoDB and S3 adapters with unit tests before replacing domain modules.
+- [ ] Implement Cognito token verification and tenant identity mapping.
+- [ ] Update Lambda packaging to remove Firebase dependencies only after all imports are migrated.
+- [ ] Add AWS-native integration tests and disabled-by-default infrastructure templates.
+
+## Implemented adapter progress (feature/saas-foundation)
+
+- [x] Tenant-scoped DynamoDB primitives for messages, customers and workspaces using the existing PK/SK key shape; no GSI required for those partition-local operations.
+- [x] Organization and membership repository with user-to-organization lookup rows, transactional member changes, owner protection and atomic seat counter enforcement.
+- [x] DynamoDB-backed organization authorization adapter.
+- [x] Cognito JWT verifier and opt-in authentication-provider seam; Firebase remains the default until all dependent domains are migrated.
+- [x] Private S3 media adapter with tenant-scoped keys, server-side encryption and presigned downloads.
+- [x] Tenant-scoped DynamoDB audit event writer and audit listing; member-management factory uses it by default.
+- [x] DynamoDB subscription snapshot store with server-verified write gate and trusted plan-catalog seat-limit resolver.
+- [x] Leased DynamoDB Stripe webhook event ledger with conditional claims, duplicate/in-progress detection and lease-token guarded completion/failure.
+- [x] DynamoDB-native Stripe webhook processing helper for checkout completion, subscription create/update/delete and invoice payment failure; canonical Stripe retrieval is required for checkout/invoice events, and inactive subscription states are persisted to revoke seat access.
+- [x] Atomic DynamoDB message quota ledger: outbound reservation with transactional hard-block condition, idempotent client-message keys, sent/failed settlement, inbound deduplication, and usage threshold reporting.
+- [x] DynamoDB media-transfer quota reservation and settlement with tenant-scoped idempotency, byte reservations, plan/trial caps, and actual-byte reconciliation.
+- [x] Add a reusable raw-body Stripe signature-verification boundary and AWS-native orchestration helper that calls `stores.stripeBilling.process` only after signature and event-envelope validation; unit tests cover tampering and dependency failures.
+- [ ] Wire the deployed HTTP Stripe webhook route to the AWS-native orchestration helper, inject configured DynamoDB stores and canonical Stripe subscription retrieval, and switch persistence only after real AWS client/table configuration and migration gates are satisfied. The existing production HTTP route still uses Firebase persistence.
+- [ ] Connect the AWS repositories to migrated domain services and HTTP routes, including the Stripe webhook event ledger.
+- [ ] Migrate frontend authentication/session handling and remaining Firestore/Storage modules.
+- [ ] Add AWS SDK v3 runtime dependencies and real AWS integration tests against isolated staging resources.
+- [ ] Provision and verify actual AWS resources; deploy Lambda and validate the full application flow.
+
+## Current Lambda console instruction
+
+The newly created `joy-inbox-api` Lambda is only a starter function. Keep its basic CloudWatch execution role. Do not add Firebase environment variables, do not paste a broad IAM policy, do not upload the existing Firebase-dependent ZIP, and do not enable public Function URL. Wait until AWS-native code, verified resource names and the staging deployment plan are ready.

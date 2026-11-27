@@ -1,0 +1,50 @@
+name: Backend tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "firestore.rules"
+      - "firestore.indexes.json"
+      - "storage.rules"
+      - "firebase.json"
+      - ".github/workflows/backend-tests.yml"
+  push:
+    branches: [main, "feature/**"]
+    paths:
+      - "backend/**"
+      - "firestore.rules"
+      - "firestore.indexes.json"
+      - "storage.rules"
+      - "firebase.json"
+      - ".github/workflows/backend-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Set up Java for Firestore emulator
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install backend dependencies from lockfile
+        working-directory: backend
+        run: npm ci --no-audit --no-fund
+      - name: Run backend tests with Firestore emulator
+        run: npx --yes firebase-tools emulators:exec --only firestore --project demo-joy-inbox "cd backend && npm test"
+      - name: Build and verify production Lambda package
+        working-directory: backend
+        run: npm run package:lambda

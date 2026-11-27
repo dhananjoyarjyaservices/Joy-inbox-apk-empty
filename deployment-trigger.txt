@@ -1,0 +1,1 @@
+Trigger Cloudflare Pages deployment after repository deployment secrets were configured.

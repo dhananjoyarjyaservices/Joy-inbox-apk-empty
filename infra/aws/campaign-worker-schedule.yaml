@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: EventBridge schedule for the Joy Inbox campaign delivery Lambda.
+
+Parameters:
+  CampaignWorkerLambdaArn:
+    Type: String
+    Description: ARN of the deployed Lambda whose handler is src/index.campaignScheduledHandler.
+
+Resources:
+  CampaignWorkerSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: joy-inbox-campaign-worker-every-minute
+      Description: Processes explicitly started and due scheduled Joy Inbox campaigns.
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Id: JoyInboxCampaignWorker
+          Arn: !Ref CampaignWorkerLambdaArn
+
+  AllowEventBridgeInvokeCampaignWorker:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CampaignWorkerLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CampaignWorkerSchedule.Arn
+
+Outputs:
+  CampaignWorkerScheduleArn:
+    Description: EventBridge rule ARN. Deploy only after the campaign worker Lambda is configured.
+    Value: !GetAtt CampaignWorkerSchedule.Arn

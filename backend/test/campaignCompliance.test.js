@@ -1,0 +1,151 @@
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+process.env.CAMPAIGN_SUPPRESSION_HASH_KEY ||= Buffer.alloc(32, 1).toString("base64");
+const {
+  suppressionDocumentId,
+  isWhatsAppOptInMessage,
+  recordCampaignOptIn,
+  isWhatsAppOptOutMessage,
+  recordCampaignOptOut,
+  filterSuppressedCampaignRecipients
+} = require("../src/campaignCompliance");
+
+test("recognizes explicit START/UNSTOP opt-in requests", () => {
+  for (const value of ["START", "start!", "UNSTOP", "subscribe"]) {
+    assert.equal(isWhatsAppOptInMessage(value), true, value);
+  }
+  for (const value of ["please start the app", "starting now", ""]) {
+    assert.equal(isWhatsAppOptInMessage(value), false, value);
+  }
+});
+
+test("recognizes common WhatsApp opt-out keywords without matching ordinary text", () => {
+  for (const value of ["STOP", "stop all", "Unsubscribe!", "cancel", "END", "quit", "opt out", "Please stop sending me messages", "dont message me", "don\'t message me"]) {
+    assert.equal(isWhatsAppOptOutMessage(value), true, value);
+  }
+  for (const value of ["please stop by tomorrow", "stopwatch", "I need help", ""]) {
+    assert.equal(isWhatsAppOptOutMessage(value), false, value);
+  }
+});
+
+test("suppression IDs are deterministic and normalize phone punctuation", () => {
+  assert.equal(suppressionDocumentId("+91 98765-43210"), suppressionDocumentId("919876543210"));
+  assert.throws(() => suppressionDocumentId("123"), /valid international phone/);
+});
+
+test("production suppression IDs use a keyed HMAC and require a configured key", () => {
+  const crypto = require("node:crypto");
+  const previousKey = process.env.CAMPAIGN_SUPPRESSION_HASH_KEY;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const key = Buffer.alloc(32, 7);
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.CAMPAIGN_SUPPRESSION_HASH_KEY;
+    assert.throws(() => suppressionDocumentId("919876543210"), /must be configured in production/);
+    process.env.CAMPAIGN_SUPPRESSION_HASH_KEY = key.toString("base64");
+    const expected = crypto.createHmac("sha256", key).update("919876543210").digest("hex");
+    assert.equal(suppressionDocumentId("+91 98765 43210"), expected);
+    process.env.CAMPAIGN_SUPPRESSION_HASH_KEY = "not-a-valid-key";
+    assert.throws(() => suppressionDocumentId("919876543210"), /base64-encoded 32-byte key/);
+  } finally {
+    if (previousKey === undefined) delete process.env.CAMPAIGN_SUPPRESSION_HASH_KEY;
+    else process.env.CAMPAIGN_SUPPRESSION_HASH_KEY = previousKey;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
+test("recordCampaignOptOut creates an organization-scoped suppression record", async () => {
+  let stored;
+  const ref = {
+    async get() { return { exists: Boolean(stored), data: () => stored }; }
+  };
+  const db = {
+    collection(name) {
+      assert.equal(name, "organizations");
+      return { doc(id) {
+        assert.equal(id, "org_123");
+        return { collection(child) {
+          assert.equal(child, "campaignSuppressions");
+          return { doc(id) { assert.equal(id, suppressionDocumentId("919876543210")); return ref; } };
+        } };
+      } };
+    },
+    async runTransaction(callback) {
+      await callback({
+        get: async () => ({ exists: Boolean(stored), data: () => stored }),
+        create: (_ref, value) => { stored = value; },
+        set: (_ref, value, options) => { stored = options?.merge ? { ...stored, ...value } : value; }
+      });
+    }
+  };
+  const result = await recordCampaignOptOut(db, "org_123", "+91 98765 43210", "wamid.123");
+  assert.equal(result.status, "opted_out");
+  assert.equal(Object.hasOwn(stored, "phone"), false);
+  assert.equal(stored.source, "whatsapp_inbound");
+  assert.equal(stored.lastInboundMessageId, "wamid.123");
+});
+
+test("campaign recipient filtering excludes suppressed recipients in bounded batches", async () => {
+  const suppressedId = suppressionDocumentId("919876543210");
+  const db = {
+    collection() {
+      return { doc() {
+        return { collection() {
+          return { doc(id) { return { get: async () => ({ exists: id === suppressedId, data: () => ({ status: "opted_out" }) }) }; } };
+        } };
+      } };
+    }
+  };
+  const recipients = [
+    { phone: "919876543210" },
+    { phone: "919876543211" }
+  ];
+  const result = await filterSuppressedCampaignRecipients(db, "org_123", recipients);
+  assert.deepEqual(result.recipients, [recipients[1]]);
+  assert.equal(result.suppressed, 1);
+});
+
+test("a new STOP reply re-applies suppression even after a prior active status", async () => {
+  let stored = {
+    phone: "919876543210",
+    status: "active",
+    optedOutAt: new Date("2026-01-01T00:00:00Z")
+  };
+  const ref = { async get() { return { exists: true, data: () => stored }; } };
+  const db = {
+    collection: () => ({ doc: () => ({ collection: () => ({ doc: () => ref }) }) }),
+    async runTransaction(callback) {
+      await callback({
+        get: async () => ({ exists: true, data: () => stored }),
+        set: (_ref, value, options) => { stored = options?.merge ? { ...stored, ...value } : value; }
+      });
+    }
+  };
+  await recordCampaignOptOut(db, "org_123", "919876543210", "wamid.stop-again");
+  assert.equal(stored.status, "opted_out");
+  assert.equal(stored.source, "whatsapp_inbound");
+  assert.equal(stored.lastInboundMessageId, "wamid.stop-again");
+});
+
+test("explicit START changes a previously suppressed contact to active", async () => {
+  let stored = { status: "opted_out", source: "whatsapp_inbound" };
+  const ref = { async get() { return { exists: true, data: () => stored }; } };
+  const db = {
+    collection: () => ({ doc: () => ({ collection: () => ({ doc: () => ref }) }) }),
+    async runTransaction(callback) {
+      await callback({
+        get: async () => ({ exists: true, data: () => stored }),
+        set: (_ref, value, options) => { stored = options?.merge ? { ...stored, ...value } : value; },
+        create: (_ref, value) => { stored = value; }
+      });
+    }
+  };
+  await recordCampaignOptIn(db, "org_123", "+91 98765 43210", "wamid.start");
+  assert.equal(stored.status, "active");
+  assert.equal(stored.source, "whatsapp_inbound_explicit_opt_in");
+  assert.equal(stored.lastInboundMessageId, "wamid.start");
+});

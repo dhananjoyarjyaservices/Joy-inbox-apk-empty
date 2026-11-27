@@ -1,0 +1,202 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner() {
+      return request.auth != null
+        && request.auth.uid == "Vy49nGnw74gR5SFHmjN0DOQ2QFE3";
+    }
+
+    function isActiveOrganizationMember(organizationId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/organizations/$(organizationId))
+        && get(/databases/$(database)/documents/organizations/$(organizationId)).data.status == "active"
+        && exists(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid)).data.status == "active"
+        && get(/databases/$(database)/documents/organizations/$(organizationId)/members/$(request.auth.uid)).data.role in ["owner", "admin", "agent"];
+    }
+
+    // Users can only read their own organization switcher index.
+    match /users/{userId}/organizations/{organizationId} {
+      allow read: if request.auth != null && request.auth.uid == userId && isActiveOrganizationMember(organizationId);
+      allow write: if false;
+    }
+
+    // Organization metadata and membership are server-managed.
+    // Members can read their own organization and their own membership record only.
+    match /organizations/{organizationId} {
+      allow read: if isActiveOrganizationMember(organizationId);
+      allow write: if false;
+
+      // Tenant conversations are readable only by active members.
+      // All writes remain server-only through the Admin SDK.
+      match /chats/{chatId} {
+        allow read: if isActiveOrganizationMember(organizationId);
+        allow write: if false;
+
+        match /messages/{messageId} {
+          allow read: if isActiveOrganizationMember(organizationId);
+          allow write: if false;
+        }
+
+        match /sendRequests/{requestId} {
+          allow read, write: if false;
+        }
+      }
+
+      // Tenant-owned contacts and saved replies are readable by active members.
+      // Mutations stay server-only until validated organization API routes are available.
+      match /contacts/{contactId} {
+        allow read: if isActiveOrganizationMember(organizationId);
+        allow write: if false;
+      }
+
+      match /quickReplies/{replyId} {
+        allow read: if isActiveOrganizationMember(organizationId);
+        allow write: if false;
+      }
+
+      match /members/{memberUid} {
+        allow read: if request.auth != null
+          && request.auth.uid == memberUid
+          && isActiveOrganizationMember(organizationId);
+        allow write: if false;
+      }
+
+      // Invitation tokens are server-only and must never be readable by
+      // ordinary workspace members through the client SDK.
+      match /invitations/{invitationId} {
+        allow read, write: if false;
+      }
+
+      match /whatsappSignupSessions/{sessionId} {
+        allow read, write: if false;
+      }
+
+      match /webhookSubscriptions/{webhookId} {
+        allow read, write: if false;
+      }
+    }
+
+    // Public API key hashes and metadata are server-only. The plaintext key is
+    // returned once at creation and is never stored in Firestore.
+    match /publicApiKeys/{keyId} {
+      allow read, write: if false;
+    }
+
+    match /publicApiRateLimits/{bucketId} {
+      allow read, write: if false;
+    }
+
+    match /webhookDeliveryQueue/{deliveryId} {
+      allow read, write: if false;
+    }
+
+    // Legacy single-owner data is limited to these known root collections.
+    // Do not grant the owner wildcard access to /users: that would bypass the
+    // per-user rules below and expose every user's profile, contacts and replies.
+    // Tenant organizations and FCM device credentials remain server-only.
+    match /{collection}/{document=**} {
+      allow read: if isOwner()
+        && collection in ["chats", "deletedChats", "whatsappPhoneNumbers"];
+      allow write: if false;
+    }
+
+    // Restrict browser updates to the existing outgoing-message metadata fields.
+    match /chats/{chatId}/messages/{messageId} {
+      allow update: if isOwner()
+        && resource.data.direction == "outgoing"
+        && request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(["direction", "source", "messageId"])
+        && request.resource.data.direction == "outgoing"
+        && request.resource.data.source in ["manual", "quick_reply"]
+        && request.resource.data.messageId == messageId;
+    }
+
+    // Owner can manage their own saved Quick Replies.
+    match /users/{userId}/quickReplies/{replyId} {
+      allow read: if isOwner()
+        && request.auth.uid == userId;
+
+      allow create: if isOwner()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          "title",
+          "shortcut",
+          "message",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.message is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.message.size() > 0
+        && request.resource.data.title.size() <= 60
+        && request.resource.data.message.size() <= 4096;
+
+      allow update: if isOwner()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          "title",
+          "shortcut",
+          "message",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.message is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.message.size() > 0
+        && request.resource.data.title.size() <= 60
+        && request.resource.data.message.size() <= 4096;
+
+      allow delete: if isOwner()
+        && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/contacts/{contactId} {
+      function validContact() {
+        return request.resource.data.keys().hasOnly([
+            "name",
+            "phone",
+            "phoneId",
+            "email",
+            "notes",
+            "source",
+            "createdAt",
+            "updatedAt",
+            "lastSeenAt"
+          ])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 100
+          && request.resource.data.phone is string
+          && request.resource.data.phone.matches("^\\+[1-9][0-9]{6,14}$")
+          && request.resource.data.phoneId is string
+          && request.resource.data.phoneId.matches("^[1-9][0-9]{6,14}$")
+          && request.resource.data.phoneId == contactId
+          && request.resource.data.email is string
+          && request.resource.data.email.size() <= 254
+          && request.resource.data.notes is string
+          && request.resource.data.notes.size() <= 1000
+          && request.resource.data.source in ["local", "whatsapp"];
+      }
+
+      allow read: if isOwner() && request.auth.uid == userId;
+
+      allow create: if isOwner()
+        && request.auth.uid == userId
+        && validContact()
+        && request.resource.data.source == "local";
+
+      allow update: if isOwner()
+        && request.auth.uid == userId
+        && validContact()
+        && request.resource.data.source == resource.data.source;
+
+      allow delete: if isOwner() && request.auth.uid == userId;
+    }
+  }
+}

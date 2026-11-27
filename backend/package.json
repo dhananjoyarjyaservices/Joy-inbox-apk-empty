@@ -1,0 +1,22 @@
+{
+  "name": "joy-inbox-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Joy Inbox WhatsApp Cloud API backend",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node -r ./test/bootstrap.js --test",
+    "package:lambda": "bash ./scripts/package-lambda.sh"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.5.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.10.0"
+  }
+}

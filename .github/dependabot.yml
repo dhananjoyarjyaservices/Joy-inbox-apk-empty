@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    target-branch: feature/saas-foundation
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      backend-production:
+        dependency-type: production
+      backend-development:
+        dependency-type: development
+
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: feature/saas-foundation
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      frontend-production:
+        dependency-type: production
+      frontend-development:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: feature/saas-foundation
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
