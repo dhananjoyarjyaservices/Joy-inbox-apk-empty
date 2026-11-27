@@ -40,7 +40,7 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
         { Update: {
           TableName: tableName, Key: usageKey,
           UpdateExpression: "SET #entity = :entity, plan = :plan, periodStart = :start, periodEnd = :end, messageLimit = :limit, updatedAt = :now, messagesUsed = if_not_exists(messagesUsed, :zero) ADD messagesReserved :one",
-          ConditionExpression: "attribute_not_exists(messagesUsed) OR (if_not_exists(messagesUsed, :zero) + if_not_exists(messagesReserved, :zero) < :limit)",
+          ConditionExpression: "(attribute_not_exists(messagesUsed) AND attribute_not_exists(messagesReserved)) OR (messagesUsed + messagesReserved < :limit)",
           ExpressionAttributeNames: { "#entity": "entityType" },
           ExpressionAttributeValues: {
             ":entity": "BILLING_USAGE", ":plan": window.plan.key, ":start": dateIso(window.start),
