@@ -52,7 +52,9 @@ Status: implementation planning based on the current `feature/saas-foundation` s
 - Added `backend/test/dynamo-organization-store.test.js` for atomic creation, active membership checks, inactive membership rejection and user-scoped pagination.
 - The initial adapter version expected a GSI, but the owner-provided AWS console screenshots (2026-11-27) confirm `JoyInboxMessages` has **zero GSIs**, primary keys `PK` (String) and `SK` (String), On-demand capacity, Active status, and zero items at the time of capture.
 - Updated the adapter to avoid requiring any GSI: organization metadata uses `PK=ORG#<id>, SK=META`; organization membership uses `PK=ORG#<id>, SK=MEMBER#<uid>`; a user-to-organization lookup record is transactionally duplicated at `PK=USER#<uid>, SK=ORG#<id>`. Listing organizations now queries the base table by `PK` and `begins_with(SK, ORG#)`. Creation writes all three records atomically.
-- The owner-provided `JoyInboxCustomers` screenshots (2026-11-27) confirm the same `PK` (String) and `SK` (String) primary keys, Active status, On-demand capacity, zero GSIs, and zero items at capture time. `JoyInboxWorkspaces` remains to be inspected. No AWS infrastructure changes have been made. Existing Firebase organization/member data remains the active source of truth until cutover.
+- The owner-provided `JoyInboxCustomers` screenshots (2026-11-27) confirm the same `PK` (String) and `SK` (String) primary keys, Active status, On-demand capacity, zero GSIs, and zero items at capture time.
+- The owner-provided `JoyInboxWorkspaces` screenshots (2026-11-27) confirm the same `PK` (String) and `SK` (String) primary keys, Active status, On-demand capacity, zero GSIs, and zero items at capture time.
+- All three tables currently share the same base-key shape and have no GSIs in the screenshots. Do not assume they are interchangeable: keep entity ownership and access patterns explicit. No AWS infrastructure changes have been made. Existing Firebase organization/member data remains the active source of truth until cutover.
 
 ## Safe migration sequence
 
@@ -69,7 +71,7 @@ Status: implementation planning based on the current `feature/saas-foundation` s
 
 ## Current blockers / facts not yet verified
 
-- `JoyInboxWorkspaces` key schema, indexes, data volume and existing item formats. `JoyInboxMessages` and `JoyInboxCustomers` were visually verified as `PK`/`SK`, no GSIs, and zero items at screenshot time.
+- Live item formats and data volume for all three tables still need verification when items are introduced; screenshots show zero items in each at capture time. All three were visually verified with `PK`/`SK`, no GSIs, Active status and On-demand capacity.
 - Whether the existing Lambda role is the intended role for the staging stack and whether any additional AWS policies/resources already exist.
 - Cognito User Pool, app client, callback URLs and Google federation configuration.
 - S3 bucket deployment and lifecycle/retention rules.
