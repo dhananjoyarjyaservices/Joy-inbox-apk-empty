@@ -4,6 +4,8 @@ Current development branch: `feature/saas-foundation`.
 
 This checklist separates code already present from work that requires real service configuration, production data, external review or an explicit deployment decision. A green CI build does not mean the SaaS product is production-ready.
 
+> **Architecture decision (owner-confirmed): AWS-native customer data.** The target platform stores tenant/customer data in DynamoDB and customer media in private S3. Firebase/Firestore/Firebase Storage are legacy implementation dependencies to migrate away from, not services to configure for the target deployment. AWS Cognito is the proposed identity provider and requires a migration design. See [AWS-NATIVE-MIGRATION.md](AWS-NATIVE-MIGRATION.md). Do not add Firebase credentials to the new Lambda, and do not deploy the current Firebase-dependent Lambda ZIP as the target backend. Existing Firebase-specific checklist items below describe legacy code/tests and must not be treated as AWS launch acceptance gates.
+
 
 
 ## Owner-requested execution order
