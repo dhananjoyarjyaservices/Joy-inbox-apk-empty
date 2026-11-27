@@ -25,9 +25,9 @@ test("creates organization and first owner membership atomically with conditiona
 });
 
 test("constructs without a GSI because user membership uses the base table", () => {
-  assert.throws(() => createDynamoOrganizationStore({
+  assert.doesNotThrow(() => createDynamoOrganizationStore({
     documentClient: { send: async () => ({}) }, commands, tableName: "JoyInboxMessages"
-  });
+  }));
 });
 
 test("resolves active membership from authoritative organization records", async () => {
@@ -35,7 +35,7 @@ test("resolves active membership from authoritative organization records", async
     documentClient: { send: async (command) => command.input.Key.SK === "META"
       ? { Item: { name: "Acme", status: "active" } }
       : { Item: { role: "admin", status: "active" } } },
-    commands, tableName: "JoyInboxMessages", userIndexName: "GSI1"
+    commands, tableName: "JoyInboxMessages"
   });
   const organization = await store.requireActiveOrganization("org_1", "user_1");
   assert.equal(organization.role, "admin");
