@@ -100,7 +100,8 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
       Limit: limit
     };
     if (exclusiveStartKey !== undefined) {
-      if (!exclusiveStartKey || exclusiveStartKey.PK !== `USER#${uid}`) {
+      if (!exclusiveStartKey || exclusiveStartKey.PK !== `USER#${uid}` ||
+          typeof exclusiveStartKey.SK !== "string" || !exclusiveStartKey.SK.startsWith("ORG#")) {
         throw httpError("Pagination cursor does not belong to this user.", 400);
       }
       input.ExclusiveStartKey = exclusiveStartKey;
