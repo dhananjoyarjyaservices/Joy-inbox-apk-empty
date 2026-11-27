@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Joy Inbox private media bucket and least-privilege access policy for an
+  existing DynamoDB table. Review parameters and deploy only to ap-south-1.
+  This stack does not create or modify the existing DynamoDB table.
+
+Parameters:
+  MediaBucketName:
+    Type: String
+    MinLength: 3
+    MaxLength: 63
+    AllowedPattern: "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+    Description: Globally unique S3 bucket name chosen by the account owner.
+  LambdaExecutionRoleName:
+    Type: String
+    Description: Exact existing Lambda execution role name for joy-inbox-api.
+  ExistingDynamoDBTableName:
+    Type: String
+    Default: JoyInboxMessages
+    Description: Existing table name; its key schema is not changed by this stack.
+
+Resources:
+  JoyInboxPrivateMediaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref MediaBucketName
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+            BucketKeyEnabled: false
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Application
+          Value: JoyInbox
+        - Key: DataClass
+          Value: CustomerMedia
+        - Key: Environment
+          Value: Staging
+
+  JoyInboxMediaAndMessagesAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: JoyInboxMediaAndMessagesLeastPrivilege
+      Roles:
+        - !Ref LambdaExecutionRoleName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: TenantMediaObjectOperations
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+            Resource: !Sub "${JoyInboxPrivateMediaBucket.Arn}/organizations/*"
+          - Sid: ExistingMessagesTableItemOperations
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:TransactGetItems
+              - dynamodb:TransactWriteItems
+            Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingDynamoDBTableName}"
+
+Outputs:
+  MediaBucketName:
+    Description: Private Joy Inbox media bucket
+    Value: !Ref JoyInboxPrivateMediaBucket
+  MediaBucketArn:
+    Value: !GetAtt JoyInboxPrivateMediaBucket.Arn
+  ExistingDynamoDBTableArn:
+    Value: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingDynamoDBTableName}"
+
+# IMPORTANT:
+# - Deploy only after confirming the target AWS account, ap-south-1 region,
+#   role name and that the chosen globally unique bucket name is unused.
+# - This template grants table-level item actions only; add index ARNs only
+#   after the DynamoDB access-pattern design proves they are required.
+# - It intentionally has no lifecycle expiration rules. Per-plan retention
+#   must be implemented and tested before automatic deletion is enabled.
+# - The DynamoDB adapter's proposed PK/SK layout is a migration design and
+#   must not be written into the existing table until its current schema/data
+#   and all access patterns have been verified.
