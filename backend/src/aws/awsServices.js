@@ -3,6 +3,7 @@
 const { getAwsRuntimeConfig } = require("./awsRuntimeConfig");
 const { createDynamoStores } = require("./dynamoStores");
 const { createS3MediaStore } = require("./s3MediaStore");
+const { checkAwsDependencies } = require("./awsReadiness");
 
 /**
  * Construct AWS SDK v3 clients from the Lambda Node.js 22 runtime.
