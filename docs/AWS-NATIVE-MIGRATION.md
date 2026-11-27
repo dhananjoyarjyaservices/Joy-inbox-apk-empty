@@ -113,9 +113,11 @@ The existing `JoyInboxMessages` PK/SK table must be inspected and its current da
 - [x] DynamoDB-backed organization authorization adapter.
 - [x] Cognito JWT verifier and opt-in authentication-provider seam; Firebase remains the default until all dependent domains are migrated.
 - [x] Private S3 media adapter with tenant-scoped keys, server-side encryption and presigned downloads.
-- [x] Tenant-scoped DynamoDB audit event writer and audit listing; member-management factory uses it by default when a trusted subscription seat-limit resolver is injected.
-- [ ] Billing-backed seat-limit resolver. It must derive limits from verified server-side subscription state, never request payloads.
-- [ ] Connect the AWS repositories to migrated domain services and HTTP routes.
+- [x] Tenant-scoped DynamoDB audit event writer and audit listing; member-management factory uses it by default.
+- [x] DynamoDB subscription snapshot store with server-verified write gate and trusted plan-catalog seat-limit resolver.
+- [x] Leased DynamoDB Stripe webhook event ledger with conditional claims, duplicate/in-progress detection and lease-token guarded completion/failure.
+- [ ] Wire the Stripe webhook route to verify signatures, retrieve canonical Stripe subscription state, and persist through `subscriptions.putVerifiedSubscription`; never pass client-supplied plan data.
+- [ ] Connect the AWS repositories to migrated domain services and HTTP routes, including the Stripe webhook event ledger.
 - [ ] Migrate frontend authentication/session handling and remaining Firestore/Storage modules.
 - [ ] Add AWS SDK v3 runtime dependencies and real AWS integration tests against isolated staging resources.
 - [ ] Provision and verify actual AWS resources; deploy Lambda and validate the full application flow.
