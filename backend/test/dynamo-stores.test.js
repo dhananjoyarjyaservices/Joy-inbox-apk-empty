@@ -79,4 +79,7 @@ test("member management is wired to the verified DynamoDB subscription seat reso
   assert.equal(typeof stores.stripeEvents.claim, "function");
   assert.equal(typeof stores.stripeEvents.finish, "function");
   assert.equal(typeof stores.stripeBilling.process, "function");
+  assert.equal(typeof stores.usage.reserveOutboundMessage, "function");
+  assert.equal(typeof stores.usage.finishOutboundReservation, "function");
+  assert.equal(typeof stores.usage.recordInboundMessageUsage, "function");
 });
