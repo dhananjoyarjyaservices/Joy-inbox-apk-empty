@@ -73,7 +73,7 @@ test("adds a non-owner member atomically to organization and user lookup records
   });
   const result = await store.addMember({ organizationId: "org_1", uid: "user_2", role: "agent", seatLimit: 5 });
   assert.deepEqual(result, { uid: "user_2", role: "agent", status: "active" });
-  assert.equal(sent.TransactItems.length, 2);
+  assert.equal(sent.TransactItems.length, 3);
   assert.equal(sent.TransactItems[0].Put.Item.SK, "MEMBER#user_2");
   assert.equal(sent.TransactItems[1].Put.Item.PK, "USER#user_2");
   assert.equal(sent.TransactItems[2].Update.ExpressionAttributeValues[":seatLimit"], 5);
