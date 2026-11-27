@@ -2,6 +2,8 @@
 const crypto = require("crypto");
 const { getFirebaseAdmin, getDb } = require("./firebase");
 const { verifyCognitoAccessToken } = require("./aws/cognitoAuth");
+const { createAwsServices } = require("./aws/awsServices");
+let awsServices;
 const {
   getHeader,
   getRawBody,
@@ -4469,6 +4471,27 @@ function isLegacyOwnerApiRoute(path) {
 exports.handler = async (event) => {
   const method = getMethod(event);
   const path = getPath(event);
+
+  if (method === "GET" && (path === "/health/aws" || path.endsWith("/health/aws"))) {
+    if (process.env.AWS_RUNTIME_ENABLED !== "true" || (process.env.AUTH_PROVIDER || "").toLowerCase() !== "cognito") {
+      return jsonResponse(event, 404, { error: "Route not found." });
+    }
+    try {
+      await authenticateUser(event);
+      if (!awsServices) awsServices = createAwsServices();
+      const readiness = await awsServices.checkReadiness();
+      return jsonResponse(event, readiness.status === "ready" ? 200 : 503, {
+        status: readiness.status,
+        checkedAt: readiness.checkedAt,
+        resources: readiness.resources.map(({ resource, domain, status }) => ({ resource, domain, status }))
+      });
+    } catch (error) {
+      console.error("AWS dependency readiness check failed:", error.statusCode || "AWS_READINESS_FAILED");
+      return jsonResponse(event, error.statusCode || 503, {
+        error: error.statusCode === 401 ? error.message : "AWS dependencies could not be verified."
+      });
+    }
+  }
 
   // Public liveness probe for API Gateway / load balancer checks. It deliberately
   // does not initialize Firebase or expose configuration/secrets.
