@@ -159,10 +159,10 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
         { Update: {
           TableName: tableName, Key: usageKey,
           UpdateExpression: outcome === "sent"
-            ? "SET updatedAt = :now ADD mediaBytesReserved :minus, mediaBytesUsed :actual"
+            ? "SET updatedAt = :now ADD mediaBytesReserved :minus, mediaBytesUsed :actual, mediaBytesCount :delta"
             : "SET updatedAt = :now ADD mediaBytesReserved :minus, mediaBytesCount :minus",
           ConditionExpression: "mediaBytesReserved >= :held",
-          ExpressionAttributeValues: { ":minus": -heldBytes, ":held": heldBytes, ":actual": actual, ":now": at.toISOString() }
+          ExpressionAttributeValues: { ":minus": -heldBytes, ":held": heldBytes, ":actual": actual, ":delta": actual - heldBytes, ":now": at.toISOString() }
         } },
         { Update: {
           TableName: tableName, Key: reservationKey,
