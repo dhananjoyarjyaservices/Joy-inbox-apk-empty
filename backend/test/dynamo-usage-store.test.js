@@ -31,8 +31,9 @@ test("reserves an outbound message atomically with a hard quota condition", asyn
   assert.equal(result.duplicate, false);
   const transaction = f.calls.at(-1).TransactItems;
   assert.equal(transaction.length, 2);
-  assert.match(transaction[0].Update.ConditionExpression, /messagesUsed/);
-  assert.match(transaction[0].Update.ConditionExpression, /messagesReserved/);
+  assert.match(transaction[0].Update.ConditionExpression, /messagesCount/);
+  assert.match(transaction[0].Update.UpdateExpression, /messagesCount :one/);
+  assert.match(transaction[0].Update.UpdateExpression, /messagesReserved :one/);
   assert.equal(transaction[1].Put.Item.state, "reserved");
   assert.equal(transaction[0].Update.Key.SK, "USAGE#month_1793491200000");
 });
@@ -64,6 +65,7 @@ test("releases failed reservation without incrementing used count", async () => 
     clientMessageId: "client_msg_2", periodKey: "month_1793491200000"
   }, "failed");
   assert.doesNotMatch(f.calls.at(-1).TransactItems[0].Update.UpdateExpression, /messagesUsed :one/);
+  assert.match(f.calls.at(-1).TransactItems[0].Update.UpdateExpression, /messagesCount :minus/);
 });
 
 test("records inbound provider message idempotently", async () => {
