@@ -125,7 +125,10 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
     if (current.role === "owner") throw httpError("The organization owner role cannot be changed here.", 409);
     await documentClient.send(new commands.TransactWriteCommand({
       TransactItems: [
-        { Put: { TableName: tableName, Item: { ...current, ...memberKey, role, updatedAt: now }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } },
+        { Put: { TableName: tableName, Item: { ...current, ...memberKey, role, updatedAt: now }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK) AND #role <> :owner AND #status = :active",
+          ExpressionAttributeNames: { "#role": "role", "#status": "status" },
+          ExpressionAttributeValues: { ":owner": "owner", ":active": "active" }
+        } },
         { Put: { TableName: tableName, Item: { ...userKey, entityType: "USER_ORGANIZATION", organizationId, uid, role, status: "active", updatedAt: now }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } }
       ]
     }));
@@ -140,7 +143,10 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
     if (current.role === "owner") throw httpError("The organization owner cannot be removed.", 409);
     await documentClient.send(new commands.TransactWriteCommand({
       TransactItems: [
-        { Delete: { TableName: tableName, Key: { PK: `ORG#${organizationId}`, SK: `MEMBER#${uid}` }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } },
+        { Delete: { TableName: tableName, Key: { PK: `ORG#${organizationId}`, SK: `MEMBER#${uid}` }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK) AND #role <> :owner AND #status = :active",
+          ExpressionAttributeNames: { "#role": "role", "#status": "status" },
+          ExpressionAttributeValues: { ":owner": "owner", ":active": "active" }
+        } },
         { Delete: { TableName: tableName, Key: { PK: `USER#${uid}`, SK: `ORG#${organizationId}` }, ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)" } }
       ]
     }));
