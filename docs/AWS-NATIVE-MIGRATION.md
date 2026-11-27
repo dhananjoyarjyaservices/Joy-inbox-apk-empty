@@ -106,6 +106,20 @@ The existing `JoyInboxMessages` PK/SK table must be inspected and its current da
 - [ ] Update Lambda packaging to remove Firebase dependencies only after all imports are migrated.
 - [ ] Add AWS-native integration tests and disabled-by-default infrastructure templates.
 
+## Implemented adapter progress (feature/saas-foundation)
+
+- [x] Tenant-scoped DynamoDB primitives for messages, customers and workspaces using the existing PK/SK key shape; no GSI required for those partition-local operations.
+- [x] Organization and membership repository with user-to-organization lookup rows, transactional member changes, owner protection and atomic seat counter enforcement.
+- [x] DynamoDB-backed organization authorization adapter.
+- [x] Cognito JWT verifier and opt-in authentication-provider seam; Firebase remains the default until all dependent domains are migrated.
+- [x] Private S3 media adapter with tenant-scoped keys, server-side encryption and presigned downloads.
+- [x] Tenant-scoped DynamoDB audit event writer and audit listing; member-management factory uses it by default when a trusted subscription seat-limit resolver is injected.
+- [ ] Billing-backed seat-limit resolver. It must derive limits from verified server-side subscription state, never request payloads.
+- [ ] Connect the AWS repositories to migrated domain services and HTTP routes.
+- [ ] Migrate frontend authentication/session handling and remaining Firestore/Storage modules.
+- [ ] Add AWS SDK v3 runtime dependencies and real AWS integration tests against isolated staging resources.
+- [ ] Provision and verify actual AWS resources; deploy Lambda and validate the full application flow.
+
 ## Current Lambda console instruction
 
 The newly created `joy-inbox-api` Lambda is only a starter function. Keep its basic CloudWatch execution role. Do not add Firebase environment variables, do not paste a broad IAM policy, do not upload the existing Firebase-dependent ZIP, and do not enable public Function URL. Wait until AWS-native code, verified resource names and the staging deployment plan are ready.
