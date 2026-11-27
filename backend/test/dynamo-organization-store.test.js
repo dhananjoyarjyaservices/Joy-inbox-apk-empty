@@ -61,5 +61,6 @@ test("lists organizations by user index and rejects foreign pagination cursors",
   assert.equal(sent.IndexName, undefined);
   assert.equal(sent.ExpressionAttributeValues[":user"], "USER#user_1");
   assert.equal(sent.KeyConditionExpression, "PK = :user AND begins_with(SK, :organization)");
-  await assert.rejects(() => store.listOrganizations("user_1", { exclusiveStartKey: { PK: "USER#user_2" } }), { statusCode: 400 });
+  await assert.rejects(() => store.listOrganizations("user_1", { exclusiveStartKey: { PK: "USER#user_2", SK: "ORG#org_1" } }), { statusCode: 400 });
+  await assert.rejects(() => store.listOrganizations("user_1", { exclusiveStartKey: { PK: "USER#user_1", SK: "CUSTOMER#customer_1" } }), { statusCode: 400 });
 });
