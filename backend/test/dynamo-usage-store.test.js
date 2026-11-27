@@ -68,6 +68,42 @@ test("releases failed reservation without incrementing used count", async () => 
   assert.match(f.calls.at(-1).TransactItems[0].Update.UpdateExpression, /messagesCount :minus/);
 });
 
+test("reserves media bytes atomically against the plan transfer cap", async () => {
+  const f = fixture(input => input.Key?.SK.startsWith("USAGE#")
+    ? { Item: { mediaBytesUsed: 100, mediaBytesReserved: 50 } } : {});
+  const reservation = await f.store.reserveMediaTransfer("org_1", "transfer_1", 200);
+  assert.equal(reservation.reservedBytes, 200);
+  const tx = f.calls.at(-1).TransactItems;
+  assert.match(tx[0].Update.ConditionExpression, /mediaBytesCount/);
+  assert.match(tx[0].Update.UpdateExpression, /mediaBytesCount :bytes/);
+  assert.equal(tx[1].Put.Item.state, "reserved");
+});
+
+test("rejects media transfer beyond available allowance", async () => {
+  const f = fixture(input => input.Key?.SK.startsWith("USAGE#")
+    ? { Item: { mediaBytesUsed: 1024 * 1024 * 1024, mediaBytesReserved: 0 } } : {});
+  await assert.rejects(() => f.store.reserveMediaTransfer("org_1", "transfer_2", 1), { code: "MEDIA_QUOTA_EXCEEDED" });
+});
+
+test("settles media bytes and reconciles the actual transfer size", async () => {
+  const f = fixture(input => input.Key?.SK.startsWith("MEDIA_RESERVATION#")
+    ? { Item: { state: "reserved", reservedBytes: 500 } } : {});
+  const reservation = { enforced: true, organizationId: "org_1", transferId: "transfer_3", periodKey: "month_1793491200000" };
+  assert.equal(await f.store.finishMediaTransfer(reservation, "sent", 350), true);
+  const update = f.calls.at(-1).TransactItems[0].Update;
+  assert.match(update.UpdateExpression, /mediaBytesCount :delta/);
+  assert.equal(update.ExpressionAttributeValues[":delta"], -150);
+  assert.equal(update.ExpressionAttributeValues[":actual"], 350);
+});
+
+test("releases failed media transfer reservation and aggregate quota", async () => {
+  const f = fixture(input => input.Key?.SK.startsWith("MEDIA_RESERVATION#")
+    ? { Item: { state: "reserved", reservedBytes: 500 } } : {});
+  const reservation = { enforced: true, organizationId: "org_1", transferId: "transfer_4", periodKey: "month_1793491200000" };
+  assert.equal(await f.store.finishMediaTransfer(reservation, "failed"), true);
+  assert.match(f.calls.at(-1).TransactItems[0].Update.UpdateExpression, /mediaBytesCount :minus/);
+});
+
 test("records inbound provider message idempotently", async () => {
   const f = fixture();
   assert.equal(await f.store.recordInboundMessageUsage("org_1", "wamid.123"), true);
