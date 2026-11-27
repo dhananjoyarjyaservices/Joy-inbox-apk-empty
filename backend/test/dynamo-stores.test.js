@@ -76,4 +76,6 @@ test("member management is wired to the verified DynamoDB subscription seat reso
   assert.ok(stores.memberManagement);
   assert.equal(typeof stores.subscriptions.getSeatLimit, "function");
   assert.equal(typeof stores.subscriptions.putVerifiedSubscription, "function");
+  assert.equal(typeof stores.stripeEvents.claim, "function");
+  assert.equal(typeof stores.stripeEvents.finish, "function");
 });
