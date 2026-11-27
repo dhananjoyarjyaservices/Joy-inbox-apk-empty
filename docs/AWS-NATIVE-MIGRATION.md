@@ -116,6 +116,15 @@ Required deployment environment (names only; never put secret values in Git):
 
 All names/IDs must be verified in the owner's AWS account before configuring Lambda. This configuration validator does not create AWS resources or prove that they exist.
 
+
+### Read-only AWS readiness endpoint
+
+- `backend/src/aws/awsReadiness.js` checks the configured three DynamoDB tables with `DescribeTable` and the configured S3 bucket with `HeadBucket`. It does not read or mutate customer records.
+- `backend/src/aws/awsServices.js` exposes this as `checkReadiness()`.
+- `GET /health/aws` is an opt-in authenticated diagnostic route. It is hidden unless both `AWS_RUNTIME_ENABLED=true` and `AUTH_PROVIDER=cognito`; it requires a valid Cognito access token and returns only resource domains/status, not table/bucket names or raw AWS errors.
+- The API Lambda role will need `dynamodb:DescribeTable` for the three verified table ARNs and `s3:ListBucket`/bucket metadata permission sufficient for `HeadBucket` on the one verified media bucket. This is a proposed permission requirement, not an IAM policy already deployed.
+- Do not enable this route until the SDK packages are pinned/bundled, the exact resource names and ARNs are verified, Cognito pool/client are active, and least-privilege IAM permissions have been attached.
+
 ## Immediate next implementation tasks
 
 - [ ] Produce a complete Firestore collection/query/transaction inventory across all backend modules.
