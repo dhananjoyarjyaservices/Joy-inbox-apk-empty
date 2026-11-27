@@ -50,12 +50,13 @@ Status: implementation planning based on the current `feature/saas-foundation` s
 
 - Added `backend/src/aws/dynamoOrganizationStore.js` with transactional organization + first-owner creation, strongly consistent organization/member reads, active membership authorization, and user-to-organization listing.
 - Added `backend/test/dynamo-organization-store.test.js` for atomic creation, active membership checks, inactive membership rejection and user-scoped pagination.
-- The adapter expects the table's confirmed base keys `PK` and `SK`, plus a provisioned GSI with `GSI1PK` and `GSI1SK` for user-to-organization lookup. The index name is injected explicitly as `DYNAMODB_USER_ORGANIZATIONS_INDEX`; no GSI is assumed to exist and no infrastructure change has been deployed.
-- Before wiring this adapter into API routes, inspect the live table indexes and either confirm this GSI exists or design a migration that safely adds it. Existing Firebase organization/member data still remains the active source of truth until cutover.
+- The initial adapter version expected a GSI, but the owner-provided AWS console screenshots (2026-11-27) confirm `JoyInboxMessages` has **zero GSIs**, primary keys `PK` (String) and `SK` (String), On-demand capacity, Active status, and zero items at the time of capture.
+- Updated the adapter to avoid requiring any GSI: organization metadata uses `PK=ORG#<id>, SK=META`; organization membership uses `PK=ORG#<id>, SK=MEMBER#<uid>`; a user-to-organization lookup record is transactionally duplicated at `PK=USER#<uid>, SK=ORG#<id>`. Listing organizations now queries the base table by `PK` and `begins_with(SK, ORG#)`. Creation writes all three records atomically.
+- The screenshots also show separate `JoyInboxCustomers` and `JoyInboxWorkspaces` tables, but their key schemas, indexes and item counts have not yet been inspected. No AWS infrastructure changes have been made. Existing Firebase organization/member data remains the active source of truth until cutover.
 
 ## Safe migration sequence
 
-1. Confirm the actual `JoyInboxMessages` key schema and inspect existing records/indexes. Do not assume the proposed `ORG#...` key layout matches production data.
+1. Confirm the actual key schemas and indexes for `JoyInboxMessages`, `JoyInboxCustomers`, and `JoyInboxWorkspaces`; inspect records before writing to any live table. `JoyInboxMessages` was verified from screenshots as `PK`/`SK`, no GSIs, zero items at capture time.
 2. Finalize a DynamoDB entity/access-pattern model for organizations, memberships, user indexes, chats, messages, contacts, CRM, campaigns, templates, usage, billing, webhook deliveries and audit events. Add GSIs only after access patterns are documented.
 3. Provision Cognito and its app clients in `ap-south-1`; configure callback/logout URLs, email verification, password policy, Google federation only after provider credentials and consent are available.
 4. Implement and unit-test Cognito JWT verification and a backend identity abstraction. Add explicit tests for invalid signature, wrong issuer/audience, wrong token_use, expired token, unknown key ID, inactive user and revoked/disabled account behavior.
@@ -68,7 +69,7 @@ Status: implementation planning based on the current `feature/saas-foundation` s
 
 ## Current blockers / facts not yet verified
 
-- Actual DynamoDB table key schema, indexes, data volume and existing item formats.
+- Key schemas, indexes, data volume and existing item formats for `JoyInboxCustomers` and `JoyInboxWorkspaces`; `JoyInboxMessages` was visually verified as `PK`/`SK`, no GSIs, and zero items at screenshot time.
 - Whether the existing Lambda role is the intended role for the staging stack and whether any additional AWS policies/resources already exist.
 - Cognito User Pool, app client, callback URLs and Google federation configuration.
 - S3 bucket deployment and lifecycle/retention rules.
