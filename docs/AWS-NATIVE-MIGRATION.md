@@ -118,6 +118,7 @@ The existing `JoyInboxMessages` PK/SK table must be inspected and its current da
 - [x] Leased DynamoDB Stripe webhook event ledger with conditional claims, duplicate/in-progress detection and lease-token guarded completion/failure.
 - [x] DynamoDB-native Stripe webhook processing helper for checkout completion, subscription create/update/delete and invoice payment failure; canonical Stripe retrieval is required for checkout/invoice events, and inactive subscription states are persisted to revoke seat access.
 - [x] Atomic DynamoDB message quota ledger: outbound reservation with transactional hard-block condition, idempotent client-message keys, sent/failed settlement, inbound deduplication, and usage threshold reporting.
+- [x] DynamoDB media-transfer quota reservation and settlement with tenant-scoped idempotency, byte reservations, plan/trial caps, and actual-byte reconciliation.
 - [ ] Wire the HTTP Stripe webhook route to verify signatures against the raw request body, inject the configured Stripe retriever, and call `stores.stripeBilling.process`; do not enable until real DynamoDB client and table config are available.
 - [ ] Connect the AWS repositories to migrated domain services and HTTP routes, including the Stripe webhook event ledger.
 - [ ] Migrate frontend authentication/session handling and remaining Firestore/Storage modules.
