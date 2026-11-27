@@ -29,7 +29,9 @@ function fakeSdk() {
       UpdateCommand: Command,
       PutObjectCommand: Command,
       GetObjectCommand: Command,
-      DeleteObjectCommand: Command
+      DeleteObjectCommand: Command,
+      DescribeTableCommand: Command,
+      HeadBucketCommand: Command
     }
   };
 }
@@ -61,6 +63,7 @@ test("constructs DynamoDB and S3 clients and wires tenant stores plus private me
   assert.equal(typeof services.media.signedDownload, "function");
   assert.equal(typeof services.media.remove, "function");
   assert.equal(services.config.mediaBucket, "joy-inbox-media-staging");
+  assert.equal(typeof services.checkReadiness, "function");
 });
 
 test("does not construct AWS clients when required resource configuration is missing", () => {
