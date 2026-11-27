@@ -39,7 +39,7 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
       await documentClient.send(new commands.TransactWriteCommand({ TransactItems: [
         { Update: {
           TableName: tableName, Key: usageKey,
-          UpdateExpression: "SET #entity = :entity, plan = :plan, periodStart = :start, periodEnd = :end, messageLimit = :limit, updatedAt = :now ADD messagesReserved :one",
+          UpdateExpression: "SET #entity = :entity, plan = :plan, periodStart = :start, periodEnd = :end, messageLimit = :limit, updatedAt = :now, messagesUsed = if_not_exists(messagesUsed, :zero) ADD messagesReserved :one",
           ConditionExpression: "attribute_not_exists(messagesUsed) OR (if_not_exists(messagesUsed, :zero) + if_not_exists(messagesReserved, :zero) < :limit)",
           ExpressionAttributeNames: { "#entity": "entityType" },
           ExpressionAttributeValues: {
@@ -77,8 +77,8 @@ function createDynamoUsageStore({ documentClient, commands, tableName, subscript
         { Update: {
           TableName: tableName, Key: usageKey,
           UpdateExpression: outcome === "sent"
-            ? "ADD messagesReserved :minus, messagesUsed :one SET updatedAt = :now"
-            : "ADD messagesReserved :minus SET updatedAt = :now",
+            ? "SET updatedAt = :now ADD messagesReserved :minus, messagesUsed :one"
+            : "SET updatedAt = :now ADD messagesReserved :minus",
           ConditionExpression: "messagesReserved >= :one",
           ExpressionAttributeValues: { ":minus": -1, ":one": 1, ":now": at.toISOString() }
         } },
