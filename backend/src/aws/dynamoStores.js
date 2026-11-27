@@ -2,6 +2,7 @@
 
 const { createDynamoTenantStore } = require("./dynamoTenantStore");
 const { createDynamoOrganizationStore } = require("./dynamoOrganizationStore");
+const { createDynamoTenancy } = require("./dynamoTenancy");
 
 /**
  * Creates isolated adapters for the three owner-verified DynamoDB tables.
@@ -30,6 +31,7 @@ function createDynamoStores({ documentClient, commands, env = process.env }) {
   const organizations = createDynamoOrganizationStore({
     documentClient, commands, tableName: messagesTable
   });
+  const tenancy = createDynamoTenancy({ organizationStore: organizations });
   const messages = createDynamoTenantStore({
     documentClient, commands, tableName: messagesTable
   });
@@ -42,6 +44,7 @@ function createDynamoStores({ documentClient, commands, env = process.env }) {
 
   return Object.freeze({
     organizations,
+    tenancy,
     messages,
     customers: Object.freeze({
       get: (organizationId, customerId) => customers.get(organizationId, "CUSTOMER", customerId),
