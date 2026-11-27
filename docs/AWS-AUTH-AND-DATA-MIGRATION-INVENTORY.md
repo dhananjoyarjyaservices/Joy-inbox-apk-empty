@@ -1,3 +1,9 @@
+## DynamoDB tenant authorization adapter (implemented, not activated)
+
+- Added `backend/src/aws/dynamoTenancy.js`, which resolves organization membership through the DynamoDB organization store and applies the existing `ROLES` and `ROLE_PERMISSIONS` contract.
+- Exposed the adapter as `stores.tenancy` from `createDynamoStores`.
+- Added tests for identity validation, malformed organization IDs, inactive/unknown roles, allowed permissions and privilege escalation.
+- The existing API still calls Firebase-backed `requireOrganization(getDb(), ...)` and uses Firestore across domain routes. This adapter is not wired into API routes and must not be enabled until every dependent route and domain data access is migrated.
 # AWS-Native Authentication and Data Migration Inventory
 
 Status: implementation planning based on the current `feature/saas-foundation` source tree. This document is not evidence that AWS resources have been provisioned or that production traffic has migrated.
