@@ -56,6 +56,23 @@ Status: implementation planning based on the current `feature/saas-foundation` s
 - The owner-provided `JoyInboxWorkspaces` screenshots (2026-11-27) confirm the same `PK` (String) and `SK` (String) primary keys, Active status, On-demand capacity, zero GSIs, and zero items at capture time.
 - All three tables currently share the same base-key shape and have no GSIs in the screenshots. Do not assume they are interchangeable: keep entity ownership and access patterns explicit. No AWS infrastructure changes have been made. Existing Firebase organization/member data remains the active source of truth until cutover.
 
+## Proposed three-table DynamoDB layout (design only; not deployed)
+
+All three owner-inspected tables currently have the same base key types (PK String, SK String), no GSIs, On-demand capacity, Active status, and zero items at screenshot time. Keep the tables separate by domain:
+
+| Table | Proposed responsibility | Example key patterns |
+|---|---|---|
+| `JoyInboxMessages` | Organization metadata, memberships, conversations, messages, message events and user-to-organization lookup records | `PK=ORG#<orgId>`, `SK=META`; `MEMBER#<uid>`; `CONVERSATION#<chatId>`; `MESSAGE#<messageId>`; user lookup `PK=USER#<uid>`, `SK=ORG#<orgId>` |
+| `JoyInboxCustomers` | Tenant-owned customer/contact profiles and CRM attributes | `PK=ORG#<orgId>`, `SK=CUSTOMER#<customerId>` |
+| `JoyInboxWorkspaces` | WhatsApp channel/workspace configuration, agent settings and workspace-level preferences | `PK=ORG#<orgId>`, `SK=WORKSPACE#<workspaceId>`; child settings use a documented prefix under the same organization partition |
+
+Rules before implementation:
+- These are proposed access patterns, not claims about existing records. Screenshots show zero items at capture time, but re-check live item counts before first writes.
+- Keep all tenant-owned records partitioned by `ORG#<orgId>`; derive the organization ID only from verified server-side membership, never from an untrusted request body alone.
+- Use strongly consistent point reads where authorization depends on current membership. Use conditional writes and transactions for membership changes and multi-record invariants.
+- Do not add a GSI until a concrete query cannot be served by a partition-key query or a separate transactional lookup item.
+- Avoid storing large media bytes in DynamoDB; store media in private S3 and persist only tenant-scoped object metadata/keys.
+- Do not split one domain across tables merely for naming convenience; each access pattern and transaction must be documented before route wiring.
 ## Safe migration sequence
 
 1. Confirm the actual key schemas and indexes for `JoyInboxMessages`, `JoyInboxCustomers`, and `JoyInboxWorkspaces`; inspect records before writing to any live table. `JoyInboxMessages` was verified from screenshots as `PK`/`SK`, no GSIs, zero items at capture time.
