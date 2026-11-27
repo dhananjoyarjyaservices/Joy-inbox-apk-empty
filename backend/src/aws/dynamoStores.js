@@ -3,6 +3,7 @@
 const { createDynamoTenantStore } = require("./dynamoTenantStore");
 const { createDynamoOrganizationStore } = require("./dynamoOrganizationStore");
 const { createDynamoTenancy } = require("./dynamoTenancy");
+const { createDynamoMemberManagement } = require("./dynamoMemberManagement");
 
 /**
  * Creates isolated adapters for the three owner-verified DynamoDB tables.
@@ -10,7 +11,7 @@ const { createDynamoTenancy } = require("./dynamoTenancy");
  * clients and command constructors. This factory is not enabled by the API
  * until identity and all domain migrations are complete.
  */
-function createDynamoStores({ documentClient, commands, env = process.env }) {
+function createDynamoStores({ documentClient, commands, env = process.env, getSeatLimit, recordMemberAudit }) {
   const messagesTable = env.DYNAMODB_MESSAGES_TABLE || "JoyInboxMessages";
   const customersTable = env.DYNAMODB_CUSTOMERS_TABLE || "JoyInboxCustomers";
   const workspacesTable = env.DYNAMODB_WORKSPACES_TABLE || "JoyInboxWorkspaces";
@@ -32,6 +33,9 @@ function createDynamoStores({ documentClient, commands, env = process.env }) {
     documentClient, commands, tableName: messagesTable
   });
   const tenancy = createDynamoTenancy({ organizationStore: organizations });
+  const memberManagement = typeof getSeatLimit === "function" && typeof recordMemberAudit === "function"
+    ? createDynamoMemberManagement({ organizationStore: organizations, getSeatLimit, recordAudit: recordMemberAudit })
+    : null;
   const messages = createDynamoTenantStore({
     documentClient, commands, tableName: messagesTable
   });
@@ -45,6 +49,7 @@ function createDynamoStores({ documentClient, commands, env = process.env }) {
   return Object.freeze({
     organizations,
     tenancy,
+    memberManagement,
     messages,
     customers: Object.freeze({
       get: (organizationId, customerId) => customers.get(organizationId, "CUSTOMER", customerId),
