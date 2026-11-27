@@ -147,6 +147,37 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
     return { uid, removed: true };
   }
 
+
+  async function listMembers(organizationId, { limit = 50, exclusiveStartKey } = {}) {
+    assertId(organizationId, "organization ID");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw httpError("Page limit must be between 1 and 100.", 400);
+    }
+    const input = {
+      TableName: tableName,
+      KeyConditionExpression: "PK = :organization AND begins_with(SK, :member)",
+      ExpressionAttributeValues: {
+        ":organization": `ORG#${organizationId}`,
+        ":member": "MEMBER#"
+      },
+      Limit: limit
+    };
+    if (exclusiveStartKey !== undefined) {
+      if (!exclusiveStartKey ||
+          exclusiveStartKey.PK !== `ORG#${organizationId}` ||
+          typeof exclusiveStartKey.SK !== "string" ||
+          !exclusiveStartKey.SK.startsWith("MEMBER#")) {
+        throw httpError("Pagination cursor does not belong to this organization member list.", 400);
+      }
+      input.ExclusiveStartKey = exclusiveStartKey;
+    }
+    const result = await documentClient.send(new commands.QueryCommand(input));
+    return {
+      items: result.Items || [],
+      lastEvaluatedKey: result.LastEvaluatedKey || null
+    };
+  }
+
   async function listOrganizations(uid, { limit = 50, exclusiveStartKey } = {}) {
     assertId(uid, "user ID");
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw httpError("Page limit must be between 1 and 100.", 400);
@@ -167,7 +198,7 @@ function createDynamoOrganizationStore({ documentClient, commands, tableName }) 
     return { items: result.Items || [], lastEvaluatedKey: result.LastEvaluatedKey || null };
   }
 
-  return Object.freeze({ createOrganization, getMembership, requireActiveOrganization, addMember, updateMemberRole, removeMember, listOrganizations });
+  return Object.freeze({ createOrganization, getMembership, requireActiveOrganization, addMember, updateMemberRole, removeMember, listMembers, listOrganizations });
 }
 
 module.exports = { createDynamoOrganizationStore };
