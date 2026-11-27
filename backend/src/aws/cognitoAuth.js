@@ -63,7 +63,7 @@ async function verifyCognitoAccessToken(token, options = {}) {
       claims.iss !== config.issuer || claims.token_use !== "access" ||
       claims.client_id !== config.clientId || typeof claims.sub !== "string" ||
       !/^[A-Za-z0-9-]{1,128}$/.test(claims.sub) ||
-      !Number.isFinite(claims.exp) || claims.exp <= now - MAX_CLOCK_SKEW_SECONDS ||
+      !Number.isFinite(claims.exp) || claims.exp <= now ||
       !Number.isFinite(claims.iat) || claims.iat > now + MAX_CLOCK_SKEW_SECONDS ||
       (claims.nbf !== undefined && (!Number.isFinite(claims.nbf) || claims.nbf > now + MAX_CLOCK_SKEW_SECONDS))) {
     throw unauthorized();
