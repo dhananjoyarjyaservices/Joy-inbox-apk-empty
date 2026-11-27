@@ -17,7 +17,7 @@ const { checkAwsDependencies } = require("./awsReadiness");
 function createAwsServices({ env = process.env, sdk, getSignedUrl, plans, getSeatLimit, recordMemberAudit } = {}) {
   const config = getAwsRuntimeConfig(env);
   const aws = sdk || {
-    DynamoDBClient: require("@aws-sdk/client-dynamodb").DynamoDBClient,
+    ...require("@aws-sdk/client-dynamodb"),
     DynamoDBDocumentClient: require("@aws-sdk/lib-dynamodb").DynamoDBDocumentClient,
     ...require("@aws-sdk/lib-dynamodb"),
     S3Client: require("@aws-sdk/client-s3").S3Client,
