@@ -116,7 +116,8 @@ The existing `JoyInboxMessages` PK/SK table must be inspected and its current da
 - [x] Tenant-scoped DynamoDB audit event writer and audit listing; member-management factory uses it by default.
 - [x] DynamoDB subscription snapshot store with server-verified write gate and trusted plan-catalog seat-limit resolver.
 - [x] Leased DynamoDB Stripe webhook event ledger with conditional claims, duplicate/in-progress detection and lease-token guarded completion/failure.
-- [ ] Wire the Stripe webhook route to verify signatures, retrieve canonical Stripe subscription state, and persist through `subscriptions.putVerifiedSubscription`; never pass client-supplied plan data.
+- [x] DynamoDB-native Stripe webhook processing helper for checkout completion, subscription create/update/delete and invoice payment failure; canonical Stripe retrieval is required for checkout/invoice events, and inactive subscription states are persisted to revoke seat access.
+- [ ] Wire the HTTP Stripe webhook route to verify signatures against the raw request body, inject the configured Stripe retriever, and call `stores.stripeBilling.process`; do not enable until real DynamoDB client and table config are available.
 - [ ] Connect the AWS repositories to migrated domain services and HTTP routes, including the Stripe webhook event ledger.
 - [ ] Migrate frontend authentication/session handling and remaining Firestore/Storage modules.
 - [ ] Add AWS SDK v3 runtime dependencies and real AWS integration tests against isolated staging resources.
