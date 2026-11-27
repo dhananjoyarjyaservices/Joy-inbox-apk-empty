@@ -30,6 +30,7 @@ test("claims Stripe event atomically with a bounded lease and attempt counter", 
 
 test("returns duplicate or in-progress state when another worker owns the event", async () => {
   const duplicate = fixture(async input => {
+    if (input.UpdateExpression) { const error = new Error("conditional"); error.name = "ConditionalCheckFailedException"; throw error; }
     if (input.Key) return { Item: { status: "processed" } };
     const error = new Error("conditional"); error.name = "ConditionalCheckFailedException"; throw error;
   });
@@ -38,6 +39,7 @@ test("returns duplicate or in-progress state when another worker owns the event"
   });
 
   const busy = fixture(async input => {
+    if (input.UpdateExpression) { const error = new Error("conditional"); error.name = "ConditionalCheckFailedException"; throw error; }
     if (input.Key) return { Item: { status: "processing", leaseUntil: "2026-11-27T12:01:00.000Z" } };
     const error = new Error("conditional"); error.name = "ConditionalCheckFailedException"; throw error;
   });
