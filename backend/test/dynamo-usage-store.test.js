@@ -75,6 +75,7 @@ test("reserves media bytes atomically against the plan transfer cap", async () =
   assert.equal(reservation.reservedBytes, 200);
   const tx = f.calls.at(-1).TransactItems;
   assert.match(tx[0].Update.ConditionExpression, /mediaBytesCount/);
+  assert.equal(tx[0].Update.ExpressionAttributeValues[":maxAllowedBefore"], 1024 * 1024 * 1024 - 200);
   assert.match(tx[0].Update.UpdateExpression, /mediaBytesCount :bytes/);
   assert.equal(tx[1].Put.Item.state, "reserved");
 });
